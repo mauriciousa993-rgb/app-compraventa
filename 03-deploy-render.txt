@@ -1,0 +1,142 @@
+╔════════════════════════════════════════════════════════════╗
+║        DESPLIEGUE PASO 3: RENDER (BACKEND)                ║
+╚════════════════════════════════════════════════════════════╝
+
+📌 TIEMPO: 5-10 minutos
+⚠️  NECESITAS: 
+   - Tu GitHub URL
+   - Tu MONGODB_URI de MongoDB Atlas
+   - Un JWT_SECRET seguro
+
+════════════════════════════════════════════════════════════
+
+🔧 PASO 1: Crear Cuenta en Render
+
+1. Abre: https://render.com
+
+2. Click en "Sign up" (esquina superior derecha)
+
+3. Selecciona: "Continue with GitHub"
+
+4. Autoriza Render a acceder a tu GitHub
+   - Click en "Authorize render-oss"
+
+5. Completa tu información en Render
+
+════════════════════════════════════════════════════════════
+
+🔧 PASO 2: Crear Web Service
+
+1. En el dashboard de Render, click en: "New +"
+
+2. Selecciona: "Web Service"
+
+3. Selecciona tu repositorio: app-compraventa
+   (Si no aparece, click en "Connect GitHub account")
+
+4. Configura los detalles:
+
+   Name: compraventa-backend
+   
+   Environment: Node
+   
+   Build Command:
+   cd backend && npm install && npm run build
+   
+   Start Command:
+   cd backend && npm start
+   
+   Instance Type: Free (Gratis)
+
+5. Scroll hacia abajo...
+
+════════════════════════════════════════════════════════════
+
+🔧 PASO 3: Agregar Variables de Entorno
+
+1. En la sección "Environment Variables":
+
+2. Agrega estas variables (una por una):
+
+   VARIABLE 1:
+   - Key: PORT
+   - Value: 5000
+
+   VARIABLE 2:
+   - Key: MONGODB_URI
+   - Value: (pega tu MONGODB_URI completo de MongoDB Atlas)
+   
+   VARIABLE 3:
+   - Key: JWT_SECRET
+   - Value: (pega tu JWT_SECRET generado con generar-jwt-secret.bat)
+   
+   VARIABLE 4:
+   - Key: NODE_ENV
+   - Value: production
+
+   Ejemplo de MONGODB_URI:
+   mongodb+srv://adminuser:GeneraUnaContraseña123!@compraventa-cluster.xxxxx.mongodb.net/compraventa-vehiculos?retryWrites=true&w=majority
+
+3. Verifica que NO hay espacios antes o después
+
+════════════════════════════════════════════════════════════
+
+🔧 PASO 4: Deploy
+
+1. Scroll hacia abajo
+
+2. Click en el botón azul: "Create Web Service"
+
+3. ESPERA 10-15 MINUTOS mientras se deploya
+   (Verás un log con el progreso)
+
+4. Cuando termine, deberías ver:
+   ✓ "Your service is live"
+   ✓ Una URL como: https://compraventa-backend.onrender.com
+
+5. COPIA esta URL
+   (La usarás en Vercel)
+
+════════════════════════════════════════════════════════════
+
+✅ VERIFICACIÓN
+
+1. Abre en el navegador:
+   https://compraventa-backend.onrender.com
+
+2. Deberías ver JSON como:
+   {
+     "message": "API de Compraventa de Vehículos",
+     "version": "1.0.0",
+     "endpoints": { ... }
+   }
+
+Si ves esto: ✅ FUNCIONA PERFECTO
+
+Si ves error: 
+- Espera 2 minutos (Render "despierta" el servidor)
+- Verifica las variables de entorno
+- Revisa los logs en Render
+
+════════════════════════════════════════════════════════════
+
+✏️  GUARDA AQUÍ:
+
+RENDER BACKEND URL:
+https://compraventa-backend.onrender.com
+
+(Necesitarás esto para Vercel)
+
+════════════════════════════════════════════════════════════
+
+⚠️  IMPORTANTE
+
+- No cierres Render aún (déjalo corriendo)
+- Anota tu URL de Render
+- La usarás en Vercel como VITE_API_URL
+
+════════════════════════════════════════════════════════════
+
+👉 SIGUIENTE PASO: Desplegar en Vercel
+
+Lee: 04-deploy-vercel.txt

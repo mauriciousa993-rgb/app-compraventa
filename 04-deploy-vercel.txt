@@ -1,0 +1,195 @@
+╔════════════════════════════════════════════════════════════╗
+║        DESPLIEGUE PASO 4: VERCEL (FRONTEND)               ║
+╚════════════════════════════════════════════════════════════╝
+
+📌 TIEMPO: 5-10 minutos
+⚠️  NECESITAS: 
+   - Tu GitHub URL
+   - Tu Render Backend URL (https://compraventa-backend.onrender.com)
+
+════════════════════════════════════════════════════════════
+
+🔧 PASO 1: Crear Cuenta en Vercel
+
+1. Abre: https://vercel.com
+
+2. Click en "Sign up" (esquina superior derecha)
+
+3. Selecciona: "Continue with GitHub"
+
+4. Autoriza Vercel a acceder a tu GitHub
+
+5. Completa tu información
+
+════════════════════════════════════════════════════════════
+
+🔧 PASO 2: Importar Proyecto
+
+1. En el dashboard de Vercel, click en: "Add New..."
+
+2. Selecciona: "Project"
+
+3. Selecciona tu repositorio: app-compraventa
+   (Si no aparece, click en "Adjust GitHub App Permissions")
+
+════════════════════════════════════════════════════════════
+
+🔧 PASO 3: Configurar Proyecto
+
+Vercel debería sugerir automáticamente:
+
+- Project Name: app-compraventa (o similar)
+- Framework Preset: Vite (selecciona esto)
+- Root Directory: frontend (IMPORTANTE - selecciona esto)
+- Build Command: npm run build
+- Output Directory: dist
+- Install Command: npm install
+
+Si NO aparecen estas opciones:
+1. Click en "Project Settings"
+2. Configura manualmente como se describe arriba
+
+════════════════════════════════════════════════════════════
+
+🔧 PASO 4: Agregar Variables de Entorno
+
+1. En la sección "Environment Variables":
+
+2. Agrega esta variable:
+
+   VARIABLE 1:
+   - Name: VITE_API_URL
+   - Value: https://compraventa-backend.onrender.com/api
+   
+   (Reemplaza con tu URL real de Render)
+
+3. Verifica que NO hay espacios
+
+4. El formato debe ser EXACTO:
+   https://compraventa-backend.onrender.com/api
+   
+   (Con /api al final)
+
+════════════════════════════════════════════════════════════
+
+🔧 PASO 5: Deploy
+
+1. Scroll hacia abajo
+
+2. Click en el botón azul: "Deploy"
+
+3. ESPERA 5-10 MINUTOS mientras Vercel deploya
+   (Verás un log con el progreso)
+
+4. Cuando termine, deberías ver:
+   ✓ "Congratulations! Your project has been successfully deployed"
+   ✓ Una URL como: https://compraventa-vehiculos.vercel.app
+
+5. COPIA esta URL
+   (Es tu URL final para compartir)
+
+════════════════════════════════════════════════════════════
+
+✅ VERIFICACIÓN
+
+1. Abre en el navegador:
+   https://compraventa-vehiculos.vercel.app
+
+2. Deberías ver:
+   ✓ Página de Login
+   ✓ Campos para Email y Contraseña
+   ✓ Botones: Inicia sesión / Crear cuenta
+
+Si ves esto: ✅ FUNCIONA PERFECTO
+
+Si ves error o página en blanco:
+1. Abre F12 (tecla F12)
+2. Busca errores rojos en la consola
+3. Verifica que VITE_API_URL sea correcto en Vercel
+4. Espera 2-3 minutos y recarga
+
+════════════════════════════════════════════════════════════
+
+✏️  GUARDA AQUÍ:
+
+VERCEL FRONTEND URL:
+https://compraventa-vehiculos.vercel.app
+
+(Esta es tu URL final para compartir)
+
+════════════════════════════════════════════════════════════
+
+✅ ¡LISTO! TU APP ESTÁ EN INTERNET
+
+════════════════════════════════════════════════════════════
+
+🎯 PRUEBA FINAL
+
+1. Abre: https://compraventa-vehiculos.vercel.app
+
+2. Haz clic en "Crear cuenta"
+
+3. Registra un usuario:
+   - Nombre: Tu nombre
+   - Email: test@example.com
+   - Contraseña: Test123456
+
+4. Haz clic en "Crear cuenta"
+
+5. Deberías ver el Dashboard
+
+6. ¡FUNCIONA!
+
+════════════════════════════════════════════════════════════
+
+📱 COMPARTIR CON OTROS
+
+Tu URL final para compartir:
+https://compraventa-vehiculos.vercel.app
+
+Pueden acceder desde:
+- Cualquier móvil
+- Cualquier PC
+- Cualquier país
+- Con WiFi o datos móviles
+
+════════════════════════════════════════════════════════════
+
+🎉 FELICIDADES
+
+Tu aplicación ahora está:
+✅ En línea
+✅ Disponible 24/7
+✅ Accesible desde cualquier lugar
+✅ Con HTTPS seguro
+✅ Gratis (planes gratuitos)
+
+════════════════════════════════════════════════════════════
+
+📝 PRÓXIMOS PASOS (OPCIONALES)
+
+1. Cambiar contraseña de admin
+2. Agregar más usuarios
+3. Configurar dominio personalizado
+4. Monitoreo y backups
+5. Scaling si crece
+
+════════════════════════════════════════════════════════════
+
+🆘 SOLUCIÓN DE PROBLEMAS
+
+Problema: Página en blanco
+→ Abre F12 y busca errores
+
+Problema: No conecta a API
+→ Verifica VITE_API_URL en Vercel
+
+Problema: Build fails
+→ Revisa logs en Vercel
+
+Problema: MongoDB connection error
+→ Agrega 0.0.0.0/0 en MongoDB Atlas → Security
+
+════════════════════════════════════════════════════════════
+
+¡Listo! Tu aplicación está funcionando. 🚀
