@@ -11,6 +11,7 @@ declare global {
       env: ProcessEnv;
       exit(code?: number): never;
       cwd(): string;
+      on(event: string, listener: (...args: any[]) => void): void;
     }
   }
 
@@ -25,6 +26,24 @@ declare global {
     function warn(...args: any[]): void;
     function info(...args: any[]): void;
   }
+}
+
+declare module 'path' {
+  namespace path {
+    function join(...paths: string[]): string;
+    function resolve(...paths: string[]): string;
+    function dirname(p: string): string;
+  }
+  export = path;
+}
+
+declare module 'fs' {
+  namespace fs {
+    function existsSync(path: string): boolean;
+    function mkdirSync(path: string, options?: any): string;
+    function writeFileSync(path: string, data: any): void;
+  }
+  export = fs;
 }
 
 export {};
