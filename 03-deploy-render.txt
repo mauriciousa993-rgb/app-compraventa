@@ -1,142 +1,126 @@
-╔════════════════════════════════════════════════════════════╗
-║        DESPLIEGUE PASO 3: RENDER (BACKEND)                ║
-╚════════════════════════════════════════════════════════════╝
+🚀 PASO 2: DESPLEGAR EN RENDER (Backend)
+═════════════════════════════════════════════════════════════
 
-📌 TIEMPO: 5-10 minutos
-⚠️  NECESITAS: 
-   - Tu GitHub URL
-   - Tu MONGODB_URI de MongoDB Atlas
-   - Un JWT_SECRET seguro
+✅ Tu código está en GitHub:
+   https://github.com/mauriciousa993-rgb/app-compraventa
 
-════════════════════════════════════════════════════════════
+Ahora necesitas desplegar tu backend en Render.
 
-🔧 PASO 1: Crear Cuenta en Render
+═════════════════════════════════════════════════════════════
 
-1. Abre: https://render.com
+⚠️  IMPORTANTE - ANTES DE CONTINUAR:
 
-2. Click en "Sign up" (esquina superior derecha)
-
-3. Selecciona: "Continue with GitHub"
-
-4. Autoriza Render a acceder a tu GitHub
-   - Click en "Authorize render-oss"
-
-5. Completa tu información en Render
-
-════════════════════════════════════════════════════════════
-
-🔧 PASO 2: Crear Web Service
-
-1. En el dashboard de Render, click en: "New +"
-
-2. Selecciona: "Web Service"
-
-3. Selecciona tu repositorio: app-compraventa
-   (Si no aparece, click en "Connect GitHub account")
-
-4. Configura los detalles:
-
-   Name: compraventa-backend
+1. Genera tu JWT_SECRET ejecutando en PowerShell:
    
-   Environment: Node
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
    
-   Build Command:
-   cd backend && npm install && npm run build
+   Copia el resultado completo (una cadena larga)
+
+2. Ten a mano tu MONGODB_URI de MongoDB Atlas:
    
-   Start Command:
-   cd backend && npm start
+   mongodb+srv://usuario:contraseña@cluster.xxxxx...
+
+═════════════════════════════════════════════════════════════
+
+📋 PASOS PARA DESPLEGAR EN RENDER
+
+1️⃣  Abre: https://render.com
+
+2️⃣  Click en "Sign up with GitHub"
+   - Autoriza Render para acceder a tu GitHub
+   - Completa tu perfil
+
+3️⃣  En el dashboard, haz click en "+ New"
+
+4️⃣  Selecciona "Web Service"
+
+5️⃣  Conectar Repositorio:
+   - Busca: app-compraventa
+   - Haz click para seleccionarlo
+   - Click "Connect"
+
+6️⃣  Configura el servicio:
    
-   Instance Type: Free (Gratis)
+   Name:                compraventa-backend
+   Environment:         Node
+   Region:              (por defecto)
+   Build Command:       cd backend && npm install && npm run build
+   Start Command:       cd backend && npm start
+   Instance Type:       Free (Gratis)
 
-5. Scroll hacia abajo...
-
-════════════════════════════════════════════════════════════
-
-🔧 PASO 3: Agregar Variables de Entorno
-
-1. En la sección "Environment Variables":
-
-2. Agrega estas variables (una por una):
-
-   VARIABLE 1:
+7️⃣  Scroll hacia abajo a "Environment Variables"
+   
+   Agrega estas variables (una por una):
+   
+   Variable 1:
    - Key: PORT
    - Value: 5000
-
-   VARIABLE 2:
+   
+   Variable 2:
    - Key: MONGODB_URI
-   - Value: (pega tu MONGODB_URI completo de MongoDB Atlas)
+   - Value: mongodb+srv://usuario:contraseña@cluster.xxxxx...
    
-   VARIABLE 3:
+   Variable 3:
    - Key: JWT_SECRET
-   - Value: (pega tu JWT_SECRET generado con generar-jwt-secret.bat)
+   - Value: (el que generaste arriba - copia todo)
    
-   VARIABLE 4:
+   Variable 4:
    - Key: NODE_ENV
    - Value: production
 
-   Ejemplo de MONGODB_URI:
-   mongodb+srv://adminuser:GeneraUnaContraseña123!@compraventa-cluster.xxxxx.mongodb.net/compraventa-vehiculos?retryWrites=true&w=majority
+8️⃣  Click en el botón azul "Create Web Service"
 
-3. Verifica que NO hay espacios antes o después
+9️⃣  ESPERA 10-15 MINUTOS mientras Render compila
 
-════════════════════════════════════════════════════════════
+   Verás algo como:
+   - "Building..."
+   - "Running build command..."
+   - Varios logs
 
-🔧 PASO 4: Deploy
-
-1. Scroll hacia abajo
-
-2. Click en el botón azul: "Create Web Service"
-
-3. ESPERA 10-15 MINUTOS mientras se deploya
-   (Verás un log con el progreso)
-
-4. Cuando termine, deberías ver:
+   Cuando termine verás:
    ✓ "Your service is live"
    ✓ Una URL como: https://compraventa-backend.onrender.com
 
-5. COPIA esta URL
-   (La usarás en Vercel)
+═════════════════════════════════════════════════════════════
 
-════════════════════════════════════════════════════════════
+✅ VERIFICACIÓN - Que el backend funciona
 
-✅ VERIFICACIÓN
+1. Copia tu URL de Render
+   (Algo como: https://compraventa-backend.onrender.com)
 
-1. Abre en el navegador:
+2. Abre en el navegador:
    https://compraventa-backend.onrender.com
 
-2. Deberías ver JSON como:
+3. Deberías ver un JSON como:
    {
      "message": "API de Compraventa de Vehículos",
      "version": "1.0.0",
-     "endpoints": { ... }
+     "endpoints": {
+       "auth": "/api/auth",
+       "vehicles": "/api/vehicles"
+     }
    }
 
-Si ves esto: ✅ FUNCIONA PERFECTO
+Si ves esto: ✅ PERFECTO, funciona
 
-Si ves error: 
+Si ves error o página en blanco:
 - Espera 2 minutos (Render "despierta" el servidor)
-- Verifica las variables de entorno
-- Revisa los logs en Render
+- Revisa los logs en Render dashboard
+- Verifica que las variables estén correctas
 
-════════════════════════════════════════════════════════════
+═════════════════════════════════════════════════════════════
 
-✏️  GUARDA AQUÍ:
+📌 GUARDA AQUÍ TU RENDER URL:
 
-RENDER BACKEND URL:
-https://compraventa-backend.onrender.com
+Backend URL: https://compraventa-backend.onrender.com
 
-(Necesitarás esto para Vercel)
+(La necesitarás para el siguiente paso - Vercel)
 
-════════════════════════════════════════════════════════════
+═════════════════════════════════════════════════════════════
 
-⚠️  IMPORTANTE
+👉 SIGUIENTE PASO:
 
-- No cierres Render aún (déjalo corriendo)
-- Anota tu URL de Render
-- La usarás en Vercel como VITE_API_URL
+Cuando tu backend esté funcionando en Render,
+lee: 04-deploy-vercel.txt
 
-════════════════════════════════════════════════════════════
-
-👉 SIGUIENTE PASO: Desplegar en Vercel
-
-Lee: 04-deploy-vercel.txt
+═════════════════════════════════════════════════════════════

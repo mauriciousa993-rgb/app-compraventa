@@ -1,4 +1,5 @@
-# ✅ Cambios Realizados para Acceso desde Móvil
+Abre terminal aquí y ejecuta:
+01-setup-github.batLee: 03-deploy-render.txt# ✅ Cambios Realizados para Acceso desde Móvil
 
 ## 📋 Resumen de Modificaciones
 

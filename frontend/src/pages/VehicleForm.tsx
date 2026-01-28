@@ -79,17 +79,8 @@ const VehicleForm: React.FC = () => {
     }
   });
 
-  const [selectedFiles, setSelectedFiles] = useState<{
-    exteriores: File[];
-    interiores: File[];
-    detalles: File[];
-    documentos: File[];
-  }>({
-    exteriores: [],
-    interiores: [],
-    detalles: [],
-    documentos: []
-  });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string>('');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -158,21 +149,22 @@ const VehicleForm: React.FC = () => {
     }
   };
 
-  const handleFileChange = (category: 'exteriores' | 'interiores' | 'detalles' | 'documentos', files: FileList | null) => {
-    if (!files) return;
-    
-    const fileArray = Array.from(files);
-    setSelectedFiles(prev => ({
-      ...prev,
-      [category]: [...prev[category], ...fileArray]
-    }));
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      // Crear preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotoPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
-  const removeFile = (category: 'exteriores' | 'interiores' | 'detalles' | 'documentos', index: number) => {
-    setSelectedFiles(prev => ({
-      ...prev,
-      [category]: prev[category].filter((_, i) => i !== index)
-    }));
+  const removeFile = () => {
+    setSelectedFile(null);
+    setPhotoPreview('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -634,194 +626,58 @@ const VehicleForm: React.FC = () => {
             </select>
           </div>
 
-          {/* Fotos del Vehículo */}
+          {/* Foto del Vehículo */}
           <div className="card">
-            <h2 className="text-xl font-semibold mb-4 text-gray-900">Fotografías del Vehículo</h2>
+            <h2 className="text-xl font-semibold mb-4 text-gray-900">
+              <Image className="inline h-5 w-5 mr-2" />
+              Foto del Vehículo
+            </h2>
             <p className="text-sm text-gray-600 mb-4">
-              Adjunta fotos del vehículo para tener un registro visual completo
+              Sube una foto principal del vehículo
             </p>
 
-            <div className="space-y-6">
-              {/* Fotos Exteriores */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <Image className="inline h-4 w-4 mr-1" />
-                  Fotos Exteriores
+            {!photoPreview ? (
+              <div className="flex items-center justify-center w-full">
+                <label className="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
+                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                    <Upload className="w-12 h-12 mb-4 text-gray-400" />
+                    <p className="mb-2 text-sm text-gray-700">
+                      <span className="font-semibold">Click para subir</span> o arrastra la foto aquí
+                    </p>
+                    <p className="text-xs text-gray-500">PNG o JPG (MAX. 5MB)</p>
+                  </div>
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                  />
                 </label>
-                <div className="flex items-center justify-center w-full">
-                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
-                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                      <Upload className="w-8 h-8 mb-2 text-gray-500" />
-                      <p className="mb-2 text-sm text-gray-500">
-                        <span className="font-semibold">Click para subir</span> o arrastra archivos
-                      </p>
-                      <p className="text-xs text-gray-500">PNG, JPG (MAX. 5MB cada una)</p>
-                    </div>
-                    <input
-                      type="file"
-                      className="hidden"
-                      multiple
-                      accept="image/*"
-                      onChange={(e) => handleFileChange('exteriores', e.target.files)}
-                    />
-                  </label>
-                </div>
-                {selectedFiles.exteriores.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {selectedFiles.exteriores.map((file, index) => (
-                      <div key={index} className="relative bg-blue-50 px-3 py-2 rounded-lg flex items-center">
-                        <span className="text-sm text-blue-700">{file.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeFile('exteriores', index)}
-                          className="ml-2 text-red-600 hover:text-red-800"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
+              </div>
+            ) : (
+              <div className="relative">
+                <img
+                  src={photoPreview}
+                  alt="Preview"
+                  className="w-full h-64 object-cover rounded-lg border-2 border-gray-200"
+                />
+                <button
+                  type="button"
+                  onClick={removeFile}
+                  className="absolute top-2 right-2 bg-red-600 text-white p-2 rounded-full hover:bg-red-700 transition-colors shadow-lg"
+                  title="Eliminar foto"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+                {selectedFile && (
+                  <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-sm text-green-800">
+                      <strong>✓ Foto seleccionada:</strong> {selectedFile.name}
+                    </p>
                   </div>
                 )}
               </div>
-
-              {/* Fotos Interiores */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <Image className="inline h-4 w-4 mr-1" />
-                  Fotos Interiores
-                </label>
-                <div className="flex items-center justify-center w-full">
-                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
-                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                      <Upload className="w-8 h-8 mb-2 text-gray-500" />
-                      <p className="mb-2 text-sm text-gray-500">
-                        <span className="font-semibold">Click para subir</span> o arrastra archivos
-                      </p>
-                      <p className="text-xs text-gray-500">PNG, JPG (MAX. 5MB cada una)</p>
-                    </div>
-                    <input
-                      type="file"
-                      className="hidden"
-                      multiple
-                      accept="image/*"
-                      onChange={(e) => handleFileChange('interiores', e.target.files)}
-                    />
-                  </label>
-                </div>
-                {selectedFiles.interiores.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {selectedFiles.interiores.map((file, index) => (
-                      <div key={index} className="relative bg-blue-50 px-3 py-2 rounded-lg flex items-center">
-                        <span className="text-sm text-blue-700">{file.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeFile('interiores', index)}
-                          className="ml-2 text-red-600 hover:text-red-800"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Fotos de Detalles/Daños */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <Image className="inline h-4 w-4 mr-1" />
-                  Fotos de Detalles/Daños
-                </label>
-                <div className="flex items-center justify-center w-full">
-                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
-                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                      <Upload className="w-8 h-8 mb-2 text-gray-500" />
-                      <p className="mb-2 text-sm text-gray-500">
-                        <span className="font-semibold">Click para subir</span> o arrastra archivos
-                      </p>
-                      <p className="text-xs text-gray-500">PNG, JPG (MAX. 5MB cada una)</p>
-                    </div>
-                    <input
-                      type="file"
-                      className="hidden"
-                      multiple
-                      accept="image/*"
-                      onChange={(e) => handleFileChange('detalles', e.target.files)}
-                    />
-                  </label>
-                </div>
-                {selectedFiles.detalles.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {selectedFiles.detalles.map((file, index) => (
-                      <div key={index} className="relative bg-blue-50 px-3 py-2 rounded-lg flex items-center">
-                        <span className="text-sm text-blue-700">{file.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeFile('detalles', index)}
-                          className="ml-2 text-red-600 hover:text-red-800"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Fotos de Documentos */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <Image className="inline h-4 w-4 mr-1" />
-                  Fotos de Documentos
-                </label>
-                <div className="flex items-center justify-center w-full">
-                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
-                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                      <Upload className="w-8 h-8 mb-2 text-gray-500" />
-                      <p className="mb-2 text-sm text-gray-500">
-                        <span className="font-semibold">Click para subir</span> o arrastra archivos
-                      </p>
-                      <p className="text-xs text-gray-500">PNG, JPG, PDF (MAX. 5MB cada una)</p>
-                    </div>
-                    <input
-                      type="file"
-                      className="hidden"
-                      multiple
-                      accept="image/*,application/pdf"
-                      onChange={(e) => handleFileChange('documentos', e.target.files)}
-                    />
-                  </label>
-                </div>
-                {selectedFiles.documentos.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {selectedFiles.documentos.map((file, index) => (
-                      <div key={index} className="relative bg-blue-50 px-3 py-2 rounded-lg flex items-center">
-                        <span className="text-sm text-blue-700">{file.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeFile('documentos', index)}
-                          className="ml-2 text-red-600 hover:text-red-800"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="text-sm text-yellow-800">
-                <strong>Nota:</strong> Las fotos se guardarán cuando completes el registro del vehículo. 
-                Total de fotos seleccionadas: {
-                  selectedFiles.exteriores.length + 
-                  selectedFiles.interiores.length + 
-                  selectedFiles.detalles.length + 
-                  selectedFiles.documentos.length
-                }
-              </p>
-            </div>
+            )}
           </div>
 
           {/* Observaciones y Comentarios */}
