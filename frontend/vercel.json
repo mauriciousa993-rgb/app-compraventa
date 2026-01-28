@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm install && vite build",
+  "buildCommand": "rm -rf node_modules .next dist && npm ci && vite build",
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
@@ -14,8 +14,7 @@
   "build": {
     "env": {
       "CI": "false",
-      "SKIP_PREFLIGHT_CHECK": "true",
-      "TSC_COMPILE_ON_ERROR": "true"
+      "NODE_ENV": "production"
     }
   }
 }

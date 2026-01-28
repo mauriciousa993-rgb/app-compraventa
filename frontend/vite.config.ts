@@ -5,6 +5,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    sourcemap: false,
     rollupOptions: {
       onwarn(warning, warn) {
         // Ignorar warnings de TypeScript durante el build
@@ -14,7 +17,7 @@ export default defineConfig({
     }
   },
   server: {
-    host: '0.0.0.0', // Escuchar en todas las interfaces
+    host: '0.0.0.0',
     port: 3000,
     proxy: {
       '/api': {
