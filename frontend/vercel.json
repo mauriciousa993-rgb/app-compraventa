@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm install && npm run build -- --mode production",
+  "buildCommand": "npm install && vite build",
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
