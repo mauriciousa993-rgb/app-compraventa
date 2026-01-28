@@ -17,11 +17,6 @@ export interface AuthRequest extends Request {
     email: string;
     rol: string;
   };
-  params?: any;
-  body?: any;
-  query?: any;
-  header?: (name: string) => string | undefined;
-  headers?: any;
   files?: any;
 }
 
