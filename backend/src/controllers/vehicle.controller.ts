@@ -21,7 +21,33 @@ export const createVehicle = async (req: AuthRequest, res: Response): Promise<vo
       vehicle,
     });
   } catch (error: any) {
-    res.status(500).json({ message: 'Error al crear vehículo', error: error.message });
+    console.error('Error al crear vehículo:', error);
+    
+    // Manejar errores de validación de Mongoose
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map((err: any) => err.message);
+      res.status(400).json({ 
+        message: 'Error de validación', 
+        errors: errors,
+        details: error.message 
+      });
+      return;
+    }
+    
+    // Manejar errores de duplicados (placa o VIN)
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      res.status(400).json({ 
+        message: `Ya existe un vehículo con ${field === 'placa' ? 'esta placa' : 'este VIN'}`,
+        field: field
+      });
+      return;
+    }
+    
+    res.status(500).json({ 
+      message: 'Error al crear vehículo', 
+      error: error.message 
+    });
   }
 };
 

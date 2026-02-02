@@ -88,15 +88,16 @@ const vehicleSchema = new Schema<IVehicleDocument>(
     },
     vin: {
       type: String,
-      required: [true, 'El VIN es requerido'],
-      unique: true,
+      required: false,
+      sparse: true, // Permite múltiples documentos con vin vacío
       uppercase: true,
       trim: true,
     },
     color: {
       type: String,
-      required: [true, 'El color es requerido'],
+      required: false,
       trim: true,
+      default: '',
     },
     kilometraje: {
       type: Number,
@@ -186,7 +187,7 @@ const vehicleSchema = new Schema<IVehicleDocument>(
 
 // Índices para búsquedas rápidas
 vehicleSchema.index({ placa: 1 });
-vehicleSchema.index({ vin: 1 });
+vehicleSchema.index({ vin: 1 }, { sparse: true }); // Índice sparse para permitir valores vacíos
 vehicleSchema.index({ estado: 1 });
 vehicleSchema.index({ marca: 1, modelo: 1 });
 
