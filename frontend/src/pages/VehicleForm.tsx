@@ -1,12 +1,16 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Upload, Save, Image, X } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
 import api from '../services/api';
 
 const VehicleForm: React.FC = () => {
   const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const isEditMode = Boolean(id);
+  
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
@@ -81,6 +85,86 @@ const VehicleForm: React.FC = () => {
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string>('');
+
+  // Cargar datos del vehículo si estamos en modo edición
+  useEffect(() => {
+    if (isEditMode && id) {
+      loadVehicleData(id);
+    }
+  }, [id, isEditMode]);
+
+  const loadVehicleData = async (vehicleId: string) => {
+    setIsLoadingData(true);
+    setError('');
+    try {
+      const response = await api.get(`/vehicles/${vehicleId}`);
+      const vehicle = response.data;
+      
+      // Cargar los datos en el formulario
+      setFormData({
+        marca: vehicle.marca || '',
+        modelo: vehicle.modelo || '',
+        año: vehicle.año || new Date().getFullYear(),
+        placa: vehicle.placa || '',
+        vin: vehicle.vin || '',
+        color: vehicle.color || '',
+        kilometraje: vehicle.kilometraje || 0,
+        precioCompra: vehicle.precioCompra || 0,
+        precioVenta: vehicle.precioVenta || 0,
+        gastos: {
+          pintura: vehicle.gastos?.pintura || 0,
+          mecanica: vehicle.gastos?.mecanica || 0,
+          varios: vehicle.gastos?.varios || 0,
+          total: vehicle.gastos?.total || 0
+        },
+        estado: vehicle.estado || 'en_proceso',
+        documentacion: {
+          prenda: {
+            tiene: vehicle.documentacion?.prenda?.tiene || false,
+            detalles: vehicle.documentacion?.prenda?.detalles || '',
+            verificado: vehicle.documentacion?.prenda?.verificado || false
+          },
+          soat: {
+            tiene: vehicle.documentacion?.soat?.tiene || false,
+            fechaVencimiento: vehicle.documentacion?.soat?.fechaVencimiento 
+              ? new Date(vehicle.documentacion.soat.fechaVencimiento).toISOString().split('T')[0]
+              : '',
+            verificado: vehicle.documentacion?.soat?.verificado || false
+          },
+          tecnomecanica: {
+            tiene: vehicle.documentacion?.tecnomecanica?.tiene || false,
+            fechaVencimiento: vehicle.documentacion?.tecnomecanica?.fechaVencimiento
+              ? new Date(vehicle.documentacion.tecnomecanica.fechaVencimiento).toISOString().split('T')[0]
+              : '',
+            verificado: vehicle.documentacion?.tecnomecanica?.verificado || false
+          },
+          tarjetaPropiedad: {
+            tiene: vehicle.documentacion?.tarjetaPropiedad?.tiene || false,
+            verificado: vehicle.documentacion?.tarjetaPropiedad?.verificado || false
+          }
+        },
+        checklist: {
+          revisionMecanica: vehicle.checklist?.revisionMecanica || false,
+          limpiezaDetailing: vehicle.checklist?.limpiezaDetailing || false,
+          fotografiasCompletas: vehicle.checklist?.fotografiasCompletas || false,
+          documentosCompletos: vehicle.checklist?.documentosCompletos || false,
+          precioEstablecido: vehicle.checklist?.precioEstablecido || false
+        },
+        observaciones: vehicle.observaciones || '',
+        fotos: {
+          exteriores: vehicle.fotos?.exteriores || [],
+          interiores: vehicle.fotos?.interiores || [],
+          detalles: vehicle.fotos?.detalles || [],
+          documentos: vehicle.fotos?.documentos || []
+        }
+      });
+    } catch (err: any) {
+      console.error('Error al cargar vehículo:', err);
+      setError(err.response?.data?.message || 'Error al cargar los datos del vehículo');
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -173,19 +257,41 @@ const VehicleForm: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Por ahora guardamos sin fotos (la funcionalidad de upload se puede agregar después)
-      // Las fotos se pueden subir usando FormData y multer en el backend
-      await api.post('/vehicles', formData);
-      setSuccess(true);
-      setTimeout(() => {
-        navigate('/vehicles');
-      }, 1500);
+      if (isEditMode && id) {
+        // Modo edición: usar PUT
+        await api.put(`/vehicles/${id}`, formData);
+        setSuccess(true);
+        setTimeout(() => {
+          navigate('/vehicles');
+        }, 1500);
+      } else {
+        // Modo creación: usar POST
+        await api.post('/vehicles', formData);
+        setSuccess(true);
+        setTimeout(() => {
+          navigate('/vehicles');
+        }, 1500);
+      }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Error al crear vehículo');
+      setError(err.response?.data?.message || `Error al ${isEditMode ? 'actualizar' : 'crear'} vehículo`);
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Mostrar loading mientras carga los datos del vehículo
+  if (isLoadingData) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Cargando datos del vehículo...</p>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -198,7 +304,9 @@ const VehicleForm: React.FC = () => {
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
-            <h1 className="text-3xl font-bold text-gray-900">Nuevo Vehículo</h1>
+            <h1 className="text-3xl font-bold text-gray-900">
+              {isEditMode ? 'Editar Vehículo' : 'Nuevo Vehículo'}
+            </h1>
           </div>
         </div>
 
@@ -210,7 +318,7 @@ const VehicleForm: React.FC = () => {
 
         {success && (
           <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800">
-            ¡Vehículo creado exitosamente! Redirigiendo...
+            ¡Vehículo {isEditMode ? 'actualizado' : 'creado'} exitosamente! Redirigiendo...
           </div>
         )}
 
@@ -712,7 +820,13 @@ const VehicleForm: React.FC = () => {
               disabled={isLoading || success}
             >
               <Save className="h-5 w-5 mr-2" />
-              {isLoading ? 'Guardando...' : success ? '¡Guardado!' : 'Guardar Vehículo'}
+              {isLoading 
+                ? 'Guardando...' 
+                : success 
+                  ? '¡Guardado!' 
+                  : isEditMode 
+                    ? 'Actualizar Vehículo' 
+                    : 'Guardar Vehículo'}
             </button>
           </div>
         </form>
