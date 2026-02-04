@@ -1,5 +1,12 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export interface IInversionista {
+  nombre: string;
+  montoInversion: number;
+  porcentajeParticipacion: number;
+  utilidadCorrespondiente: number;
+}
+
 export interface IVehicleDocument extends Document {
   marca: string;
   modelo: string;
@@ -17,6 +24,8 @@ export interface IVehicleDocument extends Document {
     varios: number;
     total: number;
   };
+  inversionistas: IInversionista[];
+  tieneInversionistas: boolean;
   estado: 'en_proceso' | 'listo_venta' | 'en_negociacion' | 'vendido' | 'retirado';
   documentacion: {
     prenda: {
@@ -122,6 +131,16 @@ const vehicleSchema = new Schema<IVehicleDocument>(
       varios: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
       total: { type: Number, default: 0 },
     },
+    inversionistas: [{
+      nombre: { type: String, required: true, trim: true },
+      montoInversion: { type: Number, required: true, min: [0, 'El monto de inversión no puede ser negativo'] },
+      porcentajeParticipacion: { type: Number, default: 0, min: [0, 'El porcentaje no puede ser negativo'], max: [100, 'El porcentaje no puede ser mayor a 100'] },
+      utilidadCorrespondiente: { type: Number, default: 0 }
+    }],
+    tieneInversionistas: {
+      type: Boolean,
+      default: false,
+    },
     estado: {
       type: String,
       enum: ['en_proceso', 'listo_venta', 'en_negociacion', 'vendido', 'retirado'],
@@ -193,9 +212,24 @@ vehicleSchema.index({ vin: 1 }, { sparse: true }); // Índice sparse para permit
 vehicleSchema.index({ estado: 1 });
 vehicleSchema.index({ marca: 1, modelo: 1 });
 
-// Middleware para calcular total de gastos antes de guardar
+// Middleware para calcular total de gastos y distribución de inversionistas antes de guardar
 vehicleSchema.pre('save', function (next) {
+  // Calcular total de gastos
   this.gastos.total = this.gastos.pintura + this.gastos.mecanica + this.gastos.traspaso + this.gastos.varios;
+  
+  // Calcular distribución de inversionistas si existen
+  if (this.inversionistas && this.inversionistas.length > 0) {
+    const totalInversion = this.inversionistas.reduce((sum, inv) => sum + inv.montoInversion, 0);
+    const utilidadTotal = this.precioVenta - this.precioCompra - this.gastos.total;
+    
+    this.inversionistas.forEach(inv => {
+      // Calcular porcentaje de participación
+      inv.porcentajeParticipacion = totalInversion > 0 ? (inv.montoInversion / totalInversion) * 100 : 0;
+      // Calcular utilidad correspondiente
+      inv.utilidadCorrespondiente = (inv.porcentajeParticipacion / 100) * utilidadTotal;
+    });
+  }
+  
   next();
 });
 

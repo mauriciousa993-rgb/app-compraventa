@@ -36,6 +36,15 @@ const VehicleForm: React.FC = () => {
       total: 0
     },
     
+    // Inversionistas
+    inversionistas: [] as Array<{
+      nombre: string;
+      montoInversion: number;
+      porcentajeParticipacion: number;
+      utilidadCorrespondiente: number;
+    }>,
+    tieneInversionistas: false,
+    
     // Estado
     estado: 'en_proceso',
     fechaVenta: '',
@@ -134,6 +143,8 @@ const VehicleForm: React.FC = () => {
           varios: vehicle.gastos?.varios || 0,
           total: vehicle.gastos?.total || 0
         },
+        inversionistas: vehicle.inversionistas || [],
+        tieneInversionistas: vehicle.tieneInversionistas || false,
         estado: vehicle.estado || 'en_proceso',
         fechaVenta: vehicle.fechaVenta 
           ? new Date(vehicle.fechaVenta).toISOString().split('T')[0]
@@ -225,6 +236,9 @@ const VehicleForm: React.FC = () => {
             [doc]: { ...prev.documentacion[doc as keyof typeof prev.documentacion], fechaVencimiento: value, tiene: true }
           }
         }));
+      } else {
+        // Manejar otros campos de fecha (como fechaVenta)
+        setFormData(prev => ({ ...prev, [name]: value }));
       }
     } else if (name === 'doc.prenda.detalles') {
       setFormData(prev => ({

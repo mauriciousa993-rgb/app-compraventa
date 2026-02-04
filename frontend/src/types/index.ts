@@ -12,6 +12,13 @@ export interface AuthResponse {
   user: User;
 }
 
+export interface Inversionista {
+  nombre: string;
+  montoInversion: number;
+  porcentajeParticipacion: number;
+  utilidadCorrespondiente: number;
+}
+
 export interface Vehicle {
   _id: string;
   marca: string;
@@ -29,6 +36,8 @@ export interface Vehicle {
     varios: number;
     total: number;
   };
+  inversionistas: Inversionista[];
+  tieneInversionistas: boolean;
   estado: 'en_proceso' | 'listo_venta' | 'en_negociacion' | 'vendido' | 'retirado';
   documentacion: {
     prenda: {
