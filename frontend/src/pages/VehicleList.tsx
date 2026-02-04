@@ -276,8 +276,22 @@ const VehicleList: React.FC = () => {
                 </div>
                 <div className="flex space-x-2">
                   <button
-                    onClick={() => {
-                      window.location.href = `${api.defaults.baseURL}/vehicles/${vehicle._id}/export`;
+                    onClick={async () => {
+                      try {
+                        const response = await api.get(`/vehicles/${vehicle._id}/export`, {
+                          responseType: 'blob'
+                        });
+                        const url = window.URL.createObjectURL(new Blob([response.data]));
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.setAttribute('download', `vehiculo-${vehicle.placa}-${Date.now()}.xlsx`);
+                        document.body.appendChild(link);
+                        link.click();
+                        link.remove();
+                      } catch (error) {
+                        console.error('Error al exportar:', error);
+                        alert('Error al exportar el vehículo');
+                      }
                     }}
                     className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                     title="Exportar a Excel"

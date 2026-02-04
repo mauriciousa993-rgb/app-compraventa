@@ -133,8 +133,22 @@ const Reports: React.FC = () => {
             </div>
             <div className="flex items-end">
               <button
-                onClick={() => {
-                  window.location.href = `${api.defaults.baseURL}/vehicles/reports/monthly/export?year=${selectedYear}`;
+                onClick={async () => {
+                  try {
+                    const response = await api.get(`/vehicles/reports/monthly/export?year=${selectedYear}`, {
+                      responseType: 'blob'
+                    });
+                    const url = window.URL.createObjectURL(new Blob([response.data]));
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.setAttribute('download', `reporte-ventas-${selectedYear}-${Date.now()}.xlsx`);
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                  } catch (error) {
+                    console.error('Error al exportar:', error);
+                    alert('Error al exportar el reporte');
+                  }
                 }}
                 className="btn-primary w-full flex items-center justify-center"
               >
