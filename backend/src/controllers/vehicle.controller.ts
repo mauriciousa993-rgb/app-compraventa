@@ -489,6 +489,101 @@ export const exportVehicleReport = async (
     addDataRow('Tarjeta de Propiedad', vehicle.documentacion.tarjetaPropiedad.tiene ? 'SÍ' : 'NO');
     currentRow++;
 
+    // Inversionistas
+    if (vehicle.inversionistas && vehicle.inversionistas.length > 0) {
+      addSection('INVERSIONISTAS Y DISTRIBUCIÓN DE UTILIDADES');
+      
+      // Encabezados de la tabla de inversionistas
+      worksheet.getCell(`A${currentRow}`).value = 'Nombre';
+      worksheet.getCell(`A${currentRow}`).font = { bold: true };
+      worksheet.getCell(`A${currentRow}`).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE7E6E6' },
+      };
+      
+      worksheet.getCell(`B${currentRow}`).value = 'Monto Inversión';
+      worksheet.getCell(`B${currentRow}`).font = { bold: true };
+      worksheet.getCell(`B${currentRow}`).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE7E6E6' },
+      };
+      currentRow++;
+
+      worksheet.getCell(`A${currentRow}`).value = '';
+      worksheet.getCell(`B${currentRow}`).value = 'Participación %';
+      worksheet.getCell(`B${currentRow}`).font = { bold: true };
+      worksheet.getCell(`B${currentRow}`).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE7E6E6' },
+      };
+      currentRow++;
+
+      worksheet.getCell(`A${currentRow}`).value = '';
+      worksheet.getCell(`B${currentRow}`).value = 'Utilidad Correspondiente';
+      worksheet.getCell(`B${currentRow}`).font = { bold: true };
+      worksheet.getCell(`B${currentRow}`).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE7E6E6' },
+      };
+      currentRow++;
+
+      // Calcular totales
+      const totalInversion = vehicle.inversionistas.reduce((sum, inv) => sum + inv.montoInversion, 0);
+      const utilidadTotal = vehicle.precioVenta - vehicle.precioCompra - vehicle.gastos.total;
+
+      // Datos de cada inversionista
+      vehicle.inversionistas.forEach((inv, index) => {
+        const porcentaje = totalInversion > 0 ? (inv.montoInversion / totalInversion) * 100 : 0;
+        const utilidadInv = (porcentaje / 100) * utilidadTotal;
+
+        worksheet.getCell(`A${currentRow}`).value = inv.nombre;
+        worksheet.getCell(`B${currentRow}`).value = inv.montoInversion;
+        worksheet.getCell(`B${currentRow}`).numFmt = '"$"#,##0';
+        currentRow++;
+
+        worksheet.getCell(`A${currentRow}`).value = '';
+        worksheet.getCell(`B${currentRow}`).value = porcentaje;
+        worksheet.getCell(`B${currentRow}`).numFmt = '0.00"%"';
+        worksheet.getCell(`B${currentRow}`).font = { color: { argb: 'FF0070C0' } };
+        currentRow++;
+
+        worksheet.getCell(`A${currentRow}`).value = '';
+        worksheet.getCell(`B${currentRow}`).value = utilidadInv;
+        worksheet.getCell(`B${currentRow}`).numFmt = '"$"#,##0';
+        worksheet.getCell(`B${currentRow}`).font = { bold: true, color: { argb: utilidadInv >= 0 ? 'FF00B050' : 'FFFF0000' } };
+        currentRow++;
+
+        if (index < vehicle.inversionistas.length - 1) {
+          currentRow++; // Espacio entre inversionistas
+        }
+      });
+
+      currentRow++;
+
+      // Resumen de inversiones
+      worksheet.mergeCells(`A${currentRow}:B${currentRow}`);
+      const resumenCell = worksheet.getCell(`A${currentRow}`);
+      resumenCell.value = 'RESUMEN DE INVERSIONES';
+      resumenCell.font = { bold: true, size: 11 };
+      resumenCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFD9D9D9' },
+      };
+      currentRow++;
+
+      addDataRow('Total Invertido', `$${totalInversion.toLocaleString('es-CO')}`);
+      addDataRow('Número de Socios', vehicle.inversionistas.length);
+      addDataRow('Utilidad Total Distribuida', `$${utilidadTotal.toLocaleString('es-CO')}`);
+      
+      worksheet.getCell(`B${currentRow - 1}`).font = { bold: true, color: { argb: utilidadTotal >= 0 ? 'FF00B050' : 'FFFF0000' } };
+      currentRow++;
+    }
+
     // Observaciones
     if (vehicle.observaciones) {
       addSection('OBSERVACIONES');
