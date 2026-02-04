@@ -87,6 +87,14 @@ const Dashboard: React.FC = () => {
       bgColor: 'bg-indigo-50',
     },
     {
+      title: 'Total de Gastos',
+      value: `$${(stats?.totalGastos || 0).toLocaleString('es-CO')}`,
+      icon: AlertTriangle,
+      color: 'bg-orange-500',
+      textColor: 'text-orange-600',
+      bgColor: 'bg-orange-50',
+    },
+    {
       title: 'Ganancias Estimadas',
       value: `$${(stats?.gananciasEstimadas || 0).toLocaleString('es-CO')}`,
       icon: DollarSign,

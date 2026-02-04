@@ -166,14 +166,19 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
       0
     );
 
+    const totalGastos = vehiculosEnStock.reduce(
+      (sum, vehicle) => sum + (vehicle.gastos?.total || 0),
+      0
+    );
+
     const gananciasEstimadas = vehiculosEnStock.reduce(
-      (sum, vehicle) => sum + (vehicle.precioVenta - vehicle.precioCompra),
+      (sum, vehicle) => sum + (vehicle.precioVenta - vehicle.precioCompra - (vehicle.gastos?.total || 0)),
       0
     );
 
     const vehiculosVendidosData = await Vehicle.find({ estado: 'vendido' });
     const gananciasReales = vehiculosVendidosData.reduce(
-      (sum, vehicle) => sum + (vehicle.precioVenta - vehicle.precioCompra),
+      (sum, vehicle) => sum + (vehicle.precioVenta - vehicle.precioCompra - (vehicle.gastos?.total || 0)),
       0
     );
 
@@ -183,6 +188,7 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
       vehiculosPendientes,
       vehiculosVendidos,
       valorInventario,
+      totalGastos,
       gananciasEstimadas,
       gananciasReales,
       vehiculosEnStock: vehiculosEnStock.length,

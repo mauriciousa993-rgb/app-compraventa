@@ -86,6 +86,7 @@ export interface Statistics {
   vehiculosPendientes: number;
   vehiculosVendidos: number;
   valorInventario: number;
+  totalGastos: number;
   gananciasEstimadas: number;
   gananciasReales: number;
   vehiculosEnStock: number;
