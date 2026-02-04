@@ -13,6 +13,7 @@ export interface IVehicleDocument extends Document {
   gastos: {
     pintura: number;
     mecanica: number;
+    traspaso: number;
     varios: number;
     total: number;
   };
@@ -117,6 +118,7 @@ const vehicleSchema = new Schema<IVehicleDocument>(
     gastos: {
       pintura: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
       mecanica: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
+      traspaso: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
       varios: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
       total: { type: Number, default: 0 },
     },
@@ -193,7 +195,7 @@ vehicleSchema.index({ marca: 1, modelo: 1 });
 
 // Middleware para calcular total de gastos antes de guardar
 vehicleSchema.pre('save', function (next) {
-  this.gastos.total = this.gastos.pintura + this.gastos.mecanica + this.gastos.varios;
+  this.gastos.total = this.gastos.pintura + this.gastos.mecanica + this.gastos.traspaso + this.gastos.varios;
   next();
 });
 

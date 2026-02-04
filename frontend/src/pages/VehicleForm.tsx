@@ -20,7 +20,6 @@ const VehicleForm: React.FC = () => {
     modelo: '',
     año: new Date().getFullYear(),
     placa: '',
-    vin: '',
     color: '',
     kilometraje: 0,
     
@@ -32,6 +31,7 @@ const VehicleForm: React.FC = () => {
     gastos: {
       pintura: 0,
       mecanica: 0,
+      traspaso: 0,
       varios: 0,
       total: 0
     },
@@ -122,7 +122,6 @@ const VehicleForm: React.FC = () => {
         modelo: vehicle.modelo || '',
         año: vehicle.año || new Date().getFullYear(),
         placa: vehicle.placa || '',
-        vin: vehicle.vin || '',
         color: vehicle.color || '',
         kilometraje: vehicle.kilometraje || 0,
         precioCompra: vehicle.precioCompra || 0,
@@ -130,6 +129,7 @@ const VehicleForm: React.FC = () => {
         gastos: {
           pintura: vehicle.gastos?.pintura || 0,
           mecanica: vehicle.gastos?.mecanica || 0,
+          traspaso: vehicle.gastos?.traspaso || 0,
           varios: vehicle.gastos?.varios || 0,
           total: vehicle.gastos?.total || 0
         },
@@ -392,20 +392,6 @@ const VehicleForm: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  VIN
-                </label>
-                <input
-                  type="text"
-                  name="vin"
-                  value={formData.vin}
-                  onChange={handleChange}
-                  className="input-field"
-                  placeholder="Número de identificación"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Color
                 </label>
                 <input
@@ -495,7 +481,7 @@ const VehicleForm: React.FC = () => {
                     const numValue = parseFormattedNumber(e.target.value);
                     setFormData(prev => {
                       const newGastos = { ...prev.gastos, pintura: numValue };
-                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.varios;
+                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + newGastos.varios;
                       return { ...prev, gastos: newGastos };
                     });
                   }}
@@ -516,12 +502,33 @@ const VehicleForm: React.FC = () => {
                     const numValue = parseFormattedNumber(e.target.value);
                     setFormData(prev => {
                       const newGastos = { ...prev.gastos, mecanica: numValue };
-                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.varios;
+                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + newGastos.varios;
                       return { ...prev, gastos: newGastos };
                     });
                   }}
                   className="input-field"
                   placeholder="Ej: 1,500,000"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Gastos de Traspaso
+                </label>
+                <input
+                  type="text"
+                  name="gastos.traspaso"
+                  value={formatNumber(formData.gastos.traspaso)}
+                  onChange={(e) => {
+                    const numValue = parseFormattedNumber(e.target.value);
+                    setFormData(prev => {
+                      const newGastos = { ...prev.gastos, traspaso: numValue };
+                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + newGastos.varios;
+                      return { ...prev, gastos: newGastos };
+                    });
+                  }}
+                  className="input-field"
+                  placeholder="Ej: 800,000"
                 />
               </div>
 
@@ -537,7 +544,7 @@ const VehicleForm: React.FC = () => {
                     const numValue = parseFormattedNumber(e.target.value);
                     setFormData(prev => {
                       const newGastos = { ...prev.gastos, varios: numValue };
-                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.varios;
+                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + newGastos.varios;
                       return { ...prev, gastos: newGastos };
                     });
                   }}
