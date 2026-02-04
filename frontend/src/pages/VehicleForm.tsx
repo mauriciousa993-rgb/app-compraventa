@@ -86,6 +86,22 @@ const VehicleForm: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string>('');
 
+  // Formatear número con separador de miles
+  const formatNumber = (value: number | string): string => {
+    if (value === '' || value === 0 || value === '0') return '';
+    const numValue = typeof value === 'string' ? parseFloat(value.replace(/,/g, '')) : value;
+    if (isNaN(numValue)) return '';
+    return numValue.toLocaleString('es-CO');
+  };
+
+  // Parsear número desde string formateado
+  const parseFormattedNumber = (value: string): number => {
+    if (!value || value === '') return 0;
+    const cleaned = value.replace(/,/g, '').replace(/\./g, '');
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? 0 : num;
+  };
+
   // Cargar datos del vehículo si estamos en modo edición
   useEffect(() => {
     if (isEditMode && id) {
@@ -192,20 +208,6 @@ const VehicleForm: React.FC = () => {
             [doc]: { ...prev.documentacion[doc as keyof typeof prev.documentacion], [field]: checked }
           }
         }));
-      }
-    } else if (type === 'number') {
-      // Manejar gastos
-      if (name.startsWith('gastos.')) {
-        const field = name.split('.')[1];
-        const numValue = parseFloat(value) || 0;
-        setFormData(prev => {
-          const newGastos = { ...prev.gastos, [field]: numValue };
-          // Calcular total automáticamente
-          newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.varios;
-          return { ...prev, gastos: newGastos };
-        });
-      } else {
-        setFormData(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
       }
     } else if (type === 'date') {
       // Manejar fechas de documentación
@@ -421,13 +423,15 @@ const VehicleForm: React.FC = () => {
                   Kilometraje
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   name="kilometraje"
-                  value={formData.kilometraje}
-                  onChange={handleChange}
+                  value={formatNumber(formData.kilometraje)}
+                  onChange={(e) => {
+                    const numValue = parseFormattedNumber(e.target.value);
+                    setFormData(prev => ({ ...prev, kilometraje: numValue }));
+                  }}
                   className="input-field"
-                  min="0"
-                  placeholder="0"
+                  placeholder="Ej: 50,000"
                 />
               </div>
             </div>
@@ -442,15 +446,16 @@ const VehicleForm: React.FC = () => {
                   Precio de Compra *
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   name="precioCompra"
-                  value={formData.precioCompra}
-                  onChange={handleChange}
+                  value={formatNumber(formData.precioCompra)}
+                  onChange={(e) => {
+                    const numValue = parseFormattedNumber(e.target.value);
+                    setFormData(prev => ({ ...prev, precioCompra: numValue }));
+                  }}
                   className="input-field"
                   required
-                  min="0"
-                  step="0.01"
-                  placeholder="0.00"
+                  placeholder="Ej: 29,000,000"
                 />
               </div>
 
@@ -459,15 +464,16 @@ const VehicleForm: React.FC = () => {
                   Precio de Venta *
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   name="precioVenta"
-                  value={formData.precioVenta}
-                  onChange={handleChange}
+                  value={formatNumber(formData.precioVenta)}
+                  onChange={(e) => {
+                    const numValue = parseFormattedNumber(e.target.value);
+                    setFormData(prev => ({ ...prev, precioVenta: numValue }));
+                  }}
                   className="input-field"
                   required
-                  min="0"
-                  step="0.01"
-                  placeholder="0.00"
+                  placeholder="Ej: 37,500,000"
                 />
               </div>
             </div>
@@ -482,14 +488,19 @@ const VehicleForm: React.FC = () => {
                   Gastos en Pintura
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   name="gastos.pintura"
-                  value={formData.gastos.pintura}
-                  onChange={handleChange}
+                  value={formatNumber(formData.gastos.pintura)}
+                  onChange={(e) => {
+                    const numValue = parseFormattedNumber(e.target.value);
+                    setFormData(prev => {
+                      const newGastos = { ...prev.gastos, pintura: numValue };
+                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.varios;
+                      return { ...prev, gastos: newGastos };
+                    });
+                  }}
                   className="input-field"
-                  min="0"
-                  step="0.01"
-                  placeholder="0.00"
+                  placeholder="Ej: 2,000,000"
                 />
               </div>
 
@@ -498,14 +509,19 @@ const VehicleForm: React.FC = () => {
                   Gastos en Mecánica
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   name="gastos.mecanica"
-                  value={formData.gastos.mecanica}
-                  onChange={handleChange}
+                  value={formatNumber(formData.gastos.mecanica)}
+                  onChange={(e) => {
+                    const numValue = parseFormattedNumber(e.target.value);
+                    setFormData(prev => {
+                      const newGastos = { ...prev.gastos, mecanica: numValue };
+                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.varios;
+                      return { ...prev, gastos: newGastos };
+                    });
+                  }}
                   className="input-field"
-                  min="0"
-                  step="0.01"
-                  placeholder="0.00"
+                  placeholder="Ej: 1,500,000"
                 />
               </div>
 
@@ -514,14 +530,19 @@ const VehicleForm: React.FC = () => {
                   Gastos Varios
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   name="gastos.varios"
-                  value={formData.gastos.varios}
-                  onChange={handleChange}
+                  value={formatNumber(formData.gastos.varios)}
+                  onChange={(e) => {
+                    const numValue = parseFormattedNumber(e.target.value);
+                    setFormData(prev => {
+                      const newGastos = { ...prev.gastos, varios: numValue };
+                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.varios;
+                      return { ...prev, gastos: newGastos };
+                    });
+                  }}
                   className="input-field"
-                  min="0"
-                  step="0.01"
-                  placeholder="0.00"
+                  placeholder="Ej: 500,000"
                 />
               </div>
 
