@@ -9,6 +9,7 @@ import {
   exportToExcel,
   uploadPhotos,
   getVehiclesWithExpiringDocuments,
+  getMonthlyReports,
 } from '../controllers/vehicle.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { uploadMultiple } from '../middleware/upload.middleware';
@@ -22,6 +23,7 @@ router.use(authenticate);
 router.post('/', authorize('admin', 'vendedor'), createVehicle);
 router.get('/', getAllVehicles);
 router.get('/statistics', getStatistics);
+router.get('/reports/monthly', getMonthlyReports);
 router.get('/expiring-documents', getVehiclesWithExpiringDocuments);
 router.get('/export', exportToExcel);
 router.get('/:id', getVehicleById);

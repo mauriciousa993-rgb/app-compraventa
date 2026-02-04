@@ -353,3 +353,85 @@ export const getVehiclesWithExpiringDocuments = async (
     });
   }
 };
+
+// Obtener reportes mensuales de ventas y gastos
+export const getMonthlyReports = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { year } = req.query;
+    const selectedYear = year ? parseInt(year as string) : new Date().getFullYear();
+
+    // Obtener vehículos vendidos en el año seleccionado
+    const startDate = new Date(selectedYear, 0, 1);
+    const endDate = new Date(selectedYear, 11, 31, 23, 59, 59);
+
+    const vehiculosVendidos = await Vehicle.find({
+      estado: 'vendido',
+      fechaVenta: {
+        $gte: startDate,
+        $lte: endDate,
+      },
+    }).sort({ fechaVenta: 1 });
+
+    // Agrupar por mes
+    const meses = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+
+    const reportesPorMes: any = {};
+
+    vehiculosVendidos.forEach((vehiculo) => {
+      if (!vehiculo.fechaVenta) return;
+
+      const fecha = new Date(vehiculo.fechaVenta);
+      const mesIndex = fecha.getMonth();
+      const mesNombre = meses[mesIndex];
+
+      if (!reportesPorMes[mesNombre]) {
+        reportesPorMes[mesNombre] = {
+          mes: mesNombre,
+          año: selectedYear,
+          totalVentas: 0,
+          totalGastos: 0,
+          utilidad: 0,
+          cantidadVehiculos: 0,
+          vehiculos: [],
+        };
+      }
+
+      const costoTotal = vehiculo.precioCompra + vehiculo.gastos.total;
+      const utilidad = vehiculo.precioVenta - costoTotal;
+
+      reportesPorMes[mesNombre].totalVentas += vehiculo.precioVenta;
+      reportesPorMes[mesNombre].totalGastos += costoTotal;
+      reportesPorMes[mesNombre].utilidad += utilidad;
+      reportesPorMes[mesNombre].cantidadVehiculos += 1;
+      reportesPorMes[mesNombre].vehiculos.push({
+        marca: vehiculo.marca,
+        modelo: vehiculo.modelo,
+        año: vehiculo.año,
+        placa: vehiculo.placa,
+        precioVenta: vehiculo.precioVenta,
+        precioCompra: vehiculo.precioCompra,
+        gastosTotal: vehiculo.gastos.total,
+        utilidad: utilidad,
+        fechaVenta: vehiculo.fechaVenta,
+      });
+    });
+
+    // Convertir a array y ordenar por mes
+    const reportes = meses
+      .map((mes) => reportesPorMes[mes])
+      .filter((reporte) => reporte !== undefined);
+
+    res.json(reportes);
+  } catch (error: any) {
+    res.status(500).json({
+      message: 'Error al generar reportes mensuales',
+      error: error.message,
+    });
+  }
+};

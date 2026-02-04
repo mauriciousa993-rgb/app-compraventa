@@ -38,6 +38,7 @@ const VehicleForm: React.FC = () => {
     
     // Estado
     estado: 'en_proceso',
+    fechaVenta: '',
     
     // Documentación
     documentacion: {
@@ -134,6 +135,9 @@ const VehicleForm: React.FC = () => {
           total: vehicle.gastos?.total || 0
         },
         estado: vehicle.estado || 'en_proceso',
+        fechaVenta: vehicle.fechaVenta 
+          ? new Date(vehicle.fechaVenta).toISOString().split('T')[0]
+          : '',
         documentacion: {
           prenda: {
             tiene: vehicle.documentacion?.prenda?.tiene || false,
@@ -749,17 +753,44 @@ const VehicleForm: React.FC = () => {
           {/* Estado */}
           <div className="card">
             <h2 className="text-xl font-semibold mb-4 text-gray-900">Estado del Vehículo</h2>
-            <select
-              name="estado"
-              value={formData.estado}
-              onChange={handleChange}
-              className="input-field"
-            >
-              <option value="en_proceso">En Proceso (Con pendientes)</option>
-              <option value="listo_venta">Listo para Venta</option>
-              <option value="en_negociacion">En Negociación</option>
-              <option value="vendido">Vendido</option>
-            </select>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Estado *
+                </label>
+                <select
+                  name="estado"
+                  value={formData.estado}
+                  onChange={handleChange}
+                  className="input-field"
+                >
+                  <option value="en_proceso">En Proceso (Con pendientes)</option>
+                  <option value="listo_venta">Listo para Venta</option>
+                  <option value="en_negociacion">En Negociación</option>
+                  <option value="vendido">Vendido</option>
+                </select>
+              </div>
+
+              {/* Mostrar campo de fecha de venta solo si el estado es "vendido" */}
+              {formData.estado === 'vendido' && (
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <label className="block text-sm font-medium text-green-700 mb-1">
+                    Fecha de Venta *
+                  </label>
+                  <input
+                    type="date"
+                    name="fechaVenta"
+                    value={formData.fechaVenta || ''}
+                    onChange={handleChange}
+                    className="input-field"
+                    required={formData.estado === 'vendido'}
+                  />
+                  <p className="mt-2 text-xs text-green-600">
+                    Esta fecha se usará para generar informes de ventas mensuales
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Foto del Vehículo */}

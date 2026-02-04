@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LogOut, User, Car } from 'lucide-react';
+import { LogOut, User, Car, BarChart3 } from 'lucide-react';
 
 const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
@@ -27,6 +27,10 @@ const Navbar: React.FC = () => {
             </Link>
             <Link to="/vehicles" className="hover:text-primary-200 transition-colors">
               Vehículos
+            </Link>
+            <Link to="/reports" className="hover:text-primary-200 transition-colors flex items-center space-x-1">
+              <BarChart3 className="h-4 w-4" />
+              <span>Reportes</span>
             </Link>
             {user?.rol === 'admin' && (
               <Link to="/users" className="hover:text-primary-200 transition-colors">
