@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart3, TrendingUp, DollarSign, Calendar } from 'lucide-react';
+import { BarChart3, TrendingUp, DollarSign, Calendar, FileDown } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
 import api from '../services/api';
 
@@ -97,7 +97,7 @@ const Reports: React.FC = () => {
 
         {/* Filtros */}
         <div className="card mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Año
@@ -130,6 +130,17 @@ const Reports: React.FC = () => {
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={() => {
+                  window.location.href = `${api.defaults.baseURL}/vehicles/reports/monthly/export?year=${selectedYear}`;
+                }}
+                className="btn-primary w-full flex items-center justify-center"
+              >
+                <FileDown className="h-5 w-5 mr-2" />
+                Exportar a Excel
+              </button>
             </div>
           </div>
         </div>

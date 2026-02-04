@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Car, Edit, Trash2 } from 'lucide-react';
+import { Plus, Search, Car, Edit, Trash2, FileDown } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
 import api from '../services/api';
 import { Vehicle } from '../types';
@@ -275,6 +275,15 @@ const VehicleList: React.FC = () => {
                   )}
                 </div>
                 <div className="flex space-x-2">
+                  <button
+                    onClick={() => {
+                      window.location.href = `${api.defaults.baseURL}/vehicles/${vehicle._id}/export`;
+                    }}
+                    className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                    title="Exportar a Excel"
+                  >
+                    <FileDown className="h-4 w-4" />
+                  </button>
                   <button
                     onClick={() => navigate(`/vehicles/${vehicle._id}/edit`)}
                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"

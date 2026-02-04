@@ -354,6 +354,305 @@ export const getVehiclesWithExpiringDocuments = async (
   }
 };
 
+// Exportar reporte individual de vehículo a Excel
+export const exportVehicleReport = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const vehicle = await Vehicle.findById(id).populate('registradoPor', 'nombre email');
+
+    if (!vehicle) {
+      res.status(404).json({ message: 'Vehículo no encontrado' });
+      return;
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Detalle del Vehículo');
+
+    // Configurar ancho de columnas
+    worksheet.columns = [
+      { width: 25 },
+      { width: 30 },
+    ];
+
+    // Título
+    worksheet.mergeCells('A1:B1');
+    const titleCell = worksheet.getCell('A1');
+    titleCell.value = 'REPORTE DETALLADO DE VEHÍCULO';
+    titleCell.font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+    titleCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4472C4' },
+    };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    worksheet.getRow(1).height = 30;
+
+    let currentRow = 3;
+
+    // Función helper para agregar sección
+    const addSection = (title: string) => {
+      worksheet.mergeCells(`A${currentRow}:B${currentRow}`);
+      const cell = worksheet.getCell(`A${currentRow}`);
+      cell.value = title;
+      cell.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF5B9BD5' },
+      };
+      currentRow++;
+    };
+
+    // Función helper para agregar fila de datos
+    const addDataRow = (label: string, value: any) => {
+      worksheet.getCell(`A${currentRow}`).value = label;
+      worksheet.getCell(`A${currentRow}`).font = { bold: true };
+      worksheet.getCell(`B${currentRow}`).value = value;
+      currentRow++;
+    };
+
+    // Información Básica
+    addSection('INFORMACIÓN BÁSICA');
+    addDataRow('Marca', vehicle.marca);
+    addDataRow('Modelo', vehicle.modelo);
+    addDataRow('Año', vehicle.año);
+    addDataRow('Placa', vehicle.placa);
+    addDataRow('Color', vehicle.color);
+    addDataRow('Kilometraje', vehicle.kilometraje.toLocaleString('es-CO'));
+    currentRow++;
+
+    // Información Financiera
+    addSection('INFORMACIÓN FINANCIERA');
+    addDataRow('Precio de Compra', `$${vehicle.precioCompra.toLocaleString('es-CO')}`);
+    addDataRow('Precio de Venta', `$${vehicle.precioVenta.toLocaleString('es-CO')}`);
+    currentRow++;
+
+    // Gastos
+    addSection('GASTOS');
+    addDataRow('Gastos en Pintura', `$${vehicle.gastos.pintura.toLocaleString('es-CO')}`);
+    addDataRow('Gastos en Mecánica', `$${vehicle.gastos.mecanica.toLocaleString('es-CO')}`);
+    addDataRow('Gastos de Traspaso', `$${vehicle.gastos.traspaso.toLocaleString('es-CO')}`);
+    addDataRow('Gastos Varios', `$${vehicle.gastos.varios.toLocaleString('es-CO')}`);
+    addDataRow('TOTAL GASTOS', `$${vehicle.gastos.total.toLocaleString('es-CO')}`);
+    worksheet.getCell(`A${currentRow - 1}`).font = { bold: true, color: { argb: 'FFFF0000' } };
+    worksheet.getCell(`B${currentRow - 1}`).font = { bold: true, color: { argb: 'FFFF0000' } };
+    currentRow++;
+
+    // Resumen Financiero
+    addSection('RESUMEN FINANCIERO');
+    const costoTotal = vehicle.precioCompra + vehicle.gastos.total;
+    const utilidad = vehicle.precioVenta - costoTotal;
+    const margen = costoTotal > 0 ? ((utilidad / costoTotal) * 100).toFixed(2) : '0';
+
+    addDataRow('Costo Total (Compra + Gastos)', `$${costoTotal.toLocaleString('es-CO')}`);
+    addDataRow('Precio de Venta', `$${vehicle.precioVenta.toLocaleString('es-CO')}`);
+    addDataRow('UTILIDAD', `$${utilidad.toLocaleString('es-CO')}`);
+    addDataRow('Margen de Ganancia', `${margen}%`);
+    
+    worksheet.getCell(`A${currentRow - 2}`).font = { bold: true, size: 12, color: { argb: utilidad >= 0 ? 'FF00B050' : 'FFFF0000' } };
+    worksheet.getCell(`B${currentRow - 2}`).font = { bold: true, size: 12, color: { argb: utilidad >= 0 ? 'FF00B050' : 'FFFF0000' } };
+    currentRow++;
+
+    // Estado y Fechas
+    addSection('ESTADO Y FECHAS');
+    addDataRow('Estado', vehicle.estado.replace('_', ' ').toUpperCase());
+    addDataRow('Fecha de Ingreso', vehicle.fechaIngreso.toLocaleDateString('es-CO'));
+    if (vehicle.fechaVenta) {
+      addDataRow('Fecha de Venta', new Date(vehicle.fechaVenta).toLocaleDateString('es-CO'));
+    }
+    currentRow++;
+
+    // Documentación
+    addSection('DOCUMENTACIÓN');
+    addDataRow('Prenda', vehicle.documentacion.prenda.tiene ? 'SÍ' : 'NO');
+    if (vehicle.documentacion.prenda.tiene && vehicle.documentacion.prenda.detalles) {
+      addDataRow('Detalles Prenda', vehicle.documentacion.prenda.detalles);
+    }
+    addDataRow('SOAT', vehicle.documentacion.soat.tiene ? 'SÍ' : 'NO');
+    if (vehicle.documentacion.soat.fechaVencimiento) {
+      addDataRow('Vencimiento SOAT', new Date(vehicle.documentacion.soat.fechaVencimiento).toLocaleDateString('es-CO'));
+    }
+    addDataRow('Tecnomecánica', vehicle.documentacion.tecnomecanica.tiene ? 'SÍ' : 'NO');
+    if (vehicle.documentacion.tecnomecanica.fechaVencimiento) {
+      addDataRow('Vencimiento Tecnomecánica', new Date(vehicle.documentacion.tecnomecanica.fechaVencimiento).toLocaleDateString('es-CO'));
+    }
+    addDataRow('Tarjeta de Propiedad', vehicle.documentacion.tarjetaPropiedad.tiene ? 'SÍ' : 'NO');
+    currentRow++;
+
+    // Observaciones
+    if (vehicle.observaciones) {
+      addSection('OBSERVACIONES');
+      worksheet.mergeCells(`A${currentRow}:B${currentRow + 2}`);
+      const obsCell = worksheet.getCell(`A${currentRow}`);
+      obsCell.value = vehicle.observaciones;
+      obsCell.alignment = { wrapText: true, vertical: 'top' };
+      currentRow += 3;
+    }
+
+    // Generar archivo
+    const fileName = `vehiculo-${vehicle.placa}-${Date.now()}.xlsx`;
+    const filePath = path.join(__dirname, '../../uploads', fileName);
+
+    await workbook.xlsx.writeFile(filePath);
+
+    res.download(filePath, fileName, (err) => {
+      if (err) {
+        console.error('Error al descargar archivo:', err);
+      }
+      fs.unlinkSync(filePath);
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error al exportar reporte del vehículo', error: error.message });
+  }
+};
+
+// Exportar reporte mensual de ventas a Excel
+export const exportMonthlyReport = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { year, month } = req.query;
+    const selectedYear = year ? parseInt(year as string) : new Date().getFullYear();
+
+    const startDate = new Date(selectedYear, 0, 1);
+    const endDate = new Date(selectedYear, 11, 31, 23, 59, 59);
+
+    const vehiculosVendidos = await Vehicle.find({
+      estado: 'vendido',
+      fechaVenta: {
+        $gte: startDate,
+        $lte: endDate,
+      },
+    }).sort({ fechaVenta: 1 });
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet(`Ventas ${selectedYear}`);
+
+    // Título
+    worksheet.mergeCells('A1:I1');
+    const titleCell = worksheet.getCell('A1');
+    titleCell.value = `REPORTE DE VENTAS - AÑO ${selectedYear}`;
+    titleCell.font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+    titleCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4472C4' },
+    };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    worksheet.getRow(1).height = 30;
+
+    // Encabezados
+    worksheet.columns = [
+      { header: 'Fecha Venta', key: 'fechaVenta', width: 15 },
+      { header: 'Mes', key: 'mes', width: 12 },
+      { header: 'Placa', key: 'placa', width: 12 },
+      { header: 'Marca', key: 'marca', width: 15 },
+      { header: 'Modelo', key: 'modelo', width: 15 },
+      { header: 'Año', key: 'año', width: 10 },
+      { header: 'Precio Compra', key: 'precioCompra', width: 15 },
+      { header: 'Gastos Totales', key: 'gastos', width: 15 },
+      { header: 'Costo Total', key: 'costoTotal', width: 15 },
+      { header: 'Precio Venta', key: 'precioVenta', width: 15 },
+      { header: 'Utilidad', key: 'utilidad', width: 15 },
+      { header: 'Margen %', key: 'margen', width: 12 },
+    ];
+
+    const headerRow = worksheet.getRow(3);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF5B9BD5' },
+    };
+
+    const meses = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+
+    let totalVentas = 0;
+    let totalGastos = 0;
+    let totalUtilidad = 0;
+
+    // Agregar datos
+    vehiculosVendidos.forEach((vehiculo) => {
+      if (!vehiculo.fechaVenta) return;
+
+      const fecha = new Date(vehiculo.fechaVenta);
+      const mesNombre = meses[fecha.getMonth()];
+      const costoTotal = vehiculo.precioCompra + vehiculo.gastos.total;
+      const utilidad = vehiculo.precioVenta - costoTotal;
+      const margen = costoTotal > 0 ? ((utilidad / costoTotal) * 100).toFixed(2) : '0';
+
+      totalVentas += vehiculo.precioVenta;
+      totalGastos += costoTotal;
+      totalUtilidad += utilidad;
+
+      worksheet.addRow({
+        fechaVenta: fecha.toLocaleDateString('es-CO'),
+        mes: mesNombre,
+        placa: vehiculo.placa,
+        marca: vehiculo.marca,
+        modelo: vehiculo.modelo,
+        año: vehiculo.año,
+        precioCompra: vehiculo.precioCompra,
+        gastos: vehiculo.gastos.total,
+        costoTotal: costoTotal,
+        precioVenta: vehiculo.precioVenta,
+        utilidad: utilidad,
+        margen: `${margen}%`,
+      });
+    });
+
+    // Formato de moneda
+    worksheet.getColumn('precioCompra').numFmt = '"$"#,##0';
+    worksheet.getColumn('gastos').numFmt = '"$"#,##0';
+    worksheet.getColumn('costoTotal').numFmt = '"$"#,##0';
+    worksheet.getColumn('precioVenta').numFmt = '"$"#,##0';
+    worksheet.getColumn('utilidad').numFmt = '"$"#,##0';
+
+    // Fila de totales
+    const lastRow = worksheet.lastRow!.number + 2;
+    worksheet.mergeCells(`A${lastRow}:F${lastRow}`);
+    const totalLabelCell = worksheet.getCell(`A${lastRow}`);
+    totalLabelCell.value = 'TOTALES';
+    totalLabelCell.font = { bold: true, size: 12 };
+    totalLabelCell.alignment = { horizontal: 'right' };
+
+    worksheet.getCell(`G${lastRow}`).value = totalGastos;
+    worksheet.getCell(`G${lastRow}`).numFmt = '"$"#,##0';
+    worksheet.getCell(`G${lastRow}`).font = { bold: true };
+
+    worksheet.getCell(`I${lastRow}`).value = totalVentas;
+    worksheet.getCell(`I${lastRow}`).numFmt = '"$"#,##0';
+    worksheet.getCell(`I${lastRow}`).font = { bold: true };
+
+    worksheet.getCell(`J${lastRow}`).value = totalUtilidad;
+    worksheet.getCell(`J${lastRow}`).numFmt = '"$"#,##0';
+    worksheet.getCell(`J${lastRow}`).font = { bold: true, color: { argb: totalUtilidad >= 0 ? 'FF00B050' : 'FFFF0000' } };
+
+    // Generar archivo
+    const fileName = `reporte-ventas-${selectedYear}-${Date.now()}.xlsx`;
+    const filePath = path.join(__dirname, '../../uploads', fileName);
+
+    await workbook.xlsx.writeFile(filePath);
+
+    res.download(filePath, fileName, (err) => {
+      if (err) {
+        console.error('Error al descargar archivo:', err);
+      }
+      fs.unlinkSync(filePath);
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error al exportar reporte mensual', error: error.message });
+  }
+};
+
 // Obtener reportes mensuales de ventas y gastos
 export const getMonthlyReports = async (
   req: AuthRequest,
