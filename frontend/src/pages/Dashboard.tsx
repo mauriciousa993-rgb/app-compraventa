@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout/Layout';
 import { vehiclesAPI } from '../services/api';
 import { Statistics } from '../types';
@@ -14,12 +14,21 @@ import {
 } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<Statistics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     loadStatistics();
   }, []);
+
+  const handleCardClick = (estado?: string) => {
+    if (estado) {
+      navigate(`/vehicles?estado=${estado}`);
+    } else {
+      navigate('/vehicles');
+    }
+  };
 
   const loadStatistics = async () => {
     try {
@@ -53,6 +62,8 @@ const Dashboard: React.FC = () => {
       color: 'bg-blue-500',
       textColor: 'text-blue-600',
       bgColor: 'bg-blue-50',
+      clickable: true,
+      estado: undefined,
     },
     {
       title: 'Listos para Venta',
@@ -61,6 +72,8 @@ const Dashboard: React.FC = () => {
       color: 'bg-green-500',
       textColor: 'text-green-600',
       bgColor: 'bg-green-50',
+      clickable: true,
+      estado: 'listo_venta',
     },
     {
       title: 'En Proceso',
@@ -69,6 +82,8 @@ const Dashboard: React.FC = () => {
       color: 'bg-yellow-500',
       textColor: 'text-yellow-600',
       bgColor: 'bg-yellow-50',
+      clickable: true,
+      estado: 'en_proceso',
     },
     {
       title: 'Vendidos',
@@ -77,6 +92,8 @@ const Dashboard: React.FC = () => {
       color: 'bg-purple-500',
       textColor: 'text-purple-600',
       bgColor: 'bg-purple-50',
+      clickable: true,
+      estado: 'vendido',
     },
     {
       title: 'Valor Inventario',
@@ -85,6 +102,7 @@ const Dashboard: React.FC = () => {
       color: 'bg-indigo-500',
       textColor: 'text-indigo-600',
       bgColor: 'bg-indigo-50',
+      clickable: false,
     },
     {
       title: 'Total de Gastos',
@@ -93,6 +111,7 @@ const Dashboard: React.FC = () => {
       color: 'bg-orange-500',
       textColor: 'text-orange-600',
       bgColor: 'bg-orange-50',
+      clickable: false,
     },
     {
       title: 'Ganancias Estimadas',
@@ -101,6 +120,7 @@ const Dashboard: React.FC = () => {
       color: 'bg-emerald-500',
       textColor: 'text-emerald-600',
       bgColor: 'bg-emerald-50',
+      clickable: false,
     },
   ];
 
@@ -123,8 +143,18 @@ const Dashboard: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {statCards.map((stat, index) => {
             const Icon = stat.icon;
+            const CardWrapper = stat.clickable ? 'button' : 'div';
+            
             return (
-              <div key={index} className="card">
+              <CardWrapper
+                key={index}
+                onClick={stat.clickable ? () => handleCardClick(stat.estado) : undefined}
+                className={`card ${
+                  stat.clickable 
+                    ? 'cursor-pointer hover:shadow-lg hover:scale-105 transition-all duration-200 active:scale-100 w-full text-left' 
+                    : ''
+                }`}
+              >
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-600">
@@ -133,12 +163,17 @@ const Dashboard: React.FC = () => {
                     <p className={`text-2xl font-bold mt-2 ${stat.textColor}`}>
                       {stat.value}
                     </p>
+                    {stat.clickable && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Click para ver detalles
+                      </p>
+                    )}
                   </div>
-                  <div className={`${stat.bgColor} p-3 rounded-lg`}>
+                  <div className={`${stat.bgColor} p-3 rounded-lg ${stat.clickable ? 'group-hover:scale-110 transition-transform' : ''}`}>
                     <Icon className={`h-8 w-8 ${stat.textColor}`} />
                   </div>
                 </div>
-              </div>
+              </CardWrapper>
             );
           })}
         </div>

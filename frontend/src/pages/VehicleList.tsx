@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Car, Edit, Trash2, FileDown } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Plus, Search, Car, Edit, Trash2, FileDown, X } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
 import api from '../services/api';
 import { Vehicle } from '../types';
 
 const VehicleList: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [filteredVehicles, setFilteredVehicles] = useState<Vehicle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -16,6 +17,14 @@ const VehicleList: React.FC = () => {
   useEffect(() => {
     loadVehicles();
   }, []);
+
+  // Leer parámetros de la URL al cargar
+  useEffect(() => {
+    const estadoParam = searchParams.get('estado');
+    if (estadoParam) {
+      setFilterEstado(estadoParam);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     filterVehicles();
@@ -52,6 +61,23 @@ const VehicleList: React.FC = () => {
     }
 
     setFilteredVehicles(filtered);
+  };
+
+  const clearFilters = () => {
+    setFilterEstado('todos');
+    setSearchTerm('');
+    setSearchParams({});
+  };
+
+  const getEstadoLabel = (estado: string) => {
+    const labels: Record<string, string> = {
+      listo_venta: 'Listos para Venta',
+      en_proceso: 'En Proceso',
+      en_negociacion: 'En Negociación',
+      vendido: 'Vendidos',
+      retirado: 'Retirados'
+    };
+    return labels[estado] || estado;
   };
 
   const handleDelete = async (id: string) => {
@@ -103,9 +129,25 @@ const VehicleList: React.FC = () => {
     <Layout>
       <div className="mb-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4 md:mb-0">
-            Inventario de Vehículos
-          </h1>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              Inventario de Vehículos
+            </h1>
+            {filterEstado !== 'todos' && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">
+                  Mostrando: <span className="font-semibold">{getEstadoLabel(filterEstado)}</span>
+                </span>
+                <button
+                  onClick={clearFilters}
+                  className="text-xs text-primary-600 hover:text-primary-700 flex items-center gap-1"
+                >
+                  <X className="h-3 w-3" />
+                  Limpiar filtros
+                </button>
+              </div>
+            )}
+          </div>
           <button
             onClick={() => navigate('/vehicles/new')}
             className="btn-primary flex items-center justify-center"
@@ -148,28 +190,68 @@ const VehicleList: React.FC = () => {
 
         {/* Estadísticas Rápidas */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div className="card bg-blue-50 border-blue-200">
+          <button
+            onClick={() => {
+              setFilterEstado('todos');
+              setSearchParams({});
+            }}
+            className={`card transition-all ${
+              filterEstado === 'todos'
+                ? 'bg-blue-100 border-blue-300 ring-2 ring-blue-500'
+                : 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+            }`}
+          >
             <p className="text-sm text-blue-600 font-medium">Total Vehículos</p>
             <p className="text-2xl font-bold text-blue-900">{vehicles.length}</p>
-          </div>
-          <div className="card bg-green-50 border-green-200">
+          </button>
+          <button
+            onClick={() => {
+              setFilterEstado('listo_venta');
+              setSearchParams({ estado: 'listo_venta' });
+            }}
+            className={`card transition-all ${
+              filterEstado === 'listo_venta'
+                ? 'bg-green-100 border-green-300 ring-2 ring-green-500'
+                : 'bg-green-50 border-green-200 hover:bg-green-100'
+            }`}
+          >
             <p className="text-sm text-green-600 font-medium">Listos para Venta</p>
             <p className="text-2xl font-bold text-green-900">
               {vehicles.filter(v => v.estado === 'listo_venta').length}
             </p>
-          </div>
-          <div className="card bg-yellow-50 border-yellow-200">
+          </button>
+          <button
+            onClick={() => {
+              setFilterEstado('en_proceso');
+              setSearchParams({ estado: 'en_proceso' });
+            }}
+            className={`card transition-all ${
+              filterEstado === 'en_proceso'
+                ? 'bg-yellow-100 border-yellow-300 ring-2 ring-yellow-500'
+                : 'bg-yellow-50 border-yellow-200 hover:bg-yellow-100'
+            }`}
+          >
             <p className="text-sm text-yellow-600 font-medium">Con Pendientes</p>
             <p className="text-2xl font-bold text-yellow-900">
               {vehicles.filter(v => v.estado === 'en_proceso').length}
             </p>
-          </div>
-          <div className="card bg-purple-50 border-purple-200">
+          </button>
+          <button
+            onClick={() => {
+              setFilterEstado('vendido');
+              setSearchParams({ estado: 'vendido' });
+            }}
+            className={`card transition-all ${
+              filterEstado === 'vendido'
+                ? 'bg-purple-100 border-purple-300 ring-2 ring-purple-500'
+                : 'bg-purple-50 border-purple-200 hover:bg-purple-100'
+            }`}
+          >
             <p className="text-sm text-purple-600 font-medium">Vendidos</p>
             <p className="text-2xl font-bold text-purple-900">
               {vehicles.filter(v => v.estado === 'vendido').length}
             </p>
-          </div>
+          </button>
         </div>
       </div>
 
