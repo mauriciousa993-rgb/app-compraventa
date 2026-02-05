@@ -20,6 +20,7 @@ const VehicleForm: React.FC = () => {
     modelo: '',
     año: new Date().getFullYear(),
     placa: '',
+    vin: '',
     color: '',
     kilometraje: 0,
     
@@ -132,6 +133,7 @@ const VehicleForm: React.FC = () => {
         modelo: vehicle.modelo || '',
         año: vehicle.año || new Date().getFullYear(),
         placa: vehicle.placa || '',
+        vin: vehicle.vin || '',
         color: vehicle.color || '',
         kilometraje: vehicle.kilometraje || 0,
         precioCompra: vehicle.precioCompra || 0,
@@ -461,6 +463,23 @@ const VehicleForm: React.FC = () => {
                   required
                   placeholder="Ej: ABC123"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  VIN (Número de Serie)
+                </label>
+                <input
+                  type="text"
+                  name="vin"
+                  value={formData.vin}
+                  onChange={handleChange}
+                  className="input-field"
+                  placeholder="Ej: 1HGBH41JXMN109186 (Opcional)"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Número de identificación del vehículo (17 caracteres). Opcional.
+                </p>
               </div>
 
               <div>
