@@ -209,27 +209,46 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
 
     // Si es admin, calcular totales completos
     if (userRole === 'admin') {
-      // Valor del inventario = suma de (Precio Compra + Gastos) de vehículos en stock
+      // Valor del inventario = suma de (Precio Compra + Gastos TOTALES) de vehículos en stock
+      // gastos.total ya incluye gastos detallados + gastos de inversionistas
       valorInventario = vehiculosEnStock.reduce(
-        (sum, vehicle) => sum + vehicle.precioCompra + (vehicle.gastos?.total || 0),
+        (sum, vehicle) => {
+          const precioCompra = vehicle.precioCompra || 0;
+          const gastosTotal = vehicle.gastos?.total || 0;
+          return sum + precioCompra + gastosTotal;
+        },
         0
       );
 
       // Total de gastos solo de vehículos en stock
+      // gastos.total ya incluye todos los gastos (detallados + inversionistas)
       totalGastos = vehiculosEnStock.reduce(
         (sum, vehicle) => sum + (vehicle.gastos?.total || 0),
         0
       );
 
       // Ganancias estimadas solo de vehículos en stock
+      // Fórmula: Precio Venta - Precio Compra - Gastos Totales
       gananciasEstimadas = vehiculosEnStock.reduce(
-        (sum, vehicle) => sum + (vehicle.precioVenta - vehicle.precioCompra - (vehicle.gastos?.total || 0)),
+        (sum, vehicle) => {
+          const precioVenta = vehicle.precioVenta || 0;
+          const precioCompra = vehicle.precioCompra || 0;
+          const gastosTotal = vehicle.gastos?.total || 0;
+          const utilidad = precioVenta - precioCompra - gastosTotal;
+          return sum + utilidad;
+        },
         0
       );
 
       // Ganancias reales de vehículos vendidos
       gananciasReales = vehiculosVendidosData.reduce(
-        (sum, vehicle) => sum + (vehicle.precioVenta - vehicle.precioCompra - (vehicle.gastos?.total || 0)),
+        (sum, vehicle) => {
+          const precioVenta = vehicle.precioVenta || 0;
+          const precioCompra = vehicle.precioCompra || 0;
+          const gastosTotal = vehicle.gastos?.total || 0;
+          const utilidad = precioVenta - precioCompra - gastosTotal;
+          return sum + utilidad;
+        },
         0
       );
     } else {
