@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search, Car, Edit, Trash2, FileDown, X, ChevronDown, ChevronUp, FileText, DollarSign, Eye } from 'lucide-react';
+import { Plus, Search, Car, Edit, Trash2, FileDown, X, ChevronDown, ChevronUp, FileText, DollarSign, Eye, Edit2 } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
 import api from '../services/api';
 import { Vehicle, DatosVenta } from '../types';
@@ -118,8 +118,14 @@ const VehicleList: React.FC = () => {
     if (!selectedVehicle) return;
 
     try {
-      await vehiclesAPI.saveSaleData(selectedVehicle._id, data);
-      alert('Datos de venta guardados exitosamente. El vehículo ha sido marcado como vendido.');
+      // Si el vehículo ya está vendido, actualizar; si no, crear
+      if (selectedVehicle.estado === 'vendido' && selectedVehicle.datosVenta) {
+        await vehiclesAPI.updateSaleData(selectedVehicle._id, data);
+        alert('Datos de venta actualizados exitosamente.');
+      } else {
+        await vehiclesAPI.saveSaleData(selectedVehicle._id, data);
+        alert('Datos de venta guardados exitosamente. El vehículo ha sido marcado como vendido.');
+      }
       setSaleModalOpen(false);
       setSelectedVehicle(null);
       loadVehicles();
@@ -127,6 +133,11 @@ const VehicleList: React.FC = () => {
       console.error('Error al guardar datos de venta:', error);
       alert('Error al guardar los datos de venta');
     }
+  };
+
+  const handleEditSaleData = (vehicle: Vehicle) => {
+    setSelectedVehicle(vehicle);
+    setSaleModalOpen(true);
   };
 
   const handleGenerateContract = async (vehicleId: string) => {
@@ -612,6 +623,17 @@ const VehicleList: React.FC = () => {
                             Ver Datos de Venta
                           </button>
                           
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditSaleData(vehicle);
+                            }}
+                            className="px-4 py-2 text-sm bg-orange-600 text-white hover:bg-orange-700 rounded-lg transition-colors flex items-center gap-2"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                            Editar Datos de Venta
+                          </button>
+                          
                           {vehicle.datosVenta && (
                             <button
                               onClick={(e) => {
@@ -715,6 +737,8 @@ const VehicleList: React.FC = () => {
             }}
             onSubmit={handleSaveSaleData}
             vehiclePlaca={selectedVehicle.placa}
+            initialData={selectedVehicle.datosVenta}
+            isEditMode={selectedVehicle.estado === 'vendido' && !!selectedVehicle.datosVenta}
           />
           
           <ViewSaleDataModal

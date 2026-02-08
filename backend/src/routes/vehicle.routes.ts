@@ -43,6 +43,7 @@ router.post('/:id/photos', authorize('admin', 'vendedor'), uploadMultiple, uploa
 
 // Rutas para contratos de compraventa
 router.post('/:id/sale-data', authorize('admin', 'vendedor'), saveSaleData);
+router.put('/:id/sale-data', authorize('admin', 'vendedor'), saveSaleData); // Reutiliza la misma función
 router.get('/:id/contract', authorize('admin', 'vendedor'), generateContract);
 
 export default router;

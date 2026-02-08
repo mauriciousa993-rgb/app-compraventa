@@ -7,6 +7,8 @@ interface SaleDataModalProps {
   onClose: () => void;
   onSubmit: (data: DatosVenta) => void;
   vehiclePlaca: string;
+  initialData?: DatosVenta; // Datos iniciales para modo edición
+  isEditMode?: boolean; // Indica si es modo edición
 }
 
 const SaleDataModal: React.FC<SaleDataModalProps> = ({
@@ -14,8 +16,10 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
   onClose,
   onSubmit,
   vehiclePlaca,
+  initialData,
+  isEditMode = false,
 }) => {
-  const [formData, setFormData] = useState<DatosVenta>({
+  const [formData, setFormData] = useState<DatosVenta>(initialData || {
     vendedor: {
       nombre: '',
       identificacion: '',
@@ -95,7 +99,7 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
           <h2 className="text-2xl font-bold text-gray-900">
-            Datos de Venta - {vehiclePlaca}
+            {isEditMode ? 'Editar' : 'Registrar'} Datos de Venta - {vehiclePlaca}
           </h2>
           <button
             onClick={onClose}
@@ -512,7 +516,7 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
               type="submit"
               className="btn-primary"
             >
-              Guardar y Marcar como Vendido
+              {isEditMode ? 'Actualizar Datos de Venta' : 'Guardar y Marcar como Vendido'}
             </button>
           </div>
         </form>

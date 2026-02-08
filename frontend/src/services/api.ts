@@ -169,6 +169,11 @@ export const vehiclesAPI = {
     return response.data;
   },
 
+  updateSaleData: async (id: string, data: DatosVenta) => {
+    const response = await api.put(`/vehicles/${id}/sale-data`, data);
+    return response.data;
+  },
+
   generateContract: async (id: string) => {
     const response = await api.get(`/vehicles/${id}/contract`, {
       responseType: 'blob',
