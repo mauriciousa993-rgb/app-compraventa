@@ -13,10 +13,59 @@ export interface AuthResponse {
 }
 
 export interface Inversionista {
+  usuario: string; // ID del usuario inversionista
   nombre: string;
   montoInversion: number;
+  gastosInversionista: number;
+  detallesGastos: string;
   porcentajeParticipacion: number;
   utilidadCorrespondiente: number;
+}
+
+export interface GastoDetalle {
+  descripcion: string;
+  encargado: string;
+  fecha: string;
+  monto: number;
+}
+
+export interface DatosVenta {
+  vendedor: {
+    nombre: string;
+    identificacion: string;
+    direccion: string;
+    telefono: string;
+  };
+  comprador: {
+    nombre: string;
+    identificacion: string;
+    direccion: string;
+    telefono: string;
+    email: string;
+  };
+  vehiculoAdicional: {
+    tipoCarroceria: string;
+    capacidad: string;
+    numeroPuertas: number;
+    numeroMotor: string;
+    linea: string;
+    actaManifiesto: string;
+    sitioMatricula: string;
+    tipoServicio: string;
+  };
+  transaccion: {
+    lugarCelebracion: string;
+    fechaCelebracion: string;
+    precioLetras: string;
+    formaPago: string;
+    vendedorAnterior: string;
+    cedulaVendedorAnterior: string;
+    diasTraspaso: number;
+    fechaEntrega: string;
+    horaEntrega: string;
+    domicilioContractual: string;
+    clausulasAdicionales: string;
+  };
 }
 
 export interface Vehicle {
@@ -33,8 +82,21 @@ export interface Vehicle {
   gastos: {
     pintura: number;
     mecanica: number;
+    traspaso: number;
+    alistamiento: number;
+    tapiceria: number;
+    transporte: number;
     varios: number;
     total: number;
+  };
+  gastosDetallados?: {
+    pintura: GastoDetalle[];
+    mecanica: GastoDetalle[];
+    traspaso: GastoDetalle[];
+    alistamiento: GastoDetalle[];
+    tapiceria: GastoDetalle[];
+    transporte: GastoDetalle[];
+    varios: GastoDetalle[];
   };
   inversionistas: Inversionista[];
   tieneInversionistas: boolean;
@@ -80,6 +142,7 @@ export interface Vehicle {
   pendientes: string[];
   fechaIngreso: string;
   fechaVenta?: string;
+  datosVenta?: DatosVenta;
   registradoPor: {
     _id: string;
     nombre: string;

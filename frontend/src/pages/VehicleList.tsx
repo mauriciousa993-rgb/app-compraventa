@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search, Car, Edit, Trash2, FileDown, X } from 'lucide-react';
+import { Plus, Search, Car, Edit, Trash2, FileDown, X, ChevronDown, ChevronUp, FileText, DollarSign } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
 import api from '../services/api';
-import { Vehicle } from '../types';
+import { Vehicle, DatosVenta } from '../types';
+import SaleDataModal from '../components/SaleDataModal';
+import { vehiclesAPI } from '../services/api';
 
 const VehicleList: React.FC = () => {
   const navigate = useNavigate();
@@ -13,6 +15,9 @@ const VehicleList: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterEstado, setFilterEstado] = useState('todos');
+  const [expandedVehicles, setExpandedVehicles] = useState<Set<string>>(new Set());
+  const [saleModalOpen, setSaleModalOpen] = useState(false);
+  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
 
   useEffect(() => {
     loadVehicles();
@@ -63,6 +68,16 @@ const VehicleList: React.FC = () => {
     setFilteredVehicles(filtered);
   };
 
+  const toggleVehicle = (id: string) => {
+    const newExpanded = new Set(expandedVehicles);
+    if (newExpanded.has(id)) {
+      newExpanded.delete(id);
+    } else {
+      newExpanded.add(id);
+    }
+    setExpandedVehicles(newExpanded);
+  };
+
   const clearFilters = () => {
     setFilterEstado('todos');
     setSearchTerm('');
@@ -89,6 +104,35 @@ const VehicleList: React.FC = () => {
     } catch (error) {
       console.error('Error al eliminar vehículo:', error);
       alert('Error al eliminar el vehículo');
+    }
+  };
+
+  const handleOpenSaleModal = (vehicle: Vehicle) => {
+    setSelectedVehicle(vehicle);
+    setSaleModalOpen(true);
+  };
+
+  const handleSaveSaleData = async (data: DatosVenta) => {
+    if (!selectedVehicle) return;
+
+    try {
+      await vehiclesAPI.saveSaleData(selectedVehicle._id, data);
+      alert('Datos de venta guardados exitosamente. El vehículo ha sido marcado como vendido.');
+      setSaleModalOpen(false);
+      setSelectedVehicle(null);
+      loadVehicles();
+    } catch (error) {
+      console.error('Error al guardar datos de venta:', error);
+      alert('Error al guardar los datos de venta');
+    }
+  };
+
+  const handleGenerateContract = async (vehicleId: string) => {
+    try {
+      await vehiclesAPI.generateContract(vehicleId);
+    } catch (error) {
+      console.error('Error al generar contrato:', error);
+      alert('Error al generar el contrato. Asegúrate de que el vehículo tenga datos de venta registrados.');
     }
   };
 
@@ -280,125 +324,379 @@ const VehicleList: React.FC = () => {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredVehicles.map((vehicle) => (
-            <div key={vehicle._id} className="card hover:shadow-lg transition-shadow">
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    {vehicle.marca} {vehicle.modelo}
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    {vehicle.año} • {vehicle.placa}
-                  </p>
+        <div className="space-y-3">
+          {filteredVehicles.map((vehicle) => {
+            const isExpanded = expandedVehicles.has(vehicle._id);
+            const utilidad = vehicle.precioVenta - vehicle.precioCompra - (vehicle.gastos?.total || 0);
+            
+            return (
+              <div key={vehicle._id} className="card hover:shadow-md transition-all">
+                {/* Encabezado Compacto - Siempre Visible */}
+                <div 
+                  className="flex items-center justify-between cursor-pointer"
+                  onClick={() => toggleVehicle(vehicle._id)}
+                >
+                  <div className="flex items-center space-x-4 flex-1">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        {vehicle.marca} {vehicle.modelo}
+                      </h3>
+                      <p className="text-sm text-gray-600">
+                        {vehicle.año} • <span className="font-medium">{vehicle.placa}</span>
+                      </p>
+                    </div>
+                    <div className="hidden md:flex items-center space-x-4">
+                      {getEstadoBadge(vehicle.estado)}
+                      <div className="text-right">
+                        <p className="text-xs text-gray-500">Utilidad</p>
+                        <p className={`text-sm font-semibold ${
+                          utilidad >= 0 ? 'text-green-600' : 'text-red-600'
+                        }`}>
+                          {formatCurrency(utilidad)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <button className="ml-4 p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                    {isExpanded ? (
+                      <ChevronUp className="h-5 w-5 text-gray-600" />
+                    ) : (
+                      <ChevronDown className="h-5 w-5 text-gray-600" />
+                    )}
+                  </button>
                 </div>
-                {getEstadoBadge(vehicle.estado)}
-              </div>
 
-              <div className="space-y-2 mb-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Kilometraje:</span>
-                  <span className="font-medium text-gray-900">
-                    {vehicle.kilometraje.toLocaleString()} km
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Precio Compra:</span>
-                  <span className="font-medium text-gray-900">
-                    {formatCurrency(vehicle.precioCompra)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Gastos Totales:</span>
-                  <span className="font-medium text-orange-600">
-                    {formatCurrency(vehicle.gastos?.total || 0)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm border-t pt-2">
-                  <span className="text-gray-600 font-semibold">Costo Total:</span>
-                  <span className="font-semibold text-gray-900">
-                    {formatCurrency(vehicle.precioCompra + (vehicle.gastos?.total || 0))}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Precio Venta:</span>
-                  <span className="font-medium text-green-600">
-                    {formatCurrency(vehicle.precioVenta)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm border-t pt-2">
-                  <span className="text-gray-600 font-semibold">Utilidad:</span>
-                  <span className={`font-semibold ${
-                    (vehicle.precioVenta - vehicle.precioCompra - (vehicle.gastos?.total || 0)) >= 0 
-                      ? 'text-green-600' 
-                      : 'text-red-600'
-                  }`}>
-                    {formatCurrency(vehicle.precioVenta - vehicle.precioCompra - (vehicle.gastos?.total || 0))}
-                  </span>
-                </div>
-              </div>
+                {/* Información Detallada - Desplegable */}
+                {isExpanded && (
+                  <div className="mt-4 pt-4 border-t border-gray-200 space-y-4">
+                    {/* Información Financiera */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Información Financiera</h4>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Precio Compra:</span>
+                          <span className="font-medium text-gray-900">
+                            {formatCurrency(vehicle.precioCompra)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Gastos Totales:</span>
+                          <span className="font-medium text-orange-600">
+                            {formatCurrency(vehicle.gastos?.total || 0)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm border-t pt-2">
+                          <span className="text-gray-600 font-semibold">Costo Total:</span>
+                          <span className="font-semibold text-gray-900">
+                            {formatCurrency(vehicle.precioCompra + (vehicle.gastos?.total || 0))}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Precio Venta:</span>
+                          <span className="font-medium text-green-600">
+                            {formatCurrency(vehicle.precioVenta)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm border-t pt-2">
+                          <span className="text-gray-600 font-semibold">Utilidad:</span>
+                          <span className={`font-semibold ${
+                            utilidad >= 0 ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            {formatCurrency(utilidad)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600 font-semibold">Margen de Ganancia:</span>
+                          <span className={`font-semibold ${
+                            utilidad >= 0 ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            {(() => {
+                              const costoTotal = vehicle.precioCompra + (vehicle.gastos?.total || 0);
+                              const margen = costoTotal > 0 ? ((utilidad / costoTotal) * 100).toFixed(2) : '0.00';
+                              return `${margen}%`;
+                            })()}
+                          </span>
+                        </div>
+                      </div>
 
-              <div className="border-t pt-3 flex justify-between items-center">
-                <div className="flex space-x-2">
-                  {vehicle.documentacion?.prenda?.tiene && (
-                    <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
-                      Prenda
-                    </span>
-                  )}
-                  {vehicle.documentacion?.soat?.tiene && (
-                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                      SOAT
-                    </span>
-                  )}
-                  {vehicle.documentacion?.tecnomecanica?.tiene && (
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                      Tecno
-                    </span>
-                  )}
-                </div>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={async () => {
-                      try {
-                        const response = await api.get(`/vehicles/${vehicle._id}/export`, {
-                          responseType: 'blob'
-                        });
-                        const url = window.URL.createObjectURL(new Blob([response.data]));
-                        const link = document.createElement('a');
-                        link.href = url;
-                        link.setAttribute('download', `vehiculo-${vehicle.placa}-${Date.now()}.xlsx`);
-                        document.body.appendChild(link);
-                        link.click();
-                        link.remove();
-                      } catch (error) {
-                        console.error('Error al exportar:', error);
-                        alert('Error al exportar el vehículo');
-                      }
-                    }}
-                    className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                    title="Exportar a Excel"
-                  >
-                    <FileDown className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => navigate(`/vehicles/${vehicle._id}/edit`)}
-                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                    title="Editar"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(vehicle._id)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    title="Eliminar"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Detalles del Vehículo</h4>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Color:</span>
+                          <span className="font-medium text-gray-900">{vehicle.color}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Kilometraje:</span>
+                          <span className="font-medium text-gray-900">
+                            {vehicle.kilometraje.toLocaleString()} km
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">VIN:</span>
+                          <span className="font-medium text-gray-900 text-xs">{vehicle.vin}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Estado:</span>
+                          {getEstadoBadge(vehicle.estado)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Desglose de Gastos */}
+                    {vehicle.gastos && (vehicle.gastos.pintura > 0 || vehicle.gastos.mecanica > 0 || vehicle.gastos.traspaso > 0 || 
+                                        vehicle.gastos.alistamiento > 0 || vehicle.gastos.tapiceria > 0 || vehicle.gastos.transporte > 0 || vehicle.gastos.varios > 0) && (
+                      <div>
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Desglose de Gastos</h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                          {vehicle.gastos.pintura > 0 && (
+                            <div className="bg-orange-50 p-2 rounded">
+                              <p className="text-xs text-gray-600">Pintura</p>
+                              <p className="text-sm font-medium text-orange-600">
+                                {formatCurrency(vehicle.gastos.pintura)}
+                              </p>
+                            </div>
+                          )}
+                          {vehicle.gastos.mecanica > 0 && (
+                            <div className="bg-blue-50 p-2 rounded">
+                              <p className="text-xs text-gray-600">Mecánica</p>
+                              <p className="text-sm font-medium text-blue-600">
+                                {formatCurrency(vehicle.gastos.mecanica)}
+                              </p>
+                            </div>
+                          )}
+                          {vehicle.gastos.traspaso > 0 && (
+                            <div className="bg-purple-50 p-2 rounded">
+                              <p className="text-xs text-gray-600">Traspaso</p>
+                              <p className="text-sm font-medium text-purple-600">
+                                {formatCurrency(vehicle.gastos.traspaso)}
+                              </p>
+                            </div>
+                          )}
+                          {vehicle.gastos.alistamiento > 0 && (
+                            <div className="bg-green-50 p-2 rounded">
+                              <p className="text-xs text-gray-600">Alistamiento</p>
+                              <p className="text-sm font-medium text-green-600">
+                                {formatCurrency(vehicle.gastos.alistamiento)}
+                              </p>
+                            </div>
+                          )}
+                          {vehicle.gastos.tapiceria > 0 && (
+                            <div className="bg-pink-50 p-2 rounded">
+                              <p className="text-xs text-gray-600">Tapicería</p>
+                              <p className="text-sm font-medium text-pink-600">
+                                {formatCurrency(vehicle.gastos.tapiceria)}
+                              </p>
+                            </div>
+                          )}
+                          {vehicle.gastos.transporte > 0 && (
+                            <div className="bg-cyan-50 p-2 rounded">
+                              <p className="text-xs text-gray-600">Transporte</p>
+                              <p className="text-sm font-medium text-cyan-600">
+                                {formatCurrency(vehicle.gastos.transporte)}
+                              </p>
+                            </div>
+                          )}
+                          {vehicle.gastos.varios > 0 && (
+                            <div className="bg-gray-50 p-2 rounded">
+                              <p className="text-xs text-gray-600">Varios</p>
+                              <p className="text-sm font-medium text-gray-600">
+                                {formatCurrency(vehicle.gastos.varios)}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Documentación */}
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2">Documentación</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {vehicle.documentacion?.prenda?.tiene && (
+                          <span className="text-xs bg-red-100 text-red-800 px-3 py-1 rounded-full">
+                            ⚠️ Prenda
+                          </span>
+                        )}
+                        {vehicle.documentacion?.soat?.tiene && (
+                          <span className="text-xs bg-green-100 text-green-800 px-3 py-1 rounded-full">
+                            ✓ SOAT
+                          </span>
+                        )}
+                        {vehicle.documentacion?.tecnomecanica?.tiene && (
+                          <span className="text-xs bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
+                            ✓ Tecnomecánica
+                          </span>
+                        )}
+                        {vehicle.documentacion?.tarjetaPropiedad?.tiene && (
+                          <span className="text-xs bg-purple-100 text-purple-800 px-3 py-1 rounded-full">
+                            ✓ Tarjeta Propiedad
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Inversionistas */}
+                    {vehicle.inversionistas && vehicle.inversionistas.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Inversionistas</h4>
+                        <div className="space-y-2">
+                          {vehicle.inversionistas.map((inv, idx) => (
+                            <div key={idx} className="bg-indigo-50 p-3 rounded border border-indigo-200">
+                              <div className="flex justify-between items-start mb-2">
+                                <span className="text-sm font-medium text-gray-700">{inv.nombre}</span>
+                                <span className="text-sm font-semibold text-indigo-600">
+                                  {formatCurrency(inv.montoInversion)}
+                                </span>
+                              </div>
+                              {inv.gastosInversionista > 0 && (
+                                <div className="mt-2 pt-2 border-t border-indigo-200">
+                                  <div className="flex justify-between items-start text-xs">
+                                    <span className="text-gray-600">Gastos:</span>
+                                    <span className="font-medium text-orange-600">
+                                      {formatCurrency(inv.gastosInversionista)}
+                                    </span>
+                                  </div>
+                                  {inv.detallesGastos && (
+                                    <p className="mt-1 text-xs text-gray-600 italic">
+                                      "{inv.detallesGastos}"
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Observaciones */}
+                    {vehicle.observaciones && (
+                      <div>
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Observaciones</h4>
+                        <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
+                          {vehicle.observaciones}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Acciones */}
+                    <div className="flex flex-wrap justify-end gap-2 pt-2 border-t">
+                      {/* Botones para vehículos NO vendidos */}
+                      {vehicle.estado !== 'vendido' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenSaleModal(vehicle);
+                          }}
+                          className="px-4 py-2 text-sm bg-green-600 text-white hover:bg-green-700 rounded-lg transition-colors flex items-center gap-2"
+                        >
+                          <DollarSign className="h-4 w-4" />
+                          Vender Vehículo
+                        </button>
+                      )}
+                      
+                      {/* Botón para generar contrato (solo vehículos vendidos) */}
+                      {vehicle.estado === 'vendido' && vehicle.datosVenta && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleGenerateContract(vehicle._id);
+                          }}
+                          className="px-4 py-2 text-sm bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-2"
+                        >
+                          <FileText className="h-4 w-4" />
+                          Generar Contrato
+                        </button>
+                      )}
+
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            const response = await api.get(`/vehicles/${vehicle._id}/expenses-template`, {
+                              responseType: 'blob'
+                            });
+                            const url = window.URL.createObjectURL(new Blob([response.data]));
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.setAttribute('download', `gastos-${vehicle.placa}-${Date.now()}.xlsx`);
+                            document.body.appendChild(link);
+                            link.click();
+                            link.remove();
+                          } catch (error) {
+                            console.error('Error al exportar plantilla:', error);
+                            alert('Error al exportar plantilla de gastos');
+                          }
+                        }}
+                        className="px-4 py-2 text-sm text-purple-600 hover:bg-purple-50 rounded-lg transition-colors flex items-center gap-2"
+                      >
+                        <FileDown className="h-4 w-4" />
+                        Plantilla Gastos
+                      </button>
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            const response = await api.get(`/vehicles/${vehicle._id}/export`, {
+                              responseType: 'blob'
+                            });
+                            const url = window.URL.createObjectURL(new Blob([response.data]));
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.setAttribute('download', `vehiculo-${vehicle.placa}-${Date.now()}.xlsx`);
+                            document.body.appendChild(link);
+                            link.click();
+                            link.remove();
+                          } catch (error) {
+                            console.error('Error al exportar:', error);
+                            alert('Error al exportar el vehículo');
+                          }
+                        }}
+                        className="px-4 py-2 text-sm text-green-600 hover:bg-green-50 rounded-lg transition-colors flex items-center gap-2"
+                      >
+                        <FileDown className="h-4 w-4" />
+                        Reporte Completo
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/vehicles/${vehicle._id}/edit`);
+                        }}
+                        className="px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2"
+                      >
+                        <Edit className="h-4 w-4" />
+                        Editar
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(vehicle._id);
+                        }}
+                        className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Eliminar
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
+      )}
+
+      {/* Modal de Datos de Venta */}
+      {selectedVehicle && (
+        <SaleDataModal
+          isOpen={saleModalOpen}
+          onClose={() => {
+            setSaleModalOpen(false);
+            setSelectedVehicle(null);
+          }}
+          onSubmit={handleSaveSaleData}
+          vehiclePlaca={selectedVehicle.placa}
+        />
       )}
     </Layout>
   );

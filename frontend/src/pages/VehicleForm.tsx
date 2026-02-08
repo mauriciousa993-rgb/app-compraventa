@@ -33,14 +33,20 @@ const VehicleForm: React.FC = () => {
       pintura: 0,
       mecanica: 0,
       traspaso: 0,
+      alistamiento: 0,
+      tapiceria: 0,
+      transporte: 0,
       varios: 0,
       total: 0
     },
     
     // Inversionistas
     inversionistas: [] as Array<{
+      usuario: string;
       nombre: string;
       montoInversion: number;
+      gastosInversionista: number;
+      detallesGastos: string;
       porcentajeParticipacion: number;
       utilidadCorrespondiente: number;
     }>,
@@ -96,6 +102,7 @@ const VehicleForm: React.FC = () => {
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string>('');
+  const [usuarios, setUsuarios] = useState<Array<{ id: string; nombre: string; email: string }>>([]);
 
   // Formatear número con separador de miles
   const formatNumber = (value: number | string): string => {
@@ -113,12 +120,30 @@ const VehicleForm: React.FC = () => {
     return isNaN(num) ? 0 : num;
   };
 
+  // Cargar usuarios disponibles
+  useEffect(() => {
+    loadUsuarios();
+  }, []);
+
   // Cargar datos del vehículo si estamos en modo edición
   useEffect(() => {
     if (isEditMode && id) {
       loadVehicleData(id);
     }
   }, [id, isEditMode]);
+
+  const loadUsuarios = async () => {
+    try {
+      const response = await api.get('/auth/users');
+      setUsuarios(response.data.map((user: any) => ({
+        id: user._id || user.id,
+        nombre: user.nombre,
+        email: user.email
+      })));
+    } catch (err) {
+      console.error('Error al cargar usuarios:', err);
+    }
+  };
 
   const loadVehicleData = async (vehicleId: string) => {
     setIsLoadingData(true);
@@ -142,6 +167,9 @@ const VehicleForm: React.FC = () => {
           pintura: vehicle.gastos?.pintura || 0,
           mecanica: vehicle.gastos?.mecanica || 0,
           traspaso: vehicle.gastos?.traspaso || 0,
+          alistamiento: vehicle.gastos?.alistamiento || 0,
+          tapiceria: vehicle.gastos?.tapiceria || 0,
+          transporte: vehicle.gastos?.transporte || 0,
           varios: vehicle.gastos?.varios || 0,
           total: vehicle.gastos?.total || 0
         },
@@ -280,8 +308,11 @@ const VehicleForm: React.FC = () => {
       inversionistas: [
         ...prev.inversionistas,
         {
+          usuario: '',
           nombre: '',
           montoInversion: 0,
+          gastosInversionista: 0,
+          detallesGastos: '',
           porcentajeParticipacion: 0,
           utilidadCorrespondiente: 0
         }
@@ -298,13 +329,44 @@ const VehicleForm: React.FC = () => {
     }));
   };
 
-  const actualizarInversionista = (index: number, campo: 'nombre' | 'montoInversion', valor: string | number) => {
+  const actualizarInversionista = (index: number, campo: 'usuario' | 'nombre' | 'montoInversion' | 'gastosInversionista' | 'detallesGastos', valor: string | number) => {
+    // Si se selecciona un usuario, autocompletar el nombre
+    if (campo === 'usuario') {
+      const usuarioSeleccionado = usuarios.find(u => u.id === valor);
+      setFormData(prev => {
+        const nuevosInversionistas = [...prev.inversionistas];
+        nuevosInversionistas[index] = {
+          ...nuevosInversionistas[index],
+          usuario: valor as string,
+          nombre: usuarioSeleccionado?.nombre || ''
+        };
+        return {
+          ...prev,
+          inversionistas: nuevosInversionistas
+        };
+      });
+      return;
+    }
     setFormData(prev => {
       const nuevosInversionistas = [...prev.inversionistas];
       nuevosInversionistas[index] = {
         ...nuevosInversionistas[index],
         [campo]: valor
       };
+      
+      // Recalcular gastos totales si se modifican gastos de inversionista
+      if (campo === 'gastosInversionista') {
+        const gastosInversionistas = nuevosInversionistas.reduce((sum, inv) => sum + (inv.gastosInversionista || 0), 0);
+        const newGastos = { ...prev.gastos };
+        newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + newGastos.varios + gastosInversionistas;
+        
+        return {
+          ...prev,
+          inversionistas: nuevosInversionistas,
+          gastos: newGastos
+        };
+      }
+      
       return {
         ...prev,
         inversionistas: nuevosInversionistas
@@ -315,7 +377,9 @@ const VehicleForm: React.FC = () => {
   // Calcular totales de inversionistas
   const calcularTotalesInversionistas = () => {
     const totalInversion = formData.inversionistas.reduce((sum, inv) => sum + inv.montoInversion, 0);
-    const utilidadTotal = formData.precioVenta - formData.precioCompra - formData.gastos.total;
+    const gastosInversionistas = formData.inversionistas.reduce((sum, inv) => sum + (inv.gastosInversionista || 0), 0);
+    const gastosTotales = formData.gastos.pintura + formData.gastos.mecanica + formData.gastos.traspaso + formData.gastos.varios + gastosInversionistas;
+    const utilidadTotal = formData.precioVenta - formData.precioCompra - gastosTotales;
     
     return formData.inversionistas.map(inv => {
       const porcentaje = totalInversion > 0 ? (inv.montoInversion / totalInversion) * 100 : 0;
@@ -573,7 +637,8 @@ const VehicleForm: React.FC = () => {
                     const numValue = parseFormattedNumber(e.target.value);
                     setFormData(prev => {
                       const newGastos = { ...prev.gastos, pintura: numValue };
-                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + newGastos.varios;
+                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + 
+                                       newGastos.alistamiento + newGastos.tapiceria + newGastos.transporte + newGastos.varios;
                       return { ...prev, gastos: newGastos };
                     });
                   }}
@@ -594,7 +659,8 @@ const VehicleForm: React.FC = () => {
                     const numValue = parseFormattedNumber(e.target.value);
                     setFormData(prev => {
                       const newGastos = { ...prev.gastos, mecanica: numValue };
-                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + newGastos.varios;
+                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + 
+                                       newGastos.alistamiento + newGastos.tapiceria + newGastos.transporte + newGastos.varios;
                       return { ...prev, gastos: newGastos };
                     });
                   }}
@@ -615,12 +681,79 @@ const VehicleForm: React.FC = () => {
                     const numValue = parseFormattedNumber(e.target.value);
                     setFormData(prev => {
                       const newGastos = { ...prev.gastos, traspaso: numValue };
-                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + newGastos.varios;
+                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + 
+                                       newGastos.alistamiento + newGastos.tapiceria + newGastos.transporte + newGastos.varios;
                       return { ...prev, gastos: newGastos };
                     });
                   }}
                   className="input-field"
                   placeholder="Ej: 800,000"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Gastos de Alistamiento
+                </label>
+                <input
+                  type="text"
+                  name="gastos.alistamiento"
+                  value={formatNumber(formData.gastos.alistamiento)}
+                  onChange={(e) => {
+                    const numValue = parseFormattedNumber(e.target.value);
+                    setFormData(prev => {
+                      const newGastos = { ...prev.gastos, alistamiento: numValue };
+                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + 
+                                       newGastos.alistamiento + newGastos.tapiceria + newGastos.transporte + newGastos.varios;
+                      return { ...prev, gastos: newGastos };
+                    });
+                  }}
+                  className="input-field"
+                  placeholder="Ej: 300,000"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Gastos de Tapicería
+                </label>
+                <input
+                  type="text"
+                  name="gastos.tapiceria"
+                  value={formatNumber(formData.gastos.tapiceria)}
+                  onChange={(e) => {
+                    const numValue = parseFormattedNumber(e.target.value);
+                    setFormData(prev => {
+                      const newGastos = { ...prev.gastos, tapiceria: numValue };
+                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + 
+                                       newGastos.alistamiento + newGastos.tapiceria + newGastos.transporte + newGastos.varios;
+                      return { ...prev, gastos: newGastos };
+                    });
+                  }}
+                  className="input-field"
+                  placeholder="Ej: 400,000"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Gastos de Transporte
+                </label>
+                <input
+                  type="text"
+                  name="gastos.transporte"
+                  value={formatNumber(formData.gastos.transporte)}
+                  onChange={(e) => {
+                    const numValue = parseFormattedNumber(e.target.value);
+                    setFormData(prev => {
+                      const newGastos = { ...prev.gastos, transporte: numValue };
+                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + 
+                                       newGastos.alistamiento + newGastos.tapiceria + newGastos.transporte + newGastos.varios;
+                      return { ...prev, gastos: newGastos };
+                    });
+                  }}
+                  className="input-field"
+                  placeholder="Ej: 200,000"
                 />
               </div>
 
@@ -636,7 +769,8 @@ const VehicleForm: React.FC = () => {
                     const numValue = parseFormattedNumber(e.target.value);
                     setFormData(prev => {
                       const newGastos = { ...prev.gastos, varios: numValue };
-                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + newGastos.varios;
+                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + 
+                                       newGastos.alistamiento + newGastos.tapiceria + newGastos.transporte + newGastos.varios;
                       return { ...prev, gastos: newGastos };
                     });
                   }}
@@ -645,7 +779,7 @@ const VehicleForm: React.FC = () => {
                 />
               </div>
 
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+              <div className="md:col-span-2 bg-blue-50 p-4 rounded-lg border border-blue-200">
                 <label className="block text-sm font-medium text-blue-700 mb-1">
                   Total Gastos
                 </label>
@@ -738,18 +872,40 @@ const VehicleForm: React.FC = () => {
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="md:col-span-3">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Usuario del Sistema *
+                          </label>
+                          <select
+                            value={inv.usuario || ''}
+                            onChange={(e) => actualizarInversionista(index, 'usuario', e.target.value)}
+                            className="input-field"
+                            required={formData.inversionistas.length > 0}
+                          >
+                            <option value="">Seleccionar usuario...</option>
+                            {usuarios.map(user => (
+                              <option key={user.id} value={user.id}>
+                                {user.nombre} ({user.email})
+                              </option>
+                            ))}
+                          </select>
+                          <p className="mt-1 text-xs text-gray-500">
+                            Selecciona el usuario que será inversionista. El nombre se autocompletará.
+                          </p>
+                        </div>
+
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Nombre del Inversionista *
+                            Nombre del Inversionista
                           </label>
                           <input
                             type="text"
                             value={inv.nombre}
                             onChange={(e) => actualizarInversionista(index, 'nombre', e.target.value)}
-                            className="input-field"
-                            placeholder="Ej: Juan Pérez"
-                            required={formData.inversionistas.length > 0}
+                            className="input-field bg-gray-100"
+                            placeholder="Se autocompleta al seleccionar usuario"
+                            readOnly
                           />
                         </div>
 
@@ -769,7 +925,45 @@ const VehicleForm: React.FC = () => {
                             required={formData.inversionistas.length > 0}
                           />
                         </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Gastos del Inversionista
+                          </label>
+                          <input
+                            type="text"
+                            value={formatNumber(inv.gastosInversionista || 0)}
+                            onChange={(e) => {
+                              const numValue = parseFormattedNumber(e.target.value);
+                              actualizarInversionista(index, 'gastosInversionista', numValue);
+                            }}
+                            className="input-field"
+                            placeholder="Ej: 500,000"
+                          />
+                          <p className="mt-1 text-xs text-gray-500">
+                            Se suma a gastos totales
+                          </p>
+                        </div>
                       </div>
+
+                      {/* Campo de detalles de gastos */}
+                      {inv.gastosInversionista > 0 && (
+                        <div className="mt-3">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Detalles del Gasto
+                          </label>
+                          <textarea
+                            value={inv.detallesGastos || ''}
+                            onChange={(e) => actualizarInversionista(index, 'detallesGastos', e.target.value)}
+                            className="input-field"
+                            rows={2}
+                            placeholder="Ej: Pago de mecánica, pintura de puerta trasera, etc."
+                          />
+                          <p className="mt-1 text-xs text-gray-500">
+                            Describe en qué se gastó este dinero
+                          </p>
+                        </div>
+                      )}
 
                       {/* Mostrar cálculos */}
                       <div className="mt-3 grid grid-cols-2 gap-3">

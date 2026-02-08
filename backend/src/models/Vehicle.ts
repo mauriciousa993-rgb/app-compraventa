@@ -1,10 +1,63 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IInversionista {
+  usuario: mongoose.Types.ObjectId; // Referencia al usuario inversionista
   nombre: string;
   montoInversion: number;
+  gastosInversionista: number;
+  detallesGastos: string;
   porcentajeParticipacion: number;
   utilidadCorrespondiente: number;
+}
+
+export interface IDatosVenta {
+  // Datos del vendedor
+  vendedor: {
+    nombre: string;
+    identificacion: string;
+    direccion: string;
+    telefono: string;
+  };
+  // Datos del comprador
+  comprador: {
+    nombre: string;
+    identificacion: string;
+    direccion: string;
+    telefono: string;
+    email: string;
+  };
+  // Datos adicionales del vehículo
+  vehiculoAdicional: {
+    tipoCarroceria: string;
+    capacidad: string;
+    numeroPuertas: number;
+    numeroMotor: string;
+    linea: string;
+    actaManifiesto: string;
+    sitioMatricula: string;
+    tipoServicio: string;
+  };
+  // Datos de la transacción
+  transaccion: {
+    lugarCelebracion: string;
+    fechaCelebracion: Date;
+    precioLetras: string;
+    formaPago: string;
+    vendedorAnterior: string;
+    cedulaVendedorAnterior: string;
+    diasTraspaso: number;
+    fechaEntrega: Date;
+    horaEntrega: string;
+    domicilioContractual: string;
+    clausulasAdicionales: string;
+  };
+}
+
+export interface IGastoDetalle {
+  descripcion: string;
+  encargado: string;
+  fecha: Date;
+  monto: number;
 }
 
 export interface IVehicleDocument extends Document {
@@ -21,8 +74,20 @@ export interface IVehicleDocument extends Document {
     pintura: number;
     mecanica: number;
     traspaso: number;
+    alistamiento: number;
+    tapiceria: number;
+    transporte: number;
     varios: number;
     total: number;
+  };
+  gastosDetallados: {
+    pintura: IGastoDetalle[];
+    mecanica: IGastoDetalle[];
+    traspaso: IGastoDetalle[];
+    alistamiento: IGastoDetalle[];
+    tapiceria: IGastoDetalle[];
+    transporte: IGastoDetalle[];
+    varios: IGastoDetalle[];
   };
   inversionistas: IInversionista[];
   tieneInversionistas: boolean;
@@ -68,6 +133,7 @@ export interface IVehicleDocument extends Document {
   pendientes: string[];
   fechaIngreso: Date;
   fechaVenta?: Date;
+  datosVenta?: IDatosVenta;
   registradoPor: mongoose.Types.ObjectId;
 }
 
@@ -128,12 +194,62 @@ const vehicleSchema = new Schema<IVehicleDocument>(
       pintura: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
       mecanica: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
       traspaso: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
+      alistamiento: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
+      tapiceria: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
+      transporte: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
       varios: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
       total: { type: Number, default: 0 },
     },
+    gastosDetallados: {
+      pintura: [{
+        descripcion: { type: String, default: '', trim: true },
+        encargado: { type: String, default: '', trim: true },
+        fecha: { type: Date },
+        monto: { type: Number, default: 0, min: [0, 'El monto no puede ser negativo'] }
+      }],
+      mecanica: [{
+        descripcion: { type: String, default: '', trim: true },
+        encargado: { type: String, default: '', trim: true },
+        fecha: { type: Date },
+        monto: { type: Number, default: 0, min: [0, 'El monto no puede ser negativo'] }
+      }],
+      traspaso: [{
+        descripcion: { type: String, default: '', trim: true },
+        encargado: { type: String, default: '', trim: true },
+        fecha: { type: Date },
+        monto: { type: Number, default: 0, min: [0, 'El monto no puede ser negativo'] }
+      }],
+      alistamiento: [{
+        descripcion: { type: String, default: '', trim: true },
+        encargado: { type: String, default: '', trim: true },
+        fecha: { type: Date },
+        monto: { type: Number, default: 0, min: [0, 'El monto no puede ser negativo'] }
+      }],
+      tapiceria: [{
+        descripcion: { type: String, default: '', trim: true },
+        encargado: { type: String, default: '', trim: true },
+        fecha: { type: Date },
+        monto: { type: Number, default: 0, min: [0, 'El monto no puede ser negativo'] }
+      }],
+      transporte: [{
+        descripcion: { type: String, default: '', trim: true },
+        encargado: { type: String, default: '', trim: true },
+        fecha: { type: Date },
+        monto: { type: Number, default: 0, min: [0, 'El monto no puede ser negativo'] }
+      }],
+      varios: [{
+        descripcion: { type: String, default: '', trim: true },
+        encargado: { type: String, default: '', trim: true },
+        fecha: { type: Date },
+        monto: { type: Number, default: 0, min: [0, 'El monto no puede ser negativo'] }
+      }]
+    },
     inversionistas: [{
+      usuario: { type: Schema.Types.ObjectId, ref: 'User', required: true },
       nombre: { type: String, required: true, trim: true },
       montoInversion: { type: Number, required: true, min: [0, 'El monto de inversión no puede ser negativo'] },
+      gastosInversionista: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
+      detallesGastos: { type: String, default: '', trim: true },
       porcentajeParticipacion: { type: Number, default: 0, min: [0, 'El porcentaje no puede ser negativo'], max: [100, 'El porcentaje no puede ser mayor a 100'] },
       utilidadCorrespondiente: { type: Number, default: 0 }
     }],
@@ -195,6 +311,44 @@ const vehicleSchema = new Schema<IVehicleDocument>(
     fechaVenta: {
       type: Date,
     },
+    datosVenta: {
+      vendedor: {
+        nombre: { type: String, default: '', trim: true },
+        identificacion: { type: String, default: '', trim: true },
+        direccion: { type: String, default: '', trim: true },
+        telefono: { type: String, default: '', trim: true },
+      },
+      comprador: {
+        nombre: { type: String, default: '', trim: true },
+        identificacion: { type: String, default: '', trim: true },
+        direccion: { type: String, default: '', trim: true },
+        telefono: { type: String, default: '', trim: true },
+        email: { type: String, default: '', trim: true },
+      },
+      vehiculoAdicional: {
+        tipoCarroceria: { type: String, default: '', trim: true },
+        capacidad: { type: String, default: '', trim: true },
+        numeroPuertas: { type: Number, default: 0 },
+        numeroMotor: { type: String, default: '', trim: true },
+        linea: { type: String, default: '', trim: true },
+        actaManifiesto: { type: String, default: '', trim: true },
+        sitioMatricula: { type: String, default: '', trim: true },
+        tipoServicio: { type: String, default: '', trim: true },
+      },
+      transaccion: {
+        lugarCelebracion: { type: String, default: '', trim: true },
+        fechaCelebracion: { type: Date },
+        precioLetras: { type: String, default: '', trim: true },
+        formaPago: { type: String, default: '', trim: true },
+        vendedorAnterior: { type: String, default: '', trim: true },
+        cedulaVendedorAnterior: { type: String, default: '', trim: true },
+        diasTraspaso: { type: Number, default: 30 },
+        fechaEntrega: { type: Date },
+        horaEntrega: { type: String, default: '', trim: true },
+        domicilioContractual: { type: String, default: '', trim: true },
+        clausulasAdicionales: { type: String, default: '', trim: true },
+      },
+    },
     registradoPor: {
       type: Schema.Types.ObjectId,
       ref: 'User',
@@ -214,8 +368,26 @@ vehicleSchema.index({ marca: 1, modelo: 1 });
 
 // Middleware para calcular total de gastos y distribución de inversionistas antes de guardar
 vehicleSchema.pre('save', function (next) {
-  // Calcular total de gastos
-  this.gastos.total = this.gastos.pintura + this.gastos.mecanica + this.gastos.traspaso + this.gastos.varios;
+  // Calcular totales de gastos detallados
+  if (this.gastosDetallados) {
+    this.gastos.pintura = this.gastosDetallados.pintura?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0;
+    this.gastos.mecanica = this.gastosDetallados.mecanica?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0;
+    this.gastos.traspaso = this.gastosDetallados.traspaso?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0;
+    this.gastos.alistamiento = this.gastosDetallados.alistamiento?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0;
+    this.gastos.tapiceria = this.gastosDetallados.tapiceria?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0;
+    this.gastos.transporte = this.gastosDetallados.transporte?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0;
+    this.gastos.varios = this.gastosDetallados.varios?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0;
+  }
+  
+  // Sumar gastos de inversionistas
+  const gastosInversionistas = this.inversionistas && this.inversionistas.length > 0
+    ? this.inversionistas.reduce((sum, inv) => sum + (inv.gastosInversionista || 0), 0)
+    : 0;
+  
+  // Calcular total de gastos (incluyendo gastos de inversionistas)
+  this.gastos.total = this.gastos.pintura + this.gastos.mecanica + this.gastos.traspaso + 
+                      this.gastos.alistamiento + this.gastos.tapiceria + this.gastos.transporte + 
+                      this.gastos.varios + gastosInversionistas;
   
   // Calcular distribución de inversionistas si existen
   if (this.inversionistas && this.inversionistas.length > 0) {

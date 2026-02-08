@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AuthResponse, User, Vehicle, Statistics } from '../types';
+import { AuthResponse, User, Vehicle, Statistics, DatosVenta } from '../types';
 
 // Detectar IP local para móviles o URL de producción
 const getAPIURL = (): string => {
@@ -157,6 +157,26 @@ export const vehiclesAPI = {
   getExpiringDocuments: async () => {
     const response = await api.get<Vehicle[]>('/vehicles/expiring-documents');
     return response.data;
+  },
+
+  saveSaleData: async (id: string, data: DatosVenta) => {
+    const response = await api.post(`/vehicles/${id}/sale-data`, data);
+    return response.data;
+  },
+
+  generateContract: async (id: string) => {
+    const response = await api.get(`/vehicles/${id}/contract`, {
+      responseType: 'blob',
+    });
+    
+    // Crear un enlace de descarga
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `contrato-${id}-${Date.now()}.docx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   },
 };
 

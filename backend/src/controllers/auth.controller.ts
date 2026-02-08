@@ -176,3 +176,48 @@ export const deleteUser = async (req: Request, res: Response): Promise<void> => 
     res.status(500).json({ message: 'Error al eliminar usuario', error: error.message });
   }
 };
+
+// Crear nuevo usuario (solo admin)
+export const createUser = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { nombre, email, password, rol } = req.body;
+
+    // Verificar si el usuario ya existe
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      res.status(400).json({ message: 'El email ya está registrado' });
+      return;
+    }
+
+    // Validar rol
+    const rolesPermitidos = ['admin', 'vendedor', 'visualizador'];
+    if (rol && !rolesPermitidos.includes(rol)) {
+      res.status(400).json({ message: 'Rol inválido' });
+      return;
+    }
+
+    // Crear nuevo usuario
+    const user = new User({
+      nombre,
+      email,
+      password,
+      rol: rol || 'vendedor',
+      activo: true,
+    });
+
+    await user.save();
+
+    res.status(201).json({
+      message: 'Usuario creado exitosamente',
+      user: {
+        id: user._id,
+        nombre: user.nombre,
+        email: user.email,
+        rol: user.rol,
+        activo: user.activo,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error al crear usuario', error: error.message });
+  }
+};

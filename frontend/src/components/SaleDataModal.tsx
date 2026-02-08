@@ -1,0 +1,524 @@
+import React, { useState } from 'react';
+import { X } from 'lucide-react';
+import { DatosVenta } from '../types';
+
+interface SaleDataModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (data: DatosVenta) => void;
+  vehiclePlaca: string;
+}
+
+const SaleDataModal: React.FC<SaleDataModalProps> = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  vehiclePlaca,
+}) => {
+  const [formData, setFormData] = useState<DatosVenta>({
+    vendedor: {
+      nombre: '',
+      identificacion: '',
+      direccion: '',
+      telefono: '',
+    },
+    comprador: {
+      nombre: '',
+      identificacion: '',
+      direccion: '',
+      telefono: '',
+      email: '',
+    },
+    vehiculoAdicional: {
+      tipoCarroceria: '',
+      capacidad: '',
+      numeroPuertas: 4,
+      numeroMotor: '',
+      linea: '',
+      actaManifiesto: '',
+      sitioMatricula: '',
+      tipoServicio: 'PARTICULAR',
+    },
+    transaccion: {
+      lugarCelebracion: '',
+      fechaCelebracion: new Date().toISOString().split('T')[0],
+      precioLetras: '',
+      formaPago: '',
+      vendedorAnterior: '',
+      cedulaVendedorAnterior: '',
+      diasTraspaso: 30,
+      fechaEntrega: new Date().toISOString().split('T')[0],
+      horaEntrega: '',
+      domicilioContractual: '',
+      clausulasAdicionales: '',
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit(formData);
+  };
+
+  const updateVendedor = (field: string, value: string) => {
+    setFormData({
+      ...formData,
+      vendedor: { ...formData.vendedor, [field]: value },
+    });
+  };
+
+  const updateComprador = (field: string, value: string) => {
+    setFormData({
+      ...formData,
+      comprador: { ...formData.comprador, [field]: value },
+    });
+  };
+
+  const updateVehiculoAdicional = (field: string, value: string | number) => {
+    setFormData({
+      ...formData,
+      vehiculoAdicional: { ...formData.vehiculoAdicional, [field]: value },
+    });
+  };
+
+  const updateTransaccion = (field: string, value: string | number) => {
+    setFormData({
+      ...formData,
+      transaccion: { ...formData.transaccion, [field]: value },
+    });
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-gray-900">
+            Datos de Venta - {vehiclePlaca}
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X className="h-6 w-6" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-8">
+          {/* DATOS DEL VENDEDOR */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
+              Datos del Vendedor
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nombre Completo *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.vendedor.nombre}
+                  onChange={(e) => updateVendedor('nombre', e.target.value)}
+                  className="input"
+                  placeholder="Ej: Juan Pérez García"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Cédula/NIT *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.vendedor.identificacion}
+                  onChange={(e) => updateVendedor('identificacion', e.target.value)}
+                  className="input"
+                  placeholder="Ej: 1234567890"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Dirección *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.vendedor.direccion}
+                  onChange={(e) => updateVendedor('direccion', e.target.value)}
+                  className="input"
+                  placeholder="Ej: Calle 123 #45-67"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Teléfono *
+                </label>
+                <input
+                  type="tel"
+                  required
+                  value={formData.vendedor.telefono}
+                  onChange={(e) => updateVendedor('telefono', e.target.value)}
+                  className="input"
+                  placeholder="Ej: 3001234567"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* DATOS DEL COMPRADOR */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
+              Datos del Comprador
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nombre Completo *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.comprador.nombre}
+                  onChange={(e) => updateComprador('nombre', e.target.value)}
+                  className="input"
+                  placeholder="Ej: María López Rodríguez"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Cédula/NIT *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.comprador.identificacion}
+                  onChange={(e) => updateComprador('identificacion', e.target.value)}
+                  className="input"
+                  placeholder="Ej: 9876543210"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Dirección *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.comprador.direccion}
+                  onChange={(e) => updateComprador('direccion', e.target.value)}
+                  className="input"
+                  placeholder="Ej: Carrera 45 #12-34"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Teléfono *
+                </label>
+                <input
+                  type="tel"
+                  required
+                  value={formData.comprador.telefono}
+                  onChange={(e) => updateComprador('telefono', e.target.value)}
+                  className="input"
+                  placeholder="Ej: 3109876543"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Correo Electrónico *
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={formData.comprador.email}
+                  onChange={(e) => updateComprador('email', e.target.value)}
+                  className="input"
+                  placeholder="Ej: comprador@email.com"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* DATOS ADICIONALES DEL VEHÍCULO */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
+              Datos Adicionales del Vehículo
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tipo de Carrocería
+                </label>
+                <input
+                  type="text"
+                  value={formData.vehiculoAdicional.tipoCarroceria}
+                  onChange={(e) => updateVehiculoAdicional('tipoCarroceria', e.target.value)}
+                  className="input"
+                  placeholder="Ej: Sedán, SUV, Camioneta"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Capacidad
+                </label>
+                <input
+                  type="text"
+                  value={formData.vehiculoAdicional.capacidad}
+                  onChange={(e) => updateVehiculoAdicional('capacidad', e.target.value)}
+                  className="input"
+                  placeholder="Ej: 5 pasajeros"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Número de Puertas
+                </label>
+                <input
+                  type="number"
+                  value={formData.vehiculoAdicional.numeroPuertas}
+                  onChange={(e) => updateVehiculoAdicional('numeroPuertas', parseInt(e.target.value))}
+                  className="input"
+                  min="2"
+                  max="6"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Número de Motor
+                </label>
+                <input
+                  type="text"
+                  value={formData.vehiculoAdicional.numeroMotor}
+                  onChange={(e) => updateVehiculoAdicional('numeroMotor', e.target.value)}
+                  className="input"
+                  placeholder="Ej: ABC123456"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Línea
+                </label>
+                <input
+                  type="text"
+                  value={formData.vehiculoAdicional.linea}
+                  onChange={(e) => updateVehiculoAdicional('linea', e.target.value)}
+                  className="input"
+                  placeholder="Ej: Sport, Luxury"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Acta/Manifiesto
+                </label>
+                <input
+                  type="text"
+                  value={formData.vehiculoAdicional.actaManifiesto}
+                  onChange={(e) => updateVehiculoAdicional('actaManifiesto', e.target.value)}
+                  className="input"
+                  placeholder="Ej: 123456"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Sitio de Matrícula
+                </label>
+                <input
+                  type="text"
+                  value={formData.vehiculoAdicional.sitioMatricula}
+                  onChange={(e) => updateVehiculoAdicional('sitioMatricula', e.target.value)}
+                  className="input"
+                  placeholder="Ej: Bogotá"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tipo de Servicio
+                </label>
+                <select
+                  value={formData.vehiculoAdicional.tipoServicio}
+                  onChange={(e) => updateVehiculoAdicional('tipoServicio', e.target.value)}
+                  className="input"
+                >
+                  <option value="PARTICULAR">Particular</option>
+                  <option value="PUBLICO">Público</option>
+                  <option value="OFICIAL">Oficial</option>
+                  <option value="DIPLOMATICO">Diplomático</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* DATOS DE LA TRANSACCIÓN */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
+              Datos de la Transacción
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Lugar de Celebración *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.transaccion.lugarCelebracion}
+                  onChange={(e) => updateTransaccion('lugarCelebracion', e.target.value)}
+                  className="input"
+                  placeholder="Ej: Bogotá D.C."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Fecha de Celebración *
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={formData.transaccion.fechaCelebracion}
+                  onChange={(e) => updateTransaccion('fechaCelebracion', e.target.value)}
+                  className="input"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Precio en Letras *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.transaccion.precioLetras}
+                  onChange={(e) => updateTransaccion('precioLetras', e.target.value)}
+                  className="input"
+                  placeholder="Ej: CINCUENTA MILLONES DE PESOS COLOMBIANOS"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Escribe el precio en letras mayúsculas
+                </p>
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Forma de Pago *
+                </label>
+                <textarea
+                  required
+                  value={formData.transaccion.formaPago}
+                  onChange={(e) => updateTransaccion('formaPago', e.target.value)}
+                  className="input"
+                  rows={3}
+                  placeholder="Ej: Pago de contado en efectivo / Transferencia bancaria / Cuotas mensuales de..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Vendedor Anterior
+                </label>
+                <input
+                  type="text"
+                  value={formData.transaccion.vendedorAnterior}
+                  onChange={(e) => updateTransaccion('vendedorAnterior', e.target.value)}
+                  className="input"
+                  placeholder="De quien se compró el vehículo"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Cédula Vendedor Anterior
+                </label>
+                <input
+                  type="text"
+                  value={formData.transaccion.cedulaVendedorAnterior}
+                  onChange={(e) => updateTransaccion('cedulaVendedorAnterior', e.target.value)}
+                  className="input"
+                  placeholder="Ej: 1234567890"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Días para Traspaso *
+                </label>
+                <input
+                  type="number"
+                  required
+                  value={formData.transaccion.diasTraspaso}
+                  onChange={(e) => updateTransaccion('diasTraspaso', parseInt(e.target.value))}
+                  className="input"
+                  min="1"
+                  max="90"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Fecha de Entrega *
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={formData.transaccion.fechaEntrega}
+                  onChange={(e) => updateTransaccion('fechaEntrega', e.target.value)}
+                  className="input"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Hora de Entrega
+                </label>
+                <input
+                  type="time"
+                  value={formData.transaccion.horaEntrega}
+                  onChange={(e) => updateTransaccion('horaEntrega', e.target.value)}
+                  className="input"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Domicilio Contractual *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.transaccion.domicilioContractual}
+                  onChange={(e) => updateTransaccion('domicilioContractual', e.target.value)}
+                  className="input"
+                  placeholder="Ej: Bogotá D.C."
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Cláusulas Adicionales
+                </label>
+                <textarea
+                  value={formData.transaccion.clausulasAdicionales}
+                  onChange={(e) => updateTransaccion('clausulasAdicionales', e.target.value)}
+                  className="input"
+                  rows={4}
+                  placeholder="Cláusulas adicionales del contrato (opcional)"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Botones */}
+          <div className="flex justify-end space-x-3 pt-4 border-t">
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn-secondary"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="btn-primary"
+            >
+              Guardar y Marcar como Vendido
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export default SaleDataModal;

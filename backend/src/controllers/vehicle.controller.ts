@@ -4,6 +4,8 @@ import { AuthRequest } from '../types';
 import ExcelJS from 'exceljs';
 import path from 'path';
 import fs from 'fs';
+import Docxtemplater from 'docxtemplater';
+import PizZip from 'pizzip';
 
 // Crear nuevo vehículo
 export const createVehicle = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -55,6 +57,7 @@ export const createVehicle = async (req: AuthRequest, res: Response): Promise<vo
 export const getAllVehicles = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { estado, marca, modelo, año } = req.query;
+    const userRole = req.user?.rol;
     
     const filter: any = {};
     
@@ -67,6 +70,21 @@ export const getAllVehicles = async (req: AuthRequest, res: Response): Promise<v
       .populate('registradoPor', 'nombre email')
       .sort({ fechaIngreso: -1 });
 
+    // Si el usuario es vendedor o visualizador, ocultar información financiera
+    if (userRole === 'vendedor' || userRole === 'visualizador') {
+      const vehiclesSinFinanzas = vehicles.map(vehicle => {
+        const vehicleObj = vehicle.toObject();
+        delete vehicleObj.precioCompra;
+        delete vehicleObj.precioVenta;
+        delete vehicleObj.gastos;
+        delete vehicleObj.gastosDetallados;
+        delete vehicleObj.inversionistas;
+        return vehicleObj;
+      });
+      res.json(vehiclesSinFinanzas);
+      return;
+    }
+
     res.json(vehicles);
   } catch (error: any) {
     res.status(500).json({ message: 'Error al obtener vehículos', error: error.message });
@@ -77,11 +95,27 @@ export const getAllVehicles = async (req: AuthRequest, res: Response): Promise<v
 export const getVehicleById = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    const userRole = req.user?.rol;
 
     const vehicle = await Vehicle.findById(id).populate('registradoPor', 'nombre email');
 
     if (!vehicle) {
       res.status(404).json({ message: 'Vehículo no encontrado' });
+      return;
+    }
+
+    // Si el usuario es vendedor o visualizador, ocultar información financiera
+    if (userRole === 'vendedor' || userRole === 'visualizador') {
+      const vehicleObj = vehicle.toObject();
+      const vehicleSinFinanzas = {
+        ...vehicleObj,
+        precioCompra: undefined,
+        precioVenta: undefined,
+        gastos: undefined,
+        gastosDetallados: undefined,
+        inversionistas: undefined,
+      };
+      res.json(vehicleSinFinanzas);
       return;
     }
 
@@ -152,35 +186,84 @@ export const deleteVehicle = async (req: AuthRequest, res: Response): Promise<vo
 // Obtener estadísticas
 export const getStatistics = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const userId = req.user?.userId;
+    const userRole = req.user?.rol;
+
     const totalVehiculos = await Vehicle.countDocuments();
     const vehiculosListos = await Vehicle.countDocuments({ estado: 'listo_venta' });
     const vehiculosPendientes = await Vehicle.countDocuments({ estado: 'en_proceso' });
     const vehiculosVendidos = await Vehicle.countDocuments({ estado: 'vendido' });
 
+    // Obtener solo vehículos que NO están vendidos (inventario actual)
     const vehiculosEnStock = await Vehicle.find({
       estado: { $in: ['en_proceso', 'listo_venta', 'en_negociacion'] },
     });
 
-    const valorInventario = vehiculosEnStock.reduce(
-      (sum, vehicle) => sum + vehicle.precioCompra,
-      0
-    );
-
-    const totalGastos = vehiculosEnStock.reduce(
-      (sum, vehicle) => sum + (vehicle.gastos?.total || 0),
-      0
-    );
-
-    const gananciasEstimadas = vehiculosEnStock.reduce(
-      (sum, vehicle) => sum + (vehicle.precioVenta - vehicle.precioCompra - (vehicle.gastos?.total || 0)),
-      0
-    );
-
+    // Obtener vehículos vendidos
     const vehiculosVendidosData = await Vehicle.find({ estado: 'vendido' });
-    const gananciasReales = vehiculosVendidosData.reduce(
-      (sum, vehicle) => sum + (vehicle.precioVenta - vehicle.precioCompra - (vehicle.gastos?.total || 0)),
-      0
-    );
+
+    let valorInventario = 0;
+    let totalGastos = 0;
+    let gananciasEstimadas = 0;
+    let gananciasReales = 0;
+
+    // Si es admin, calcular totales completos
+    if (userRole === 'admin') {
+      // Valor del inventario = suma de (Precio Compra + Gastos) de vehículos en stock
+      valorInventario = vehiculosEnStock.reduce(
+        (sum, vehicle) => sum + vehicle.precioCompra + (vehicle.gastos?.total || 0),
+        0
+      );
+
+      // Total de gastos solo de vehículos en stock
+      totalGastos = vehiculosEnStock.reduce(
+        (sum, vehicle) => sum + (vehicle.gastos?.total || 0),
+        0
+      );
+
+      // Ganancias estimadas solo de vehículos en stock
+      gananciasEstimadas = vehiculosEnStock.reduce(
+        (sum, vehicle) => sum + (vehicle.precioVenta - vehicle.precioCompra - (vehicle.gastos?.total || 0)),
+        0
+      );
+
+      // Ganancias reales de vehículos vendidos
+      gananciasReales = vehiculosVendidosData.reduce(
+        (sum, vehicle) => sum + (vehicle.precioVenta - vehicle.precioCompra - (vehicle.gastos?.total || 0)),
+        0
+      );
+    } else {
+      // Para inversionistas, calcular solo SUS utilidades
+      // Vehículos en stock donde el usuario es inversionista
+      vehiculosEnStock.forEach(vehicle => {
+        const inversionista = vehicle.inversionistas?.find(
+          inv => inv.usuario?.toString() === userId
+        );
+        
+        if (inversionista) {
+          // Sumar solo la parte proporcional del inversionista
+          const totalInversion = vehicle.inversionistas.reduce((sum, inv) => sum + inv.montoInversion, 0);
+          const porcentaje = totalInversion > 0 ? (inversionista.montoInversion / totalInversion) : 0;
+          
+          valorInventario += inversionista.montoInversion + (inversionista.gastosInversionista || 0);
+          totalGastos += inversionista.gastosInversionista || 0;
+          
+          const utilidadTotal = vehicle.precioVenta - vehicle.precioCompra - (vehicle.gastos?.total || 0);
+          gananciasEstimadas += utilidadTotal * porcentaje;
+        }
+      });
+
+      // Vehículos vendidos donde el usuario es inversionista
+      vehiculosVendidosData.forEach(vehicle => {
+        const inversionista = vehicle.inversionistas?.find(
+          inv => inv.usuario?.toString() === userId
+        );
+        
+        if (inversionista) {
+          gananciasReales += inversionista.utilidadCorrespondiente || 0;
+        }
+      });
+    }
 
     res.json({
       totalVehiculos,
@@ -442,6 +525,9 @@ export const exportVehicleReport = async (
     addDataRow('Gastos en Pintura', `$${vehicle.gastos.pintura.toLocaleString('es-CO')}`);
     addDataRow('Gastos en Mecánica', `$${vehicle.gastos.mecanica.toLocaleString('es-CO')}`);
     addDataRow('Gastos de Traspaso', `$${vehicle.gastos.traspaso.toLocaleString('es-CO')}`);
+    addDataRow('Gastos de Alistamiento', `$${vehicle.gastos.alistamiento.toLocaleString('es-CO')}`);
+    addDataRow('Gastos de Tapicería', `$${vehicle.gastos.tapiceria.toLocaleString('es-CO')}`);
+    addDataRow('Gastos de Transporte', `$${vehicle.gastos.transporte.toLocaleString('es-CO')}`);
     addDataRow('Gastos Varios', `$${vehicle.gastos.varios.toLocaleString('es-CO')}`);
     addDataRow('TOTAL GASTOS', `$${vehicle.gastos.total.toLocaleString('es-CO')}`);
     worksheet.getCell(`A${currentRow - 1}`).font = { bold: true, color: { argb: 'FFFF0000' } };
@@ -512,6 +598,16 @@ export const exportVehicleReport = async (
       currentRow++;
 
       worksheet.getCell(`A${currentRow}`).value = '';
+      worksheet.getCell(`B${currentRow}`).value = 'Gastos Inversionista';
+      worksheet.getCell(`B${currentRow}`).font = { bold: true };
+      worksheet.getCell(`B${currentRow}`).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE7E6E6' },
+      };
+      currentRow++;
+
+      worksheet.getCell(`A${currentRow}`).value = '';
       worksheet.getCell(`B${currentRow}`).value = 'Participación %';
       worksheet.getCell(`B${currentRow}`).font = { bold: true };
       worksheet.getCell(`B${currentRow}`).fill = {
@@ -533,6 +629,7 @@ export const exportVehicleReport = async (
 
       // Calcular totales
       const totalInversion = vehicle.inversionistas.reduce((sum, inv) => sum + inv.montoInversion, 0);
+      const totalGastosInv = vehicle.inversionistas.reduce((sum, inv) => sum + (inv.gastosInversionista || 0), 0);
       const utilidadTotal = vehicle.precioVenta - vehicle.precioCompra - vehicle.gastos.total;
 
       // Datos de cada inversionista
@@ -540,17 +637,37 @@ export const exportVehicleReport = async (
         const porcentaje = totalInversion > 0 ? (inv.montoInversion / totalInversion) * 100 : 0;
         const utilidadInv = (porcentaje / 100) * utilidadTotal;
 
+        // Nombre
         worksheet.getCell(`A${currentRow}`).value = inv.nombre;
         worksheet.getCell(`B${currentRow}`).value = inv.montoInversion;
         worksheet.getCell(`B${currentRow}`).numFmt = '"$"#,##0';
         currentRow++;
 
+        // Gastos del inversionista
+        worksheet.getCell(`A${currentRow}`).value = '';
+        worksheet.getCell(`B${currentRow}`).value = inv.gastosInversionista || 0;
+        worksheet.getCell(`B${currentRow}`).numFmt = '"$"#,##0';
+        worksheet.getCell(`B${currentRow}`).font = { color: { argb: 'FFFF6600' } };
+        currentRow++;
+
+        // Detalles de gastos (si existen)
+        if (inv.detallesGastos) {
+          worksheet.getCell(`A${currentRow}`).value = '  Detalles:';
+          worksheet.getCell(`A${currentRow}`).font = { italic: true, size: 9 };
+          worksheet.getCell(`B${currentRow}`).value = inv.detallesGastos;
+          worksheet.getCell(`B${currentRow}`).font = { italic: true, size: 9 };
+          worksheet.getCell(`B${currentRow}`).alignment = { wrapText: true };
+          currentRow++;
+        }
+
+        // Participación
         worksheet.getCell(`A${currentRow}`).value = '';
         worksheet.getCell(`B${currentRow}`).value = porcentaje;
         worksheet.getCell(`B${currentRow}`).numFmt = '0.00"%"';
         worksheet.getCell(`B${currentRow}`).font = { color: { argb: 'FF0070C0' } };
         currentRow++;
 
+        // Utilidad
         worksheet.getCell(`A${currentRow}`).value = '';
         worksheet.getCell(`B${currentRow}`).value = utilidadInv;
         worksheet.getCell(`B${currentRow}`).numFmt = '"$"#,##0';
@@ -577,6 +694,7 @@ export const exportVehicleReport = async (
       currentRow++;
 
       addDataRow('Total Invertido', `$${totalInversion.toLocaleString('es-CO')}`);
+      addDataRow('Total Gastos Inversionistas', `$${totalGastosInv.toLocaleString('es-CO')}`);
       addDataRow('Número de Socios', vehicle.inversionistas.length);
       addDataRow('Utilidad Total Distribuida', `$${utilidadTotal.toLocaleString('es-CO')}`);
       
@@ -754,6 +872,144 @@ export const exportMonthlyReport = async (
   }
 };
 
+// Exportar plantilla de gastos detallados
+export const exportExpensesTemplate = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const vehicle = await Vehicle.findById(id).populate('registradoPor', 'nombre email');
+
+    if (!vehicle) {
+      res.status(404).json({ message: 'Vehículo no encontrado' });
+      return;
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Control de Gastos');
+
+    // Configurar ancho de columnas
+    worksheet.columns = [
+      { width: 40 }, // Descripción
+      { width: 20 }, // Encargado
+      { width: 15 }, // Fecha
+    ];
+
+    // Encabezado principal
+    worksheet.mergeCells('A1:C1');
+    const headerCell = worksheet.getCell('A1');
+    headerCell.value = `CONTROL DE GASTOS - ${vehicle.marca} ${vehicle.modelo} (${vehicle.placa})`;
+    headerCell.font = { size: 14, bold: true };
+    headerCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    headerCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4472C4' },
+    };
+    headerCell.font = { size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+    worksheet.getRow(1).height = 25;
+
+    let currentRow = 3;
+
+    // Función para crear sección con datos
+    const createSection = (title: string, color: string, gastos: any[]) => {
+      // Título de sección
+      worksheet.mergeCells(`A${currentRow}:C${currentRow}`);
+      const titleCell = worksheet.getCell(`A${currentRow}`);
+      titleCell.value = title;
+      titleCell.font = { size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
+      titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      titleCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: color },
+      };
+      worksheet.getRow(currentRow).height = 20;
+      currentRow++;
+
+      // Encabezados de columnas
+      worksheet.getCell(`A${currentRow}`).value = 'DESCRIPCION';
+      worksheet.getCell(`B${currentRow}`).value = 'ENCARGADO';
+      worksheet.getCell(`C${currentRow}`).value = 'FECHA';
+      
+      ['A', 'B', 'C'].forEach(col => {
+        const cell = worksheet.getCell(`${col}${currentRow}`);
+        cell.font = { bold: true };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE7E6E6' },
+        };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      });
+      currentRow++;
+
+      // Agregar datos reales o filas vacías
+      const minRows = 6;
+      const rowsToAdd = Math.max(minRows, gastos.length);
+      
+      for (let i = 0; i < rowsToAdd; i++) {
+        const gasto = gastos[i];
+        
+        if (gasto) {
+          // Llenar con datos reales
+          worksheet.getCell(`A${currentRow}`).value = gasto.descripcion || '';
+          worksheet.getCell(`B${currentRow}`).value = gasto.encargado || '';
+          worksheet.getCell(`C${currentRow}`).value = gasto.fecha 
+            ? new Date(gasto.fecha).toLocaleDateString('es-CO')
+            : '';
+        }
+        
+        // Aplicar bordes
+        ['A', 'B', 'C'].forEach(col => {
+          const cell = worksheet.getCell(`${col}${currentRow}`);
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' },
+          };
+        });
+        currentRow++;
+      }
+
+      currentRow++; // Espacio entre secciones
+    };
+
+    // Crear todas las secciones con datos reales
+    createSection('LAMINA Y PINTURA', 'FF92D050', vehicle.gastosDetallados?.pintura || []);
+    createSection('MECANICA', 'FFFFC000', vehicle.gastosDetallados?.mecanica || []);
+    createSection('ALISTAMIENTO', 'FF00B050', vehicle.gastosDetallados?.alistamiento || []);
+    createSection('TAPICERIA', 'FFFF6B9D', vehicle.gastosDetallados?.tapiceria || []);
+    createSection('TRANSPORTE', 'FF00B0F0', vehicle.gastosDetallados?.transporte || []);
+    createSection('TRASPASO', 'FF7030A0', vehicle.gastosDetallados?.traspaso || []);
+    createSection('VARIOS', 'FFC0C0C0', vehicle.gastosDetallados?.varios || []);
+
+    // Generar archivo
+    const fileName = `gastos-${vehicle.placa}-${Date.now()}.xlsx`;
+    const filePath = path.join(__dirname, '../../uploads', fileName);
+
+    await workbook.xlsx.writeFile(filePath);
+
+    res.download(filePath, fileName, (err) => {
+      if (err) {
+        console.error('Error al descargar archivo:', err);
+      }
+      fs.unlinkSync(filePath);
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error al exportar plantilla de gastos', error: error.message });
+  }
+};
+
 // Obtener reportes mensuales de ventas y gastos
 export const getMonthlyReports = async (
   req: AuthRequest,
@@ -832,6 +1088,180 @@ export const getMonthlyReports = async (
     res.status(500).json({
       message: 'Error al generar reportes mensuales',
       error: error.message,
+    });
+  }
+};
+
+// Guardar datos de venta
+export const saveSaleData = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const datosVenta = req.body;
+
+    const vehicle = await Vehicle.findById(id);
+
+    if (!vehicle) {
+      res.status(404).json({ message: 'Vehículo no encontrado' });
+      return;
+    }
+
+    // Actualizar datos de venta
+    vehicle.datosVenta = datosVenta;
+    vehicle.estado = 'vendido';
+    vehicle.fechaVenta = new Date();
+
+    await vehicle.save();
+
+    res.json({
+      message: 'Datos de venta guardados exitosamente',
+      vehicle,
+    });
+  } catch (error: any) {
+    res.status(500).json({ 
+      message: 'Error al guardar datos de venta', 
+      error: error.message 
+    });
+  }
+};
+
+// Generar contrato de compraventa
+export const generateContract = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const vehicle = await Vehicle.findById(id);
+
+    if (!vehicle) {
+      res.status(404).json({ message: 'Vehículo no encontrado' });
+      return;
+    }
+
+    if (!vehicle.datosVenta) {
+      res.status(400).json({ 
+        message: 'El vehículo no tiene datos de venta registrados' 
+      });
+      return;
+    }
+
+    // Leer la plantilla
+    const templatePath = path.join(__dirname, '../templates/contrato-compraventa-template.docx');
+    
+    if (!fs.existsSync(templatePath)) {
+      res.status(500).json({ 
+        message: 'Plantilla de contrato no encontrada' 
+      });
+      return;
+    }
+
+    const content = fs.readFileSync(templatePath, 'binary');
+    const zip = new PizZip(content);
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+    });
+
+    // Preparar datos para el contrato
+    const fechaCelebracion = vehicle.datosVenta.transaccion.fechaCelebracion 
+      ? new Date(vehicle.datosVenta.transaccion.fechaCelebracion)
+      : new Date();
+    
+    const fechaEntrega = vehicle.datosVenta.transaccion.fechaEntrega
+      ? new Date(vehicle.datosVenta.transaccion.fechaEntrega)
+      : new Date();
+
+    const data = {
+      // Lugar y fecha
+      lugarCelebracion: vehicle.datosVenta.transaccion.lugarCelebracion || '',
+      fechaCelebracion: fechaCelebracion.toLocaleDateString('es-CO'),
+      
+      // Vendedor
+      vendedorNombre: vehicle.datosVenta.vendedor.nombre || '',
+      vendedorIdentificacion: vehicle.datosVenta.vendedor.identificacion || '',
+      vendedorDireccion: vehicle.datosVenta.vendedor.direccion || '',
+      vendedorTelefono: vehicle.datosVenta.vendedor.telefono || '',
+      
+      // Comprador
+      compradorNombre: vehicle.datosVenta.comprador.nombre || '',
+      compradorIdentificacion: vehicle.datosVenta.comprador.identificacion || '',
+      compradorDireccion: vehicle.datosVenta.comprador.direccion || '',
+      compradorTelefono: vehicle.datosVenta.comprador.telefono || '',
+      compradorEmail: vehicle.datosVenta.comprador.email || '',
+      
+      // Domicilio contractual
+      domicilioContractual: vehicle.datosVenta.transaccion.domicilioContractual || '',
+      
+      // Datos del vehículo
+      clase: 'AUTOMOVIL',
+      marca: vehicle.marca,
+      modelo: vehicle.modelo,
+      año: vehicle.año,
+      tipoCarroceria: vehicle.datosVenta.vehiculoAdicional.tipoCarroceria || '',
+      color: vehicle.color,
+      capacidad: vehicle.datosVenta.vehiculoAdicional.capacidad || '',
+      vin: vehicle.vin,
+      numeroPuertas: vehicle.datosVenta.vehiculoAdicional.numeroPuertas || 4,
+      numeroMotor: vehicle.datosVenta.vehiculoAdicional.numeroMotor || '',
+      linea: vehicle.datosVenta.vehiculoAdicional.linea || '',
+      actaManifiesto: vehicle.datosVenta.vehiculoAdicional.actaManifiesto || '',
+      sitioMatricula: vehicle.datosVenta.vehiculoAdicional.sitioMatricula || '',
+      placa: vehicle.placa,
+      tipoServicio: vehicle.datosVenta.vehiculoAdicional.tipoServicio || 'PARTICULAR',
+      
+      // Precio
+      precioVenta: vehicle.precioVenta.toLocaleString('es-CO'),
+      precioLetras: vehicle.datosVenta.transaccion.precioLetras || '',
+      
+      // Forma de pago
+      formaPago: vehicle.datosVenta.transaccion.formaPago || '',
+      
+      // Vendedor anterior
+      vendedorAnterior: vehicle.datosVenta.transaccion.vendedorAnterior || '',
+      cedulaVendedorAnterior: vehicle.datosVenta.transaccion.cedulaVendedorAnterior || '',
+      
+      // Traspaso
+      diasTraspaso: vehicle.datosVenta.transaccion.diasTraspaso || 30,
+      
+      // Entrega
+      fechaEntrega: fechaEntrega.toLocaleDateString('es-CO'),
+      horaEntrega: vehicle.datosVenta.transaccion.horaEntrega || '',
+      
+      // Cláusulas adicionales
+      clausulasAdicionales: vehicle.datosVenta.transaccion.clausulasAdicionales || 'Ninguna',
+      
+      // Fecha de firma
+      diaFirma: fechaCelebracion.getDate(),
+      mesFirma: fechaCelebracion.toLocaleDateString('es-CO', { month: 'long' }),
+      añoFirma: fechaCelebracion.getFullYear(),
+    };
+
+    // Renderizar el documento
+    doc.render(data);
+
+    // Generar el buffer
+    const buffer = doc.getZip().generate({
+      type: 'nodebuffer',
+      compression: 'DEFLATE',
+    });
+
+    // Guardar archivo temporal
+    const fileName = `contrato-${vehicle.placa}-${Date.now()}.docx`;
+    const filePath = path.join(__dirname, '../../uploads', fileName);
+
+    fs.writeFileSync(filePath, buffer);
+
+    // Descargar archivo
+    res.download(filePath, fileName, (err) => {
+      if (err) {
+        console.error('Error al descargar contrato:', err);
+      }
+      // Eliminar archivo temporal
+      fs.unlinkSync(filePath);
+    });
+  } catch (error: any) {
+    console.error('Error al generar contrato:', error);
+    res.status(500).json({ 
+      message: 'Error al generar contrato', 
+      error: error.message 
     });
   }
 };
