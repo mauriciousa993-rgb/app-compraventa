@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Upload, Save, Image, X, Plus, Trash2, Users } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
 import api from '../services/api';
+import { DatosVenta } from '../types';
 
 const VehicleForm: React.FC = () => {
   const navigate = useNavigate();
@@ -23,6 +24,9 @@ const VehicleForm: React.FC = () => {
     vin: '',
     color: '',
     kilometraje: 0,
+    
+    // Fechas
+    fechaIngreso: new Date().toISOString().split('T')[0],
     
     // Precios
     precioCompra: 0,
@@ -103,6 +107,46 @@ const VehicleForm: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string>('');
   const [usuarios, setUsuarios] = useState<Array<{ id: string; nombre: string; email: string }>>([]);
+  
+  // Estado para datos de venta
+  const [datosVenta, setDatosVenta] = useState<DatosVenta>({
+    vendedor: {
+      nombre: '',
+      identificacion: '',
+      direccion: '',
+      telefono: '',
+    },
+    comprador: {
+      nombre: '',
+      identificacion: '',
+      direccion: '',
+      telefono: '',
+      email: '',
+    },
+    vehiculoAdicional: {
+      tipoCarroceria: '',
+      capacidad: '',
+      numeroPuertas: 4,
+      numeroMotor: '',
+      linea: '',
+      actaManifiesto: '',
+      sitioMatricula: '',
+      tipoServicio: 'PARTICULAR',
+    },
+    transaccion: {
+      lugarCelebracion: '',
+      fechaCelebracion: new Date().toISOString().split('T')[0],
+      precioLetras: '',
+      formaPago: '',
+      vendedorAnterior: '',
+      cedulaVendedorAnterior: '',
+      diasTraspaso: 30,
+      fechaEntrega: new Date().toISOString().split('T')[0],
+      horaEntrega: '',
+      domicilioContractual: '',
+      clausulasAdicionales: '',
+    },
+  });
 
   // Formatear número con separador de miles
   const formatNumber = (value: number | string): string => {
@@ -161,6 +205,9 @@ const VehicleForm: React.FC = () => {
         vin: vehicle.vin || '',
         color: vehicle.color || '',
         kilometraje: vehicle.kilometraje || 0,
+        fechaIngreso: vehicle.fechaIngreso 
+          ? new Date(vehicle.fechaIngreso).toISOString().split('T')[0]
+          : new Date().toISOString().split('T')[0],
         precioCompra: vehicle.precioCompra || 0,
         precioVenta: vehicle.precioVenta || 0,
         gastos: {
@@ -575,6 +622,24 @@ const VehicleForm: React.FC = () => {
                   className="input-field"
                   placeholder="Ej: 50,000"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Fecha de Ingreso *
+                </label>
+                <input
+                  type="date"
+                  name="fechaIngreso"
+                  value={formData.fechaIngreso}
+                  onChange={handleChange}
+                  className="input-field"
+                  required
+                  max={new Date().toISOString().split('T')[0]}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Fecha en que el vehículo ingresó al inventario
+                </p>
               </div>
             </div>
           </div>
@@ -1197,10 +1262,29 @@ const VehicleForm: React.FC = () => {
                     onChange={handleChange}
                     className="input-field"
                     required={formData.estado === 'vendido'}
+                    min={formData.fechaIngreso}
                   />
                   <p className="mt-2 text-xs text-green-600">
                     Esta fecha se usará para generar informes de ventas mensuales
                   </p>
+                  
+                  {/* Calcular y mostrar días en inventario */}
+                  {formData.fechaVenta && formData.fechaIngreso && (
+                    <div className="mt-3 p-3 bg-white rounded border border-green-300">
+                      <p className="text-sm font-medium text-gray-700 mb-1">
+                        Tiempo en Inventario
+                      </p>
+                      <p className="text-2xl font-bold text-green-700">
+                        {Math.floor(
+                          (new Date(formData.fechaVenta).getTime() - new Date(formData.fechaIngreso).getTime()) / 
+                          (1000 * 60 * 60 * 24)
+                        )} días
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Desde {new Date(formData.fechaIngreso).toLocaleDateString('es-CO')} hasta {new Date(formData.fechaVenta).toLocaleDateString('es-CO')}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
