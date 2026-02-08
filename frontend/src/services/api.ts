@@ -179,11 +179,11 @@ export const vehiclesAPI = {
       responseType: 'blob',
     });
     
-    // Crear un enlace de descarga
-    const url = window.URL.createObjectURL(new Blob([response.data]));
+    // Crear un enlace de descarga con extensión PDF
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `contrato-${id}-${Date.now()}.docx`);
+    link.setAttribute('download', `contrato-${id}-${Date.now()}.pdf`);
     document.body.appendChild(link);
     link.click();
     link.remove();
