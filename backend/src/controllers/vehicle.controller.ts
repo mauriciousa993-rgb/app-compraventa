@@ -1155,10 +1155,14 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    // Si no hay datos de venta, mostrar error más descriptivo
-    if (!vehicle.datosVenta) {
+    // Validar que existan datos de venta Y que tengan contenido real
+    if (!vehicle.datosVenta || 
+        !vehicle.datosVenta.comprador?.nombre || 
+        !vehicle.datosVenta.comprador?.identificacion ||
+        !vehicle.datosVenta.vendedor?.nombre ||
+        !vehicle.datosVenta.transaccion?.lugarCelebracion) {
       res.status(400).json({ 
-        message: 'El vehículo no tiene datos de venta registrados. Por favor, usa el botón "Vender" para registrar los datos del comprador antes de generar el contrato.' 
+        message: 'El vehículo no tiene datos de venta completos. Por favor, usa el botón "Vender" para registrar los datos del comprador antes de generar el contrato.' 
       });
       return;
     }
