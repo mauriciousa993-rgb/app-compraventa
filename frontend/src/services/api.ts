@@ -80,6 +80,11 @@ export const authAPI = {
     return response.data;
   },
 
+  createUser: async (data: { nombre: string; email: string; password: string; rol: string }) => {
+    const response = await api.post('/auth/users/create', data);
+    return response.data;
+  },
+
   updateUser: async (id: string, data: Partial<User>) => {
     const response = await api.put(`/auth/users/${id}`, data);
     return response.data;

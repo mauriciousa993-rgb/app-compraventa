@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import VehicleList from './pages/VehicleList';
 import VehicleForm from './pages/VehicleForm';
 import Reports from './pages/Reports';
+import UserManagement from './pages/UserManagement';
 
 // Componente para proteger rutas
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -68,6 +69,14 @@ function AppRoutes() {
         element={
           <PrivateRoute>
             <Reports />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/users"
+        element={
+          <PrivateRoute>
+            <UserManagement />
           </PrivateRoute>
         }
       />
