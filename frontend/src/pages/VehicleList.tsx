@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search, Car, Edit, Trash2, FileDown, X, ChevronDown, ChevronUp, FileText, DollarSign, Eye, Edit2 } from 'lucide-react';
+import { Plus, Search, Car, Edit, Trash2, FileDown, X, ChevronDown, ChevronUp, FileText, DollarSign, Edit2 } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
 import api from '../services/api';
 import { Vehicle, DatosVenta } from '../types';
@@ -18,7 +18,6 @@ const VehicleList: React.FC = () => {
   const [filterEstado, setFilterEstado] = useState('todos');
   const [expandedVehicles, setExpandedVehicles] = useState<Set<string>>(new Set());
   const [saleModalOpen, setSaleModalOpen] = useState(false);
-  const [viewSaleDataModalOpen, setViewSaleDataModalOpen] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
 
   useEffect(() => {
@@ -614,21 +613,9 @@ const VehicleList: React.FC = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSelectedVehicle(vehicle);
-                              setViewSaleDataModalOpen(true);
-                            }}
-                            className="px-4 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2"
-                          >
-                            <Eye className="h-4 w-4" />
-                            Ver Datos de Venta
-                          </button>
-                          
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
                               handleEditSaleData(vehicle);
                             }}
-                            className="px-4 py-2 text-sm bg-orange-600 text-white hover:bg-orange-700 rounded-lg transition-colors flex items-center gap-2"
+                            className="px-4 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2"
                           >
                             <Edit2 className="h-4 w-4" />
                             Editar Datos de Venta
@@ -739,16 +726,6 @@ const VehicleList: React.FC = () => {
             vehiclePlaca={selectedVehicle.placa}
             initialData={selectedVehicle.datosVenta}
             isEditMode={selectedVehicle.estado === 'vendido' && !!selectedVehicle.datosVenta}
-          />
-          
-          <ViewSaleDataModal
-            isOpen={viewSaleDataModalOpen}
-            onClose={() => {
-              setViewSaleDataModalOpen(false);
-              setSelectedVehicle(null);
-            }}
-            datosVenta={selectedVehicle.datosVenta}
-            vehiclePlaca={selectedVehicle.placa}
           />
         </>
       )}
