@@ -4,8 +4,7 @@ import { AuthRequest } from '../types';
 import ExcelJS from 'exceljs';
 import path from 'path';
 import fs from 'fs';
-import Docxtemplater from 'docxtemplater';
-import PizZip from 'pizzip';
+import PDFDocument from 'pdfkit';
 
 // Crear nuevo vehículo
 export const createVehicle = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -1143,7 +1142,7 @@ export const saveSaleData = async (req: AuthRequest, res: Response): Promise<voi
   }
 };
 
-// Generar contrato de compraventa
+// Generar contrato de compraventa en PDF
 export const generateContract = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
@@ -1162,29 +1161,12 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
         !vehicle.datosVenta.vendedor?.nombre ||
         !vehicle.datosVenta.transaccion?.lugarCelebracion) {
       res.status(400).json({ 
-        message: 'El vehículo no tiene datos de venta completos. Por favor, usa el botón "Vender" para registrar los datos del comprador antes de generar el contrato.' 
+        message: 'El vehículo no tiene datos de venta completos. Por favor, completa todos los campos requeridos antes de generar el contrato.' 
       });
       return;
     }
 
-    // Leer la plantilla
-    const templatePath = path.join(__dirname, '../templates/contrato-compraventa-template.docx');
-    
-    if (!fs.existsSync(templatePath)) {
-      res.status(500).json({ 
-        message: 'Plantilla de contrato no encontrada' 
-      });
-      return;
-    }
-
-    const content = fs.readFileSync(templatePath, 'binary');
-    const zip = new PizZip(content);
-    const doc = new Docxtemplater(zip, {
-      paragraphLoop: true,
-      linebreaks: true,
-    });
-
-    // Preparar datos para el contrato
+    // Preparar datos
     const fechaCelebracion = vehicle.datosVenta.transaccion.fechaCelebracion 
       ? new Date(vehicle.datosVenta.transaccion.fechaCelebracion)
       : new Date();
@@ -1193,94 +1175,149 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
       ? new Date(vehicle.datosVenta.transaccion.fechaEntrega)
       : new Date();
 
-    const data = {
-      // Lugar y fecha
-      lugarCelebracion: vehicle.datosVenta.transaccion.lugarCelebracion || '',
-      fechaCelebracion: fechaCelebracion.toLocaleDateString('es-CO'),
-      
-      // Vendedor
-      vendedorNombre: vehicle.datosVenta.vendedor.nombre || '',
-      vendedorIdentificacion: vehicle.datosVenta.vendedor.identificacion || '',
-      vendedorDireccion: vehicle.datosVenta.vendedor.direccion || '',
-      vendedorTelefono: vehicle.datosVenta.vendedor.telefono || '',
-      
-      // Comprador
-      compradorNombre: vehicle.datosVenta.comprador.nombre || '',
-      compradorIdentificacion: vehicle.datosVenta.comprador.identificacion || '',
-      compradorDireccion: vehicle.datosVenta.comprador.direccion || '',
-      compradorTelefono: vehicle.datosVenta.comprador.telefono || '',
-      compradorEmail: vehicle.datosVenta.comprador.email || '',
-      
-      // Domicilio contractual
-      domicilioContractual: vehicle.datosVenta.transaccion.domicilioContractual || '',
-      
-      // Datos del vehículo
-      clase: 'AUTOMOVIL',
-      marca: vehicle.marca,
-      modelo: vehicle.modelo,
-      año: vehicle.año,
-      tipoCarroceria: vehicle.datosVenta.vehiculoAdicional.tipoCarroceria || '',
-      color: vehicle.color,
-      capacidad: vehicle.datosVenta.vehiculoAdicional.capacidad || '',
-      vin: vehicle.vin,
-      numeroPuertas: vehicle.datosVenta.vehiculoAdicional.numeroPuertas || 4,
-      numeroMotor: vehicle.datosVenta.vehiculoAdicional.numeroMotor || '',
-      linea: vehicle.datosVenta.vehiculoAdicional.linea || '',
-      actaManifiesto: vehicle.datosVenta.vehiculoAdicional.actaManifiesto || '',
-      sitioMatricula: vehicle.datosVenta.vehiculoAdicional.sitioMatricula || '',
-      placa: vehicle.placa,
-      tipoServicio: vehicle.datosVenta.vehiculoAdicional.tipoServicio || 'PARTICULAR',
-      
-      // Precio
-      precioVenta: vehicle.precioVenta.toLocaleString('es-CO'),
-      precioLetras: vehicle.datosVenta.transaccion.precioLetras || '',
-      
-      // Forma de pago
-      formaPago: vehicle.datosVenta.transaccion.formaPago || '',
-      
-      // Vendedor anterior
-      vendedorAnterior: vehicle.datosVenta.transaccion.vendedorAnterior || '',
-      cedulaVendedorAnterior: vehicle.datosVenta.transaccion.cedulaVendedorAnterior || '',
-      
-      // Traspaso
-      diasTraspaso: vehicle.datosVenta.transaccion.diasTraspaso || 30,
-      
-      // Entrega
-      fechaEntrega: fechaEntrega.toLocaleDateString('es-CO'),
-      horaEntrega: vehicle.datosVenta.transaccion.horaEntrega || '',
-      
-      // Cláusulas adicionales
-      clausulasAdicionales: vehicle.datosVenta.transaccion.clausulasAdicionales || 'Ninguna',
-      
-      // Fecha de firma
-      diaFirma: fechaCelebracion.getDate(),
-      mesFirma: fechaCelebracion.toLocaleDateString('es-CO', { month: 'long' }),
-      añoFirma: fechaCelebracion.getFullYear(),
-    };
-
-    // Renderizar el documento
-    doc.render(data);
-
-    // Generar el buffer
-    const buffer = doc.getZip().generate({
-      type: 'nodebuffer',
-      compression: 'DEFLATE',
+    // Crear documento PDF
+    const doc = new PDFDocument({ 
+      size: 'LETTER',
+      margins: { top: 50, bottom: 50, left: 50, right: 50 }
     });
 
-    // Guardar archivo temporal
-    const fileName = `contrato-${vehicle.placa}-${Date.now()}.docx`;
-    const filePath = path.join(__dirname, '../../uploads', fileName);
+    // Configurar respuesta
+    const fileName = `contrato-${vehicle.placa}-${Date.now()}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
 
-    fs.writeFileSync(filePath, buffer);
+    // Pipe el PDF directamente a la respuesta
+    doc.pipe(res);
 
-    // Descargar archivo
-    res.download(filePath, fileName, (err) => {
-      if (err) {
-        console.error('Error al descargar contrato:', err);
-      }
-      // Eliminar archivo temporal
-      fs.unlinkSync(filePath);
+    // TÍTULO
+    doc.fontSize(16).font('Helvetica-Bold').text('CONTRATO DE COMPRAVENTA DE VEHÍCULO', { align: 'center' });
+    doc.moveDown();
+
+    // Lugar y fecha
+    doc.fontSize(11).font('Helvetica')
+      .text(`En ${vehicle.datosVenta.transaccion.lugarCelebracion}, a los ${fechaCelebracion.getDate()} días del mes de ${fechaCelebracion.toLocaleDateString('es-CO', { month: 'long' })} de ${fechaCelebracion.getFullYear()}, entre:`, { align: 'justify' });
+    doc.moveDown();
+
+    // VENDEDOR
+    doc.fontSize(12).font('Helvetica-Bold').text('EL VENDEDOR:', { underline: true });
+    doc.fontSize(10).font('Helvetica')
+      .text(`Nombre: ${vehicle.datosVenta.vendedor.nombre}`)
+      .text(`Identificación: ${vehicle.datosVenta.vendedor.identificacion}`)
+      .text(`Dirección: ${vehicle.datosVenta.vendedor.direccion}`)
+      .text(`Teléfono: ${vehicle.datosVenta.vendedor.telefono}`);
+    doc.moveDown();
+
+    // COMPRADOR
+    doc.fontSize(12).font('Helvetica-Bold').text('EL COMPRADOR:', { underline: true });
+    doc.fontSize(10).font('Helvetica')
+      .text(`Nombre: ${vehicle.datosVenta.comprador.nombre}`)
+      .text(`Identificación: ${vehicle.datosVenta.comprador.identificacion}`)
+      .text(`Dirección: ${vehicle.datosVenta.comprador.direccion}`)
+      .text(`Teléfono: ${vehicle.datosVenta.comprador.telefono}`)
+      .text(`Email: ${vehicle.datosVenta.comprador.email}`);
+    doc.moveDown();
+
+    // CLÁUSULA PRIMERA - OBJETO DEL CONTRATO
+    doc.fontSize(11).font('Helvetica-Bold').text('CLÁUSULA PRIMERA - OBJETO DEL CONTRATO:', { underline: true });
+    doc.fontSize(10).font('Helvetica')
+      .text(`EL VENDEDOR vende a EL COMPRADOR y éste compra de aquél, el siguiente vehículo:`, { align: 'justify' });
+    doc.moveDown(0.5);
+
+    // Datos del vehículo en tabla
+    const vehicleData = [
+      ['Clase:', 'AUTOMÓVIL'],
+      ['Marca:', vehicle.marca],
+      ['Modelo:', vehicle.modelo],
+      ['Año:', vehicle.año.toString()],
+      ['Color:', vehicle.color],
+      ['Placa:', vehicle.placa],
+      ['VIN:', vehicle.vin],
+      ['Tipo de Carrocería:', vehicle.datosVenta.vehiculoAdicional.tipoCarroceria || 'N/A'],
+      ['Número de Puertas:', vehicle.datosVenta.vehiculoAdicional.numeroPuertas?.toString() || '4'],
+      ['Tipo de Servicio:', vehicle.datosVenta.vehiculoAdicional.tipoServicio || 'PARTICULAR'],
+    ];
+
+    vehicleData.forEach(([label, value]) => {
+      doc.fontSize(10).font('Helvetica-Bold').text(label, { continued: true })
+        .font('Helvetica').text(` ${value}`);
     });
+    doc.moveDown();
+
+    // CLÁUSULA SEGUNDA - PRECIO
+    doc.fontSize(11).font('Helvetica-Bold').text('CLÁUSULA SEGUNDA - PRECIO:', { underline: true });
+    doc.fontSize(10).font('Helvetica')
+      .text(`El precio de la compraventa es la suma de $${vehicle.precioVenta.toLocaleString('es-CO')} (${vehicle.datosVenta.transaccion.precioLetras}).`, { align: 'justify' });
+    doc.moveDown();
+
+    // CLÁUSULA TERCERA - FORMA DE PAGO
+    doc.fontSize(11).font('Helvetica-Bold').text('CLÁUSULA TERCERA - FORMA DE PAGO:', { underline: true });
+    doc.fontSize(10).font('Helvetica')
+      .text(vehicle.datosVenta.transaccion.formaPago, { align: 'justify' });
+    doc.moveDown();
+
+    // CLÁUSULA CUARTA - TRASPASO
+    doc.fontSize(11).font('Helvetica-Bold').text('CLÁUSULA CUARTA - TRASPASO:', { underline: true });
+    doc.fontSize(10).font('Helvetica')
+      .text(`EL VENDEDOR se compromete a realizar el traspaso del vehículo ante las autoridades competentes dentro de los ${vehicle.datosVenta.transaccion.diasTraspaso || 30} días siguientes a la firma del presente contrato.`, { align: 'justify' });
+    doc.moveDown();
+
+    // CLÁUSULA QUINTA - ENTREGA
+    doc.fontSize(11).font('Helvetica-Bold').text('CLÁUSULA QUINTA - ENTREGA:', { underline: true });
+    doc.fontSize(10).font('Helvetica')
+      .text(`El vehículo será entregado el día ${fechaEntrega.toLocaleDateString('es-CO')}${vehicle.datosVenta.transaccion.horaEntrega ? ` a las ${vehicle.datosVenta.transaccion.horaEntrega}` : ''}.`, { align: 'justify' });
+    doc.moveDown();
+
+    // CLÁUSULA SEXTA - DOMICILIO
+    doc.fontSize(11).font('Helvetica-Bold').text('CLÁUSULA SEXTA - DOMICILIO:', { underline: true });
+    doc.fontSize(10).font('Helvetica')
+      .text(`Para todos los efectos legales derivados del presente contrato, las partes fijan como domicilio contractual la ciudad de ${vehicle.datosVenta.transaccion.domicilioContractual}.`, { align: 'justify' });
+    doc.moveDown();
+
+    // CLÁUSULAS ADICIONALES (si existen)
+    if (vehicle.datosVenta.transaccion.clausulasAdicionales && vehicle.datosVenta.transaccion.clausulasAdicionales !== 'Ninguna') {
+      doc.fontSize(11).font('Helvetica-Bold').text('CLÁUSULAS ADICIONALES:', { underline: true });
+      doc.fontSize(10).font('Helvetica')
+        .text(vehicle.datosVenta.transaccion.clausulasAdicionales, { align: 'justify' });
+      doc.moveDown();
+    }
+
+    // Agregar nueva página para firmas si es necesario
+    if (doc.y > 600) {
+      doc.addPage();
+    }
+
+    // FIRMAS
+    doc.moveDown(2);
+    doc.fontSize(10).font('Helvetica')
+      .text('En constancia, firman las partes:', { align: 'center' });
+    doc.moveDown(3);
+
+    // Líneas de firma
+    const signatureY = doc.y;
+    const pageWidth = doc.page.width - 100;
+    const signatureWidth = 200;
+    const leftX = 50;
+    const rightX = pageWidth - signatureWidth + 50;
+
+    // Vendedor
+    doc.moveTo(leftX, signatureY).lineTo(leftX + signatureWidth, signatureY).stroke();
+    doc.fontSize(9).font('Helvetica-Bold')
+      .text('EL VENDEDOR', leftX, signatureY + 10, { width: signatureWidth, align: 'center' });
+    doc.fontSize(8).font('Helvetica')
+      .text(vehicle.datosVenta.vendedor.nombre, leftX, signatureY + 25, { width: signatureWidth, align: 'center' })
+      .text(`C.C. ${vehicle.datosVenta.vendedor.identificacion}`, leftX, signatureY + 38, { width: signatureWidth, align: 'center' });
+
+    // Comprador
+    doc.moveTo(rightX, signatureY).lineTo(rightX + signatureWidth, signatureY).stroke();
+    doc.fontSize(9).font('Helvetica-Bold')
+      .text('EL COMPRADOR', rightX, signatureY + 10, { width: signatureWidth, align: 'center' });
+    doc.fontSize(8).font('Helvetica')
+      .text(vehicle.datosVenta.comprador.nombre, rightX, signatureY + 25, { width: signatureWidth, align: 'center' })
+      .text(`C.C. ${vehicle.datosVenta.comprador.identificacion}`, rightX, signatureY + 38, { width: signatureWidth, align: 'center' });
+
+    // Finalizar el documento
+    doc.end();
+
   } catch (error: any) {
     console.error('Error al generar contrato:', error);
     res.status(500).json({ 
