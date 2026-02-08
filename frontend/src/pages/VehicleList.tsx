@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search, Car, Edit, Trash2, FileDown, X, ChevronDown, ChevronUp, FileText, DollarSign } from 'lucide-react';
+import { Plus, Search, Car, Edit, Trash2, FileDown, X, ChevronDown, ChevronUp, FileText, DollarSign, Eye } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
 import api from '../services/api';
 import { Vehicle, DatosVenta } from '../types';
 import SaleDataModal from '../components/SaleDataModal';
+import ViewSaleDataModal from '../components/ViewSaleDataModal';
 import { vehiclesAPI } from '../services/api';
 
 const VehicleList: React.FC = () => {
@@ -17,6 +18,7 @@ const VehicleList: React.FC = () => {
   const [filterEstado, setFilterEstado] = useState('todos');
   const [expandedVehicles, setExpandedVehicles] = useState<Set<string>>(new Set());
   const [saleModalOpen, setSaleModalOpen] = useState(false);
+  const [viewSaleDataModalOpen, setViewSaleDataModalOpen] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
 
   useEffect(() => {
@@ -595,18 +597,34 @@ const VehicleList: React.FC = () => {
                         </button>
                       )}
                       
-                      {/* Botón para generar contrato (solo vehículos vendidos) */}
-                      {vehicle.estado === 'vendido' && vehicle.datosVenta && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleGenerateContract(vehicle._id);
-                          }}
-                          className="px-4 py-2 text-sm bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-2"
-                        >
-                          <FileText className="h-4 w-4" />
-                          Generar Contrato
-                        </button>
+                      {/* Botones para vehículos vendidos */}
+                      {vehicle.estado === 'vendido' && (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedVehicle(vehicle);
+                              setViewSaleDataModalOpen(true);
+                            }}
+                            className="px-4 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2"
+                          >
+                            <Eye className="h-4 w-4" />
+                            Ver Datos de Venta
+                          </button>
+                          
+                          {vehicle.datosVenta && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleGenerateContract(vehicle._id);
+                              }}
+                              className="px-4 py-2 text-sm bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-2"
+                            >
+                              <FileText className="h-4 w-4" />
+                              Generar Contrato
+                            </button>
+                          )}
+                        </>
                       )}
 
                       <button
@@ -688,15 +706,27 @@ const VehicleList: React.FC = () => {
 
       {/* Modal de Datos de Venta */}
       {selectedVehicle && (
-        <SaleDataModal
-          isOpen={saleModalOpen}
-          onClose={() => {
-            setSaleModalOpen(false);
-            setSelectedVehicle(null);
-          }}
-          onSubmit={handleSaveSaleData}
-          vehiclePlaca={selectedVehicle.placa}
-        />
+        <>
+          <SaleDataModal
+            isOpen={saleModalOpen}
+            onClose={() => {
+              setSaleModalOpen(false);
+              setSelectedVehicle(null);
+            }}
+            onSubmit={handleSaveSaleData}
+            vehiclePlaca={selectedVehicle.placa}
+          />
+          
+          <ViewSaleDataModal
+            isOpen={viewSaleDataModalOpen}
+            onClose={() => {
+              setViewSaleDataModalOpen(false);
+              setSelectedVehicle(null);
+            }}
+            datosVenta={selectedVehicle.datosVenta}
+            vehiclePlaca={selectedVehicle.placa}
+          />
+        </>
       )}
     </Layout>
   );
