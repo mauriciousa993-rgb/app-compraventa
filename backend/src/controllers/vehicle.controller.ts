@@ -1175,10 +1175,13 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
       ? new Date(vehicle.datosVenta.transaccion.fechaEntrega)
       : new Date();
 
+    const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    const mesNombre = meses[fechaCelebracion.getMonth()];
+
     // Crear documento PDF
     const doc = new PDFDocument({ 
       size: 'LETTER',
-      margins: { top: 50, bottom: 50, left: 50, right: 50 }
+      margins: { top: 50, bottom: 50, left: 60, right: 60 }
     });
 
     // Configurar respuesta
@@ -1190,130 +1193,143 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
     doc.pipe(res);
 
     // TÍTULO
-    doc.fontSize(16).font('Helvetica-Bold').text('CONTRATO DE COMPRAVENTA DE VEHÍCULO', { align: 'center' });
-    doc.moveDown();
+    doc.fontSize(14).font('Helvetica-Bold')
+       .text('CONTRATO DE COMPRAVENTA DE VEHICULO AUTOMOTOR', { align: 'center' });
+    doc.moveDown(2);
 
-    // Lugar y fecha
-    doc.fontSize(11).font('Helvetica')
-      .text(`En ${vehicle.datosVenta.transaccion.lugarCelebracion}, a los ${fechaCelebracion.getDate()} días del mes de ${fechaCelebracion.toLocaleDateString('es-CO', { month: 'long' })} de ${fechaCelebracion.getFullYear()}, entre:`, { align: 'justify' });
+    // LUGAR Y FECHA DE CELEBRACIÓN
+    doc.fontSize(11).font('Helvetica-Bold').text('LUGAR Y FECHA DE CELEBRACION DEL CONTRATO:');
+    doc.fontSize(10).font('Helvetica')
+       .text(`${vehicle.datosVenta.transaccion.lugarCelebracion}, ${fechaCelebracion.getDate()} de ${mesNombre} de ${fechaCelebracion.getFullYear()}`);
     doc.moveDown();
 
     // VENDEDOR
-    doc.fontSize(12).font('Helvetica-Bold').text('EL VENDEDOR:', { underline: true });
+    doc.fontSize(11).font('Helvetica-Bold').text('VENDEDOR(ES):');
     doc.fontSize(10).font('Helvetica')
-      .text(`Nombre: ${vehicle.datosVenta.vendedor.nombre}`)
-      .text(`Identificación: ${vehicle.datosVenta.vendedor.identificacion}`)
-      .text(`Dirección: ${vehicle.datosVenta.vendedor.direccion}`)
-      .text(`Teléfono: ${vehicle.datosVenta.vendedor.telefono}`);
+       .text(`Nombre e Identificación: ${vehicle.datosVenta.vendedor.nombre} - ${vehicle.datosVenta.vendedor.identificacion}`)
+       .text(`Dirección: ${vehicle.datosVenta.vendedor.direccion}`)
+       .text(`Teléfono: ${vehicle.datosVenta.vendedor.telefono}`);
     doc.moveDown();
 
     // COMPRADOR
-    doc.fontSize(12).font('Helvetica-Bold').text('EL COMPRADOR:', { underline: true });
+    doc.fontSize(11).font('Helvetica-Bold').text('COMPRADOR(ES):');
     doc.fontSize(10).font('Helvetica')
-      .text(`Nombre: ${vehicle.datosVenta.comprador.nombre}`)
-      .text(`Identificación: ${vehicle.datosVenta.comprador.identificacion}`)
-      .text(`Dirección: ${vehicle.datosVenta.comprador.direccion}`)
-      .text(`Teléfono: ${vehicle.datosVenta.comprador.telefono}`)
-      .text(`Email: ${vehicle.datosVenta.comprador.email}`);
+       .text(`Nombre e Identificación: ${vehicle.datosVenta.comprador.nombre} - ${vehicle.datosVenta.comprador.identificacion}`)
+       .text(`Dirección: ${vehicle.datosVenta.comprador.direccion}`)
+       .text(`Teléfono: ${vehicle.datosVenta.comprador.telefono}`)
+       .text(`Correo electrónico: ${vehicle.datosVenta.comprador.email}`);
     doc.moveDown();
 
-    // CLÁUSULA PRIMERA - OBJETO DEL CONTRATO
-    doc.fontSize(11).font('Helvetica-Bold').text('CLÁUSULA PRIMERA - OBJETO DEL CONTRATO:', { underline: true });
+    // DOMICILIO CONTRACTUAL
+    doc.fontSize(11).font('Helvetica-Bold').text('DOMICILIO CONTRACTUAL:');
     doc.fontSize(10).font('Helvetica')
-      .text(`EL VENDEDOR vende a EL COMPRADOR y éste compra de aquél, el siguiente vehículo:`, { align: 'justify' });
+       .text(vehicle.datosVenta.transaccion.domicilioContractual);
+    doc.moveDown();
+
+    // INTRODUCCIÓN A LAS CLÁUSULAS
+    doc.fontSize(10).font('Helvetica')
+       .text('Las partes convienen celebrar el presente contrato de compraventa, que se regirá por las anteriores estipulaciones, las normas legales aplicables a la materia y en especial por las siguientes cláusulas:', { align: 'justify' });
+    doc.moveDown();
+
+    // CLÁUSULA PRIMERA
+    doc.fontSize(10).font('Helvetica-Bold').text('PRIMERA.-OBJETO DEL CONTRATO: ', { continued: true })
+       .font('Helvetica').text('mediante el presente contrato EL VENDEDOR transfiere a título de venta y EL COMPRADOR adquiere la propiedad del vehículo automotor que a continuación se identifica:', { align: 'justify' });
     doc.moveDown(0.5);
-
-    // Datos del vehículo en tabla
-    const vehicleData = [
-      ['Clase:', 'AUTOMÓVIL'],
-      ['Marca:', vehicle.marca],
-      ['Modelo:', vehicle.modelo],
-      ['Año:', vehicle.año.toString()],
-      ['Color:', vehicle.color],
-      ['Placa:', vehicle.placa],
-      ['VIN:', vehicle.vin],
-      ['Tipo de Carrocería:', vehicle.datosVenta.vehiculoAdicional.tipoCarroceria || 'N/A'],
-      ['Número de Puertas:', vehicle.datosVenta.vehiculoAdicional.numeroPuertas?.toString() || '4'],
-      ['Tipo de Servicio:', vehicle.datosVenta.vehiculoAdicional.tipoServicio || 'PARTICULAR'],
-    ];
-
-    vehicleData.forEach(([label, value]) => {
-      doc.fontSize(10).font('Helvetica-Bold').text(label, { continued: true })
-        .font('Helvetica').text(` ${value}`);
-    });
-    doc.moveDown();
-
-    // CLÁUSULA SEGUNDA - PRECIO
-    doc.fontSize(11).font('Helvetica-Bold').text('CLÁUSULA SEGUNDA - PRECIO:', { underline: true });
+    
     doc.fontSize(10).font('Helvetica')
-      .text(`El precio de la compraventa es la suma de $${vehicle.precioVenta.toLocaleString('es-CO')} (${vehicle.datosVenta.transaccion.precioLetras}).`, { align: 'justify' });
+       .text(`CLASE: AUTOMÓVIL                    MARCA: ${vehicle.marca}                    MODELO: ${vehicle.año}`)
+       .text(`TIPO DE CARROCERIA: ${vehicle.datosVenta.vehiculoAdicional.tipoCarroceria || 'N/A'}        COLOR: ${vehicle.color}        CAPACIDAD: ${vehicle.datosVenta.vehiculoAdicional.capacidad || 'N/A'}`)
+       .text(`CHASIS No.: ${vehicle.vin}`)
+       .text(`MOTOR No.: ${vehicle.datosVenta.vehiculoAdicional.numeroMotor || 'N/A'}        LINEA: ${vehicle.datosVenta.vehiculoAdicional.linea || vehicle.modelo}        PUERTAS: ${vehicle.datosVenta.vehiculoAdicional.numeroPuertas || 4}`)
+       .text(`SITIO DE MATRICULA: ${vehicle.datosVenta.vehiculoAdicional.sitioMatricula || 'N/A'}        PLACA No.: ${vehicle.placa}        SERVICIO: ${vehicle.datosVenta.vehiculoAdicional.tipoServicio || 'PARTICULAR'}`);
     doc.moveDown();
 
-    // CLÁUSULA TERCERA - FORMA DE PAGO
-    doc.fontSize(11).font('Helvetica-Bold').text('CLÁUSULA TERCERA - FORMA DE PAGO:', { underline: true });
-    doc.fontSize(10).font('Helvetica')
-      .text(vehicle.datosVenta.transaccion.formaPago, { align: 'justify' });
+    // CLÁUSULA SEGUNDA
+    doc.fontSize(10).font('Helvetica-Bold').text('SEGUNDA.- PRECIO: ', { continued: true })
+       .font('Helvetica').text(`como precio del automotor descrito las partes acuerdan la suma de ${vehicle.datosVenta.transaccion.precioLetras} ($${vehicle.precioVenta.toLocaleString('es-CO')}), suma que deberá ser pagada en su totalidad, libre de descuentos por concepto de costos bancarios tales como 4xmil, cambio de plaza, entre otros.`, { align: 'justify' });
     doc.moveDown();
 
-    // CLÁUSULA CUARTA - TRASPASO
-    doc.fontSize(11).font('Helvetica-Bold').text('CLÁUSULA CUARTA - TRASPASO:', { underline: true });
-    doc.fontSize(10).font('Helvetica')
-      .text(`EL VENDEDOR se compromete a realizar el traspaso del vehículo ante las autoridades competentes dentro de los ${vehicle.datosVenta.transaccion.diasTraspaso || 30} días siguientes a la firma del presente contrato.`, { align: 'justify' });
+    // CLÁUSULA TERCERA
+    doc.fontSize(10).font('Helvetica-Bold').text('TERCERA.- FORMA DE PAGO: ', { continued: true })
+       .font('Helvetica').text(`EL COMPRADOR se compromete a pagar el precio a que se refiere la cláusula anterior de la siguiente forma: ${vehicle.datosVenta.transaccion.formaPago}`, { align: 'justify' });
     doc.moveDown();
 
-    // CLÁUSULA QUINTA - ENTREGA
-    doc.fontSize(11).font('Helvetica-Bold').text('CLÁUSULA QUINTA - ENTREGA:', { underline: true });
-    doc.fontSize(10).font('Helvetica')
-      .text(`El vehículo será entregado el día ${fechaEntrega.toLocaleDateString('es-CO')}${vehicle.datosVenta.transaccion.horaEntrega ? ` a las ${vehicle.datosVenta.transaccion.horaEntrega}` : ''}.`, { align: 'justify' });
+    // CLÁUSULA CUARTA
+    const vendedorAnterior = vehicle.datosVenta.transaccion.vendedorAnterior || '[NOMBRE DEL VENDEDOR ANTERIOR]';
+    const cedulaVendedorAnterior = vehicle.datosVenta.transaccion.cedulaVendedorAnterior || '[CÉDULA]';
+    
+    doc.fontSize(10).font('Helvetica-Bold').text('CUARTA.- ', { continued: true })
+       .font('Helvetica').text(`EL VENDEDOR manifiesta que adquirió el vehículo antes descrito por compra a ${vendedorAnterior} identificado con CC ${cedulaVendedorAnterior}. Y declara que está libre de toda clase de gravámenes, embargos, multas, comparendos, pactos de reserva de dominio y cualquier otra circunstancia que afecte el libre comercio del bien objeto del presente contrato.`, { align: 'justify' });
     doc.moveDown();
 
-    // CLÁUSULA SEXTA - DOMICILIO
-    doc.fontSize(11).font('Helvetica-Bold').text('CLÁUSULA SEXTA - DOMICILIO:', { underline: true });
-    doc.fontSize(10).font('Helvetica')
-      .text(`Para todos los efectos legales derivados del presente contrato, las partes fijan como domicilio contractual la ciudad de ${vehicle.datosVenta.transaccion.domicilioContractual}.`, { align: 'justify' });
+    // CLÁUSULA QUINTA
+    doc.fontSize(10).font('Helvetica-Bold').text('QUINTA.- ', { continued: true })
+       .font('Helvetica').text('EL COMPRADOR declara que conoce el estado jurídico y factico en que se encuentra el vehículo y así lo acepta. Y que por tratarse de un vehículo usado EL VENDEDOR no garantiza el estado de sus partes, condiciones técnicas, físicos o de funcionamiento, que lo afecten total o parcialmente, o por defectos de fabricación o vicios ocultos, habida cuenta que este fue elegido por EL COMPRADOR, quien a su elección ha realizado o no peritaje y revisión de antecedentes, y por lo tanto asume la responsabilidad por su elección, y como consecuencia renuncia a cualquier reclamación futura, exonerando a EL VENDEDOR de toda responsabilidad.', { align: 'justify' });
     doc.moveDown();
 
-    // CLÁUSULAS ADICIONALES (si existen)
+    // CLÁUSULA SEXTA
+    const diasTraspaso = vehicle.datosVenta.transaccion.diasTraspaso || 30;
+    doc.fontSize(10).font('Helvetica-Bold').text('SEXTA.- TRASPASO Y GASTOS: ', { continued: true })
+       .font('Helvetica').text(`Las partes se obligan a realizar las gestiones de traspaso ante las autoridades de tránsito dentro de los ${diasTraspaso} (${diasTraspaso === 30 ? 'treinta' : diasTraspaso}) días posteriores a la firma del presente contrato. El vehículo se entrega al día a la fecha de la firma del presente contrato, y por lo tanto valores tales como, los correspondientes a Impuestos se liquidarán proporcionalmente según le corresponda a cada una de las partes, entre otros. EL COMPRADOR declara que, en caso de requerir de la prestación de los servicios de un asesor de trámites ante las autoridades de tránsito, asumirá la totalidad del valor de los respectivos honorarios.`, { align: 'justify' });
+    doc.moveDown();
+
+    // CLÁUSULA SÉPTIMA
+    const horaEntrega = vehicle.datosVenta.transaccion.horaEntrega || '[HORA]';
+    doc.fontSize(10).font('Helvetica-Bold').text('SEPTIMA.- ENTREGA: ', { continued: true })
+       .font('Helvetica').text(`En la fecha ${fechaEntrega.toLocaleDateString('es-CO')} y hora ${horaEntrega} EL VENDEDOR hace entrega real y material del vehículo objeto del presente contrato a EL COMPRADOR, y éste declara conocer y aceptar el estado en que se encuentra, y recibirlo a entera satisfacción. Por lo tanto, a partir de este momento EL COMPRADOR asume los riesgos mecánicos y las responsabilidades jurídicas relativos al vehículo.`, { align: 'justify' });
+    doc.moveDown();
+
+    // CLÁUSULA OCTAVA
+    doc.fontSize(10).font('Helvetica-Bold').text('OCTAVA.- RESERVA DEL DOMINIO: ', { continued: true })
+       .font('Helvetica').text('EL VENDEDOR se reserva la propiedad del vehículo identificado en la cláusula primera del presente contrato, hasta el momento en que se pague la totalidad del precio estipulado, de conformidad con el Art. 952 del Código de Comercio, y por lo tanto, no se encuentra obligado a realizar la entrega física del mismo hasta tanto se realice la cancelación total. Se entiende por cancelación total el que la transferencia o el cheque se haya hecho efectiva/o.', { align: 'justify' });
+    doc.moveDown();
+
+    // CLÁUSULA NOVENA
+    doc.fontSize(10).font('Helvetica-Bold').text('NOVENA.- CLAUSULA PENAL: ', { continued: true })
+       .font('Helvetica').text('Las partes establecen como sanción pecuniaria a cargo de quien incumpla una cualquiera de las estipulaciones derivadas de este contrato, la suma correspondiente al diez por ciento (10%) del precio pactado en el presente contrato.', { align: 'justify' });
+    doc.moveDown();
+
+    // CLÁUSULAS ADICIONALES
     if (vehicle.datosVenta.transaccion.clausulasAdicionales && vehicle.datosVenta.transaccion.clausulasAdicionales !== 'Ninguna') {
-      doc.fontSize(11).font('Helvetica-Bold').text('CLÁUSULAS ADICIONALES:', { underline: true });
+      doc.fontSize(10).font('Helvetica-Bold').text('CLAUSULAS ADICIONALES:');
       doc.fontSize(10).font('Helvetica')
-        .text(vehicle.datosVenta.transaccion.clausulasAdicionales, { align: 'justify' });
+         .text(vehicle.datosVenta.transaccion.clausulasAdicionales, { align: 'justify' });
       doc.moveDown();
     }
 
-    // Agregar nueva página para firmas si es necesario
+    // Verificar si necesitamos nueva página para firmas
     if (doc.y > 600) {
       doc.addPage();
     }
 
-    // FIRMAS
-    doc.moveDown(2);
+    // CONSTANCIA Y FIRMAS
+    doc.moveDown();
     doc.fontSize(10).font('Helvetica')
-      .text('En constancia, firman las partes:', { align: 'center' });
+       .text(`En constancia de lo anterior, los contratantes suscriben el presente documento en la ciudad de ${vehicle.datosVenta.transaccion.lugarCelebracion}, el día ${fechaCelebracion.getDate()} (${fechaCelebracion.getDate()}), del mes de ${mesNombre}, del año ${fechaCelebracion.getFullYear()} (${fechaCelebracion.getFullYear()}).`, { align: 'justify' });
     doc.moveDown(3);
 
     // Líneas de firma
     const signatureY = doc.y;
-    const pageWidth = doc.page.width - 100;
-    const signatureWidth = 200;
-    const leftX = 50;
-    const rightX = pageWidth - signatureWidth + 50;
+    const pageWidth = doc.page.width - 120;
+    const signatureWidth = 220;
+    const leftX = 60;
+    const rightX = pageWidth - signatureWidth + 60;
 
-    // Vendedor
-    doc.moveTo(leftX, signatureY).lineTo(leftX + signatureWidth, signatureY).stroke();
-    doc.fontSize(9).font('Helvetica-Bold')
-      .text('EL VENDEDOR', leftX, signatureY + 10, { width: signatureWidth, align: 'center' });
-    doc.fontSize(8).font('Helvetica')
-      .text(vehicle.datosVenta.vendedor.nombre, leftX, signatureY + 25, { width: signatureWidth, align: 'center' })
-      .text(`C.C. ${vehicle.datosVenta.vendedor.identificacion}`, leftX, signatureY + 38, { width: signatureWidth, align: 'center' });
+    // VENDEDOR
+    doc.fontSize(10).font('Helvetica-Bold')
+       .text('VENDEDOR', leftX, signatureY, { width: signatureWidth, align: 'center' });
+    doc.moveDown(2);
+    const vendedorLineY = doc.y;
+    doc.moveTo(leftX, vendedorLineY).lineTo(leftX + signatureWidth, vendedorLineY).stroke();
+    doc.fontSize(9).font('Helvetica')
+       .text(`C.C. No. ${vehicle.datosVenta.vendedor.identificacion}`, leftX, vendedorLineY + 5, { width: signatureWidth, align: 'center' });
 
-    // Comprador
-    doc.moveTo(rightX, signatureY).lineTo(rightX + signatureWidth, signatureY).stroke();
-    doc.fontSize(9).font('Helvetica-Bold')
-      .text('EL COMPRADOR', rightX, signatureY + 10, { width: signatureWidth, align: 'center' });
-    doc.fontSize(8).font('Helvetica')
-      .text(vehicle.datosVenta.comprador.nombre, rightX, signatureY + 25, { width: signatureWidth, align: 'center' })
-      .text(`C.C. ${vehicle.datosVenta.comprador.identificacion}`, rightX, signatureY + 38, { width: signatureWidth, align: 'center' });
+    // COMPRADOR
+    doc.fontSize(10).font('Helvetica-Bold')
+       .text('COMPRADOR', rightX, signatureY, { width: signatureWidth, align: 'center' });
+    doc.moveTo(rightX, vendedorLineY).lineTo(rightX + signatureWidth, vendedorLineY).stroke();
+    doc.fontSize(9).font('Helvetica')
+       .text(`C.C. No. ${vehicle.datosVenta.comprador.identificacion}`, rightX, vendedorLineY + 5, { width: signatureWidth, align: 'center' });
 
     // Finalizar el documento
     doc.end();
