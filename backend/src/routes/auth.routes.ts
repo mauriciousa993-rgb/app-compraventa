@@ -13,8 +13,8 @@ import { authenticate, authorize } from '../middleware/auth.middleware';
 const router = Router();
 
 // Rutas públicas
-// NOTA: La ruta de registro público ha sido eliminada por seguridad
-// Solo el administrador puede crear nuevos usuarios
+// NOTA: Registro habilitado TEMPORALMENTE para crear admin inicial
+router.post('/register', register);
 router.post('/login', login);
 
 // Rutas protegidas - Solo Admin
