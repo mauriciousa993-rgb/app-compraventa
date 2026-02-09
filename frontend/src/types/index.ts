@@ -12,12 +12,18 @@ export interface AuthResponse {
   user: User;
 }
 
+export interface GastoInversionista {
+  categoria: 'pintura' | 'mecanica' | 'traspaso' | 'alistamiento' | 'tapiceria' | 'transporte' | 'varios';
+  monto: number;
+  descripcion: string;
+  fecha: string;
+}
+
 export interface Inversionista {
   usuario: string; // ID del usuario inversionista
   nombre: string;
   montoInversion: number;
-  gastosInversionista: number;
-  detallesGastos: string;
+  gastos: GastoInversionista[];
   porcentajeParticipacion: number;
   utilidadCorrespondiente: number;
 }

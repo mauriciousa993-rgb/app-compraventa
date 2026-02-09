@@ -350,9 +350,27 @@ const VehicleList: React.FC = () => {
                 >
                   <div className="flex items-center space-x-4 flex-1">
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {vehicle.marca} {vehicle.modelo}
-                      </h3>
+                      <div className="flex items-center gap-3">
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          {vehicle.marca} {vehicle.modelo}
+                        </h3>
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                          vehicle.estado === 'vendido' 
+                            ? 'bg-green-100 text-green-700' 
+                            : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {(() => {
+                            const fechaIngreso = new Date(vehicle.fechaIngreso);
+                            const fechaFinal = vehicle.estado === 'vendido' && vehicle.fechaVenta 
+                              ? new Date(vehicle.fechaVenta) 
+                              : new Date();
+                            const diasEnVitrina = Math.floor((fechaFinal.getTime() - fechaIngreso.getTime()) / (1000 * 60 * 60 * 24));
+                            return vehicle.estado === 'vendido'
+                              ? `${diasEnVitrina} día${diasEnVitrina !== 1 ? 's' : ''} en inventario`
+                              : `${diasEnVitrina} día${diasEnVitrina !== 1 ? 's' : ''} en vitrina`;
+                          })()}
+                        </span>
+                      </div>
                       <p className="text-sm text-gray-600">
                         {vehicle.año} • <span className="font-medium">{vehicle.placa}</span>
                       </p>
@@ -552,31 +570,39 @@ const VehicleList: React.FC = () => {
                       <div>
                         <h4 className="text-sm font-semibold text-gray-700 mb-2">Inversionistas</h4>
                         <div className="space-y-2">
-                          {vehicle.inversionistas.map((inv, idx) => (
-                            <div key={idx} className="bg-indigo-50 p-3 rounded border border-indigo-200">
-                              <div className="flex justify-between items-start mb-2">
-                                <span className="text-sm font-medium text-gray-700">{inv.nombre}</span>
-                                <span className="text-sm font-semibold text-indigo-600">
-                                  {formatCurrency(inv.montoInversion)}
-                                </span>
-                              </div>
-                              {inv.gastosInversionista > 0 && (
-                                <div className="mt-2 pt-2 border-t border-indigo-200">
-                                  <div className="flex justify-between items-start text-xs">
-                                    <span className="text-gray-600">Gastos:</span>
-                                    <span className="font-medium text-orange-600">
-                                      {formatCurrency(inv.gastosInversionista)}
-                                    </span>
-                                  </div>
-                                  {inv.detallesGastos && (
-                                    <p className="mt-1 text-xs text-gray-600 italic">
-                                      "{inv.detallesGastos}"
-                                    </p>
-                                  )}
+                          {vehicle.inversionistas.map((inv, idx) => {
+                            const totalGastosInv = inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0;
+                            return (
+                              <div key={idx} className="bg-indigo-50 p-3 rounded border border-indigo-200">
+                                <div className="flex justify-between items-start mb-2">
+                                  <span className="text-sm font-medium text-gray-700">{inv.nombre}</span>
+                                  <span className="text-sm font-semibold text-indigo-600">
+                                    {formatCurrency(inv.montoInversion)}
+                                  </span>
                                 </div>
-                              )}
-                            </div>
-                          ))}
+                                {totalGastosInv > 0 && (
+                                  <div className="mt-2 pt-2 border-t border-indigo-200">
+                                    <div className="flex justify-between items-start text-xs mb-2">
+                                      <span className="text-gray-600">Total Gastos:</span>
+                                      <span className="font-medium text-orange-600">
+                                        {formatCurrency(totalGastosInv)}
+                                      </span>
+                                    </div>
+                                    {inv.gastos && inv.gastos.length > 0 && (
+                                      <div className="space-y-1">
+                                        {inv.gastos.map((gasto, gIdx) => (
+                                          <div key={gIdx} className="text-xs text-gray-600 flex justify-between">
+                                            <span className="capitalize">{gasto.categoria}:</span>
+                                            <span className="font-medium">{formatCurrency(gasto.monto)}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
