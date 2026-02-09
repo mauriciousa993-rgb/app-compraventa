@@ -1,11 +1,17 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export interface IGastoInversionista {
+  categoria: 'pintura' | 'mecanica' | 'traspaso' | 'alistamiento' | 'tapiceria' | 'transporte' | 'varios';
+  monto: number;
+  descripcion: string;
+  fecha: Date;
+}
+
 export interface IInversionista {
   usuario: mongoose.Types.ObjectId; // Referencia al usuario inversionista
   nombre: string;
   montoInversion: number;
-  gastosInversionista: number;
-  detallesGastos: string;
+  gastos: IGastoInversionista[]; // Array de gastos del inversionista
   porcentajeParticipacion: number;
   utilidadCorrespondiente: number;
 }
@@ -248,8 +254,16 @@ const vehicleSchema = new Schema<IVehicleDocument>(
       usuario: { type: Schema.Types.ObjectId, ref: 'User', required: true },
       nombre: { type: String, required: true, trim: true },
       montoInversion: { type: Number, required: true, min: [0, 'El monto de inversión no puede ser negativo'] },
-      gastosInversionista: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
-      detallesGastos: { type: String, default: '', trim: true },
+      gastos: [{
+        categoria: { 
+          type: String, 
+          required: true,
+          enum: ['pintura', 'mecanica', 'traspaso', 'alistamiento', 'tapiceria', 'transporte', 'varios']
+        },
+        monto: { type: Number, required: true, min: [0, 'El monto no puede ser negativo'] },
+        descripcion: { type: String, default: '', trim: true },
+        fecha: { type: Date, default: Date.now }
+      }],
       porcentajeParticipacion: { type: Number, default: 0, min: [0, 'El porcentaje no puede ser negativo'], max: [100, 'El porcentaje no puede ser mayor a 100'] },
       utilidadCorrespondiente: { type: Number, default: 0 }
     }],
@@ -379,26 +393,42 @@ vehicleSchema.pre('save', function (next) {
     this.gastos.varios = this.gastosDetallados.varios?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0;
   }
   
-  // Sumar gastos de inversionistas
+  // Calcular gastos generales desde gastos detallados
+  const gastosGenerales = this.gastos.pintura + this.gastos.mecanica + this.gastos.traspaso + 
+                          this.gastos.alistamiento + this.gastos.tapiceria + this.gastos.transporte + 
+                          this.gastos.varios;
+  
+  // Calcular gastos de inversionistas (suma de todos sus gastos individuales)
   const gastosInversionistas = this.inversionistas && this.inversionistas.length > 0
-    ? this.inversionistas.reduce((sum, inv) => sum + (inv.gastosInversionista || 0), 0)
+    ? this.inversionistas.reduce((sum, inv) => {
+        const totalGastosInv = inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0;
+        return sum + totalGastosInv;
+      }, 0)
     : 0;
   
-  // Calcular total de gastos (incluyendo gastos de inversionistas)
-  this.gastos.total = this.gastos.pintura + this.gastos.mecanica + this.gastos.traspaso + 
-                      this.gastos.alistamiento + this.gastos.tapiceria + this.gastos.transporte + 
-                      this.gastos.varios + gastosInversionistas;
+  // Calcular total de gastos (generales + inversionistas)
+  this.gastos.total = gastosGenerales + gastosInversionistas;
   
   // Calcular distribución de inversionistas si existen
   if (this.inversionistas && this.inversionistas.length > 0) {
     const totalInversion = this.inversionistas.reduce((sum, inv) => sum + inv.montoInversion, 0);
-    const utilidadTotal = this.precioVenta - this.precioCompra - this.gastos.total;
+    
+    // Utilidad bruta (sin considerar gastos de inversionistas)
+    const utilidadBruta = this.precioVenta - this.precioCompra - gastosGenerales;
+    
+    // Utilidad neta a distribuir (después de restar gastos de inversionistas)
+    const utilidadNeta = utilidadBruta - gastosInversionistas;
     
     this.inversionistas.forEach(inv => {
       // Calcular porcentaje de participación
       inv.porcentajeParticipacion = totalInversion > 0 ? (inv.montoInversion / totalInversion) * 100 : 0;
-      // Calcular utilidad correspondiente
-      inv.utilidadCorrespondiente = (inv.porcentajeParticipacion / 100) * utilidadTotal;
+      
+      // Calcular total de gastos del inversionista
+      const totalGastosInv = inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0;
+      
+      // Utilidad correspondiente = (porcentaje × utilidad neta) + gastos del inversionista
+      const utilidadPorParticipacion = (inv.porcentajeParticipacion / 100) * utilidadNeta;
+      inv.utilidadCorrespondiente = utilidadPorParticipacion + totalGastosInv;
     });
   }
   

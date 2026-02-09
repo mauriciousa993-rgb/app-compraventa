@@ -263,8 +263,9 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
           const totalInversion = vehicle.inversionistas.reduce((sum, inv) => sum + inv.montoInversion, 0);
           const porcentaje = totalInversion > 0 ? (inversionista.montoInversion / totalInversion) : 0;
           
-          valorInventario += inversionista.montoInversion + (inversionista.gastosInversionista || 0);
-          totalGastos += inversionista.gastosInversionista || 0;
+          const gastosInv = inversionista.gastos?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0;
+          valorInventario += inversionista.montoInversion + gastosInv;
+          totalGastos += gastosInv;
           
           const utilidadTotal = vehicle.precioVenta - vehicle.precioCompra - (vehicle.gastos?.total || 0);
           gananciasEstimadas += utilidadTotal * porcentaje;
@@ -647,7 +648,10 @@ export const exportVehicleReport = async (
 
       // Calcular totales
       const totalInversion = vehicle.inversionistas.reduce((sum, inv) => sum + inv.montoInversion, 0);
-      const totalGastosInv = vehicle.inversionistas.reduce((sum, inv) => sum + (inv.gastosInversionista || 0), 0);
+      const totalGastosInv = vehicle.inversionistas.reduce((sum, inv) => {
+        const gastosInv = inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0;
+        return sum + gastosInv;
+      }, 0);
       const utilidadTotal = vehicle.precioVenta - vehicle.precioCompra - vehicle.gastos.total;
 
       // Datos de cada inversionista
@@ -663,16 +667,18 @@ export const exportVehicleReport = async (
 
         // Gastos del inversionista
         worksheet.getCell(`A${currentRow}`).value = '';
-        worksheet.getCell(`B${currentRow}`).value = inv.gastosInversionista || 0;
+        const gastosInv = inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0;
+        worksheet.getCell(`B${currentRow}`).value = gastosInv;
         worksheet.getCell(`B${currentRow}`).numFmt = '"$"#,##0';
         worksheet.getCell(`B${currentRow}`).font = { color: { argb: 'FFFF6600' } };
         currentRow++;
 
         // Detalles de gastos (si existen)
-        if (inv.detallesGastos) {
+        if (inv.gastos && inv.gastos.length > 0) {
           worksheet.getCell(`A${currentRow}`).value = '  Detalles:';
           worksheet.getCell(`A${currentRow}`).font = { italic: true, size: 9 };
-          worksheet.getCell(`B${currentRow}`).value = inv.detallesGastos;
+          const detallesGastos = inv.gastos.map(g => `${g.categoria}: $${g.monto.toLocaleString('es-CO')}${g.descripcion ? ` (${g.descripcion})` : ''}`).join(', ');
+          worksheet.getCell(`B${currentRow}`).value = detallesGastos;
           worksheet.getCell(`B${currentRow}`).font = { italic: true, size: 9 };
           worksheet.getCell(`B${currentRow}`).alignment = { wrapText: true };
           currentRow++;
