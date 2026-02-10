@@ -617,12 +617,12 @@ export const exportVehicleReport = async (
       currentRow++;
 
       worksheet.getCell(`A${currentRow}`).value = '';
-      worksheet.getCell(`B${currentRow}`).value = 'Gastos Inversionista';
+      worksheet.getCell(`B${currentRow}`).value = 'Retorno de Gastos';
       worksheet.getCell(`B${currentRow}`).font = { bold: true };
       worksheet.getCell(`B${currentRow}`).fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFE7E6E6' },
+        fgColor: { argb: 'FFFFC000' }, // Naranja
       };
       currentRow++;
 
@@ -637,12 +637,22 @@ export const exportVehicleReport = async (
       currentRow++;
 
       worksheet.getCell(`A${currentRow}`).value = '';
-      worksheet.getCell(`B${currentRow}`).value = 'Utilidad Correspondiente';
+      worksheet.getCell(`B${currentRow}`).value = 'Utilidad Neta';
       worksheet.getCell(`B${currentRow}`).font = { bold: true };
       worksheet.getCell(`B${currentRow}`).fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFE7E6E6' },
+        fgColor: { argb: 'FF92D050' }, // Verde
+      };
+      currentRow++;
+
+      worksheet.getCell(`A${currentRow}`).value = '';
+      worksheet.getCell(`B${currentRow}`).value = 'Total a Recibir';
+      worksheet.getCell(`B${currentRow}`).font = { bold: true };
+      worksheet.getCell(`B${currentRow}`).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFB4A7D6' }, // Morado
       };
       currentRow++;
 
@@ -652,12 +662,28 @@ export const exportVehicleReport = async (
         const gastosInv = inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0;
         return sum + gastosInv;
       }, 0);
-      const utilidadTotal = vehicle.precioVenta - vehicle.precioCompra - vehicle.gastos.total;
+      
+      // Gastos generales (sin gastos de inversionistas)
+      const gastosGenerales = vehicle.gastos.pintura + vehicle.gastos.mecanica + vehicle.gastos.traspaso + 
+                             vehicle.gastos.alistamiento + vehicle.gastos.tapiceria + vehicle.gastos.transporte + 
+                             vehicle.gastos.varios;
+      
+      // Utilidad bruta (sin considerar gastos de inversionistas)
+      const utilidadBruta = vehicle.precioVenta - vehicle.precioCompra - gastosGenerales;
+      
+      // Utilidad neta a distribuir (después de restar gastos de inversionistas)
+      const utilidadNeta = utilidadBruta - totalGastosInv;
 
       // Datos de cada inversionista
       vehicle.inversionistas.forEach((inv, index) => {
         const porcentaje = totalInversion > 0 ? (inv.montoInversion / totalInversion) * 100 : 0;
-        const utilidadInv = (porcentaje / 100) * utilidadTotal;
+        const gastosInv = inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0;
+        
+        // Utilidad neta del inversionista (sin incluir gastos)
+        const utilidadNetaInv = (porcentaje / 100) * utilidadNeta;
+        
+        // Total a recibir (utilidad neta + retorno de gastos)
+        const totalARecibir = utilidadNetaInv + gastosInv;
 
         // Nombre
         worksheet.getCell(`A${currentRow}`).value = inv.nombre;
@@ -665,12 +691,11 @@ export const exportVehicleReport = async (
         worksheet.getCell(`B${currentRow}`).numFmt = '"$"#,##0';
         currentRow++;
 
-        // Gastos del inversionista
+        // Retorno de Gastos
         worksheet.getCell(`A${currentRow}`).value = '';
-        const gastosInv = inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0;
         worksheet.getCell(`B${currentRow}`).value = gastosInv;
         worksheet.getCell(`B${currentRow}`).numFmt = '"$"#,##0';
-        worksheet.getCell(`B${currentRow}`).font = { color: { argb: 'FFFF6600' } };
+        worksheet.getCell(`B${currentRow}`).font = { bold: true, color: { argb: 'FFFF6600' } };
         currentRow++;
 
         // Detalles de gastos (si existen)
@@ -691,11 +716,18 @@ export const exportVehicleReport = async (
         worksheet.getCell(`B${currentRow}`).font = { color: { argb: 'FF0070C0' } };
         currentRow++;
 
-        // Utilidad
+        // Utilidad Neta (sin incluir gastos)
         worksheet.getCell(`A${currentRow}`).value = '';
-        worksheet.getCell(`B${currentRow}`).value = utilidadInv;
+        worksheet.getCell(`B${currentRow}`).value = utilidadNetaInv;
         worksheet.getCell(`B${currentRow}`).numFmt = '"$"#,##0';
-        worksheet.getCell(`B${currentRow}`).font = { bold: true, color: { argb: utilidadInv >= 0 ? 'FF00B050' : 'FFFF0000' } };
+        worksheet.getCell(`B${currentRow}`).font = { bold: true, color: { argb: utilidadNetaInv >= 0 ? 'FF00B050' : 'FFFF0000' } };
+        currentRow++;
+
+        // Total a Recibir (Utilidad Neta + Retorno de Gastos)
+        worksheet.getCell(`A${currentRow}`).value = '';
+        worksheet.getCell(`B${currentRow}`).value = totalARecibir;
+        worksheet.getCell(`B${currentRow}`).numFmt = '"$"#,##0';
+        worksheet.getCell(`B${currentRow}`).font = { bold: true, size: 11, color: { argb: 'FF7030A0' } };
         currentRow++;
 
         if (index < vehicle.inversionistas.length - 1) {
@@ -720,9 +752,10 @@ export const exportVehicleReport = async (
       addDataRow('Total Invertido', `$${totalInversion.toLocaleString('es-CO')}`);
       addDataRow('Total Gastos Inversionistas', `$${totalGastosInv.toLocaleString('es-CO')}`);
       addDataRow('Número de Socios', vehicle.inversionistas.length);
-      addDataRow('Utilidad Total Distribuida', `$${utilidadTotal.toLocaleString('es-CO')}`);
+      addDataRow('Utilidad Bruta', `$${utilidadBruta.toLocaleString('es-CO')}`);
+      addDataRow('Utilidad Neta a Distribuir', `$${utilidadNeta.toLocaleString('es-CO')}`);
       
-      worksheet.getCell(`B${currentRow - 1}`).font = { bold: true, color: { argb: utilidadTotal >= 0 ? 'FF00B050' : 'FFFF0000' } };
+      worksheet.getCell(`B${currentRow - 1}`).font = { bold: true, color: { argb: utilidadNeta >= 0 ? 'FF00B050' : 'FFFF0000' } };
       currentRow++;
     }
 
