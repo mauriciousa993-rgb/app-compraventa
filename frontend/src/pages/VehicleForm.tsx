@@ -1166,19 +1166,38 @@ const VehicleForm: React.FC = () => {
                       </div>
 
                       {/* Mostrar cálculos */}
-                      <div className="mt-3 grid grid-cols-2 gap-3">
+                      <div className="mt-3 grid grid-cols-3 gap-3">
                         <div className="bg-blue-50 p-3 rounded border border-blue-200">
                           <p className="text-xs text-blue-600 mb-1">Participación</p>
                           <p className="text-lg font-bold text-blue-900">
                             {invCalculado.porcentajeParticipacion.toFixed(2)}%
                           </p>
                         </div>
-                        <div className="bg-green-50 p-3 rounded border border-green-200">
-                          <p className="text-xs text-green-600 mb-1">Utilidad Estimada</p>
-                          <p className="text-lg font-bold text-green-900">
-                            ${invCalculado.utilidadCorrespondiente.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
+                        <div className="bg-orange-50 p-3 rounded border border-orange-200">
+                          <p className="text-xs text-orange-600 mb-1">Retorno de Gastos</p>
+                          <p className="text-lg font-bold text-orange-900">
+                            ${(inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0).toLocaleString('es-CO', { minimumFractionDigits: 2 })}
                           </p>
                         </div>
+                        <div className="bg-green-50 p-3 rounded border border-green-200">
+                          <p className="text-xs text-green-600 mb-1">Utilidad Neta</p>
+                          <p className="text-lg font-bold text-green-900">
+                            ${(invCalculado.utilidadCorrespondiente - (inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0)).toLocaleString('es-CO', { minimumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-2 bg-purple-50 p-3 rounded border border-purple-200">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium text-purple-700">
+                            Total a Recibir:
+                          </span>
+                          <span className="text-xl font-bold text-purple-900">
+                            ${invCalculado.utilidadCorrespondiente.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <p className="text-xs text-purple-600 mt-1">
+                          = Utilidad Neta + Retorno de Gastos
+                        </p>
                       </div>
                     </div>
                   );

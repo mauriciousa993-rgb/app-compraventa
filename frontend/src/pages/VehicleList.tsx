@@ -378,6 +378,12 @@ const VehicleList: React.FC = () => {
                     <div className="hidden md:flex items-center space-x-4">
                       {getEstadoBadge(vehicle.estado)}
                       <div className="text-right">
+                        <p className="text-xs text-gray-500">Precio Venta</p>
+                        <p className="text-sm font-semibold text-blue-600">
+                          {formatCurrency(vehicle.precioVenta)}
+                        </p>
+                      </div>
+                      <div className="text-right">
                         <p className="text-xs text-gray-500">Utilidad</p>
                         <p className={`text-sm font-semibold ${
                           utilidad >= 0 ? 'text-green-600' : 'text-red-600'
