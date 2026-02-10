@@ -906,13 +906,58 @@ const VehicleForm: React.FC = () => {
                 />
               </div>
 
-              <div className="md:col-span-2 bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <label className="block text-sm font-medium text-blue-700 mb-1">
-                  Total Gastos
-                </label>
-                <p className="text-2xl font-bold text-blue-900">
-                  ${formData.gastos.total.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
-                </p>
+              <div className="md:col-span-2 space-y-3">
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <label className="block text-sm font-medium text-blue-700 mb-1">
+                    Gastos del Vehículo
+                  </label>
+                  <p className="text-2xl font-bold text-blue-900">
+                    ${formData.gastos.total.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+                
+                {formData.inversionistas.length > 0 && (() => {
+                  const gastosInversionistas = formData.inversionistas.reduce((sum, inv) => {
+                    const totalGastosInv = inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0;
+                    return sum + totalGastosInv;
+                  }, 0);
+                  
+                  return gastosInversionistas > 0 ? (
+                    <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+                      <label className="block text-sm font-medium text-orange-700 mb-1">
+                        Gastos de Inversionistas
+                      </label>
+                      <p className="text-2xl font-bold text-orange-900">
+                        ${gastosInversionistas.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-xs text-orange-600 mt-1">
+                        Suma de todos los gastos de inversionistas
+                      </p>
+                    </div>
+                  ) : null;
+                })()}
+                
+                {formData.inversionistas.length > 0 && (() => {
+                  const gastosInversionistas = formData.inversionistas.reduce((sum, inv) => {
+                    const totalGastosInv = inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0;
+                    return sum + totalGastosInv;
+                  }, 0);
+                  const totalGeneral = formData.gastos.total + gastosInversionistas;
+                  
+                  return gastosInversionistas > 0 ? (
+                    <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                      <label className="block text-sm font-medium text-purple-700 mb-1">
+                        Total General de Gastos
+                      </label>
+                      <p className="text-2xl font-bold text-purple-900">
+                        ${totalGeneral.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-xs text-purple-600 mt-1">
+                        Gastos del Vehículo + Gastos de Inversionistas
+                      </p>
+                    </div>
+                  ) : null;
+                })()}
               </div>
             </div>
 
