@@ -69,8 +69,9 @@ export const getAllVehicles = async (req: AuthRequest, res: Response): Promise<v
       .populate('registradoPor', 'nombre email')
       .sort({ fechaIngreso: -1 });
 
-    // Si el usuario es vendedor o visualizador, ocultar información financiera
-    if (userRole === 'vendedor' || userRole === 'visualizador') {
+    // Si el usuario es visualizador, ocultar información financiera
+    // Los vendedores SÍ pueden ver precio de venta
+    if (userRole === 'visualizador') {
       const vehiclesSinFinanzas = vehicles.map(vehicle => {
         const vehicleObj = vehicle.toObject();
         delete vehicleObj.precioCompra;
@@ -81,6 +82,20 @@ export const getAllVehicles = async (req: AuthRequest, res: Response): Promise<v
         return vehicleObj;
       });
       res.json(vehiclesSinFinanzas);
+      return;
+    }
+    
+    // Si el usuario es vendedor, ocultar solo información sensible (costos e inversionistas)
+    if (userRole === 'vendedor') {
+      const vehiclesVendedor = vehicles.map(vehicle => {
+        const vehicleObj = vehicle.toObject();
+        delete vehicleObj.precioCompra;
+        delete vehicleObj.gastos;
+        delete vehicleObj.gastosDetallados;
+        delete vehicleObj.inversionistas;
+        return vehicleObj;
+      });
+      res.json(vehiclesVendedor);
       return;
     }
 
@@ -103,8 +118,8 @@ export const getVehicleById = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // Si el usuario es vendedor o visualizador, ocultar información financiera
-    if (userRole === 'vendedor' || userRole === 'visualizador') {
+    // Si el usuario es visualizador, ocultar información financiera
+    if (userRole === 'visualizador') {
       const vehicleObj = vehicle.toObject();
       const vehicleSinFinanzas = {
         ...vehicleObj,
@@ -115,6 +130,20 @@ export const getVehicleById = async (req: AuthRequest, res: Response): Promise<v
         inversionistas: undefined,
       };
       res.json(vehicleSinFinanzas);
+      return;
+    }
+    
+    // Si el usuario es vendedor, ocultar solo información sensible (costos e inversionistas)
+    if (userRole === 'vendedor') {
+      const vehicleObj = vehicle.toObject();
+      const vehicleVendedor = {
+        ...vehicleObj,
+        precioCompra: undefined,
+        gastos: undefined,
+        gastosDetallados: undefined,
+        inversionistas: undefined,
+      };
+      res.json(vehicleVendedor);
       return;
     }
 
