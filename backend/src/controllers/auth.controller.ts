@@ -140,20 +140,33 @@ export const getAllUsers = async (req: Request, res: Response): Promise<void> =>
 export const updateUser = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { nombre, email, rol, activo } = req.body;
+    const { nombre, email, rol, activo, password } = req.body;
 
-    const user = await User.findByIdAndUpdate(
-      id,
-      { nombre, email, rol, activo },
-      { new: true, runValidators: true }
-    ).select('-password');
+    const user = await User.findById(id);
 
     if (!user) {
       res.status(404).json({ message: 'Usuario no encontrado' });
       return;
     }
 
-    res.json({ message: 'Usuario actualizado exitosamente', user });
+    // Actualizar campos básicos
+    if (nombre) user.nombre = nombre;
+    if (email) user.email = email;
+    if (rol) user.rol = rol;
+    if (activo !== undefined) user.activo = activo;
+    
+    // Solo actualizar password si se proporcionó uno nuevo
+    if (password && password.trim() !== '') {
+      user.password = password;
+    }
+
+    await user.save();
+
+    // Retornar usuario sin password
+    const userResponse = user.toObject();
+    delete userResponse.password;
+
+    res.json({ message: 'Usuario actualizado exitosamente', user: userResponse });
   } catch (error: any) {
     res.status(500).json({ message: 'Error al actualizar usuario', error: error.message });
   }
