@@ -393,10 +393,15 @@ vehicleSchema.pre('save', function (next) {
     this.gastos.varios = this.gastosDetallados.varios?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0;
   }
   
-  // Calcular gastos generales desde gastos detallados
-  const gastosGenerales = this.gastos.pintura + this.gastos.mecanica + this.gastos.traspaso + 
-                          this.gastos.alistamiento + this.gastos.tapiceria + this.gastos.transporte + 
-                          this.gastos.varios;
+  // Calcular gastos generales - SUMAR todos los campos de gastos (incluye gastos detallados + gastos directos)
+  const gastosGenerales = 
+    (this.gastos.pintura || 0) + 
+    (this.gastos.mecanica || 0) + 
+    (this.gastos.traspaso || 0) + 
+    (this.gastos.alistamiento || 0) + 
+    (this.gastos.tapiceria || 0) + 
+    (this.gastos.transporte || 0) + 
+    (this.gastos.varios || 0);
   
   // Calcular gastos de inversionistas (suma de todos sus gastos individuales)
   const gastosInversionistas = this.inversionistas && this.inversionistas.length > 0

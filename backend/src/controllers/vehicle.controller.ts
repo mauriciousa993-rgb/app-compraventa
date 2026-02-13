@@ -9,16 +9,16 @@ import PDFDocument from 'pdfkit';
 // Crear nuevo vehículo
 export const createVehicle = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const vehicleData = {
-      ...req.body,
-      registradoPor: req.user?.userId,
-    };
+    const vehicleData = req.body;
+    
+    // Asignar el usuario que registra
+    vehicleData.registradoPor = req.user?.userId;
 
     const vehicle = new Vehicle(vehicleData);
     await vehicle.save();
 
     res.status(201).json({
-      message: 'Vehículo registrado exitosamente',
+      message: 'Vehículo creado exitosamente',
       vehicle,
     });
   } catch (error: any) {
@@ -51,6 +51,7 @@ export const createVehicle = async (req: AuthRequest, res: Response): Promise<vo
     });
   }
 };
+
 
 // Obtener todos los vehículos
 export const getAllVehicles = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -146,6 +147,7 @@ export const getVehicleById = async (req: AuthRequest, res: Response): Promise<v
       res.json(vehicleVendedor);
       return;
     }
+
 
     res.json(vehicle);
   } catch (error: any) {
