@@ -6,5 +6,11 @@
       "source": "/(.*)",
       "destination": "/index.html"
     }
-  ]
+  ],
+  "build": {
+    "env": {
+      "FORCE_REBUILD": "true",
+      "REBUILD_TIMESTAMP": "2025-01-13-force-redeploy-v2"
+    }
+  }
 }
