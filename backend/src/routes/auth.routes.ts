@@ -10,6 +10,7 @@ import {
 } from '../controllers/auth.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import User from '../models/User';
+import mongoose from 'mongoose';
 
 const router = Router();
 
@@ -17,6 +18,41 @@ const router = Router();
 // NOTA: La ruta de registro público ha sido eliminada por seguridad
 // Solo el administrador puede crear nuevos usuarios
 router.post('/login', login);
+
+// Endpoint de diagnóstico para verificar conexión a MongoDB
+router.get('/diagnostico', async (req: Request, res: Response) => {
+  try {
+    const dbState = mongoose.connection.readyState;
+    const estados = ['desconectado', 'conectado', 'conectando', 'desconectando'];
+    
+    let usuariosCount = 0;
+    let usuariosList: any[] = [];
+    
+    if (dbState === 1) {
+      usuariosCount = await User.countDocuments();
+      usuariosList = await User.find().select('nombre email rol activo').limit(5);
+    }
+    
+    res.json({
+      mongodb: {
+        estado: estados[dbState] || 'desconocido',
+        readyState: dbState,
+        uriConfigurada: process.env.MONGODB_URI ? 'SÍ (oculta por seguridad)' : 'NO CONFIGURADA'
+      },
+      usuarios: {
+        total: usuariosCount,
+        lista: usuariosList
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      error: 'Error en diagnóstico',
+      message: error.message
+    });
+  }
+});
+
 
 // Ruta temporal para crear el primer admin (solo si no existe ningún admin)
 // Esta ruta se puede eliminar después de crear el primer admin
