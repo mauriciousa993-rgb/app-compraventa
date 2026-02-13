@@ -7,7 +7,9 @@ import authRoutes from './routes/auth.routes';
 import vehicleRoutes from './routes/vehicle.routes';
 
 // Configurar variables de entorno
+// REDEPLOY_TRIGGER: 2025-01-13-v4-marketplace-fotos
 dotenv.config();
+
 
 // Crear aplicación Express
 const app = express();
