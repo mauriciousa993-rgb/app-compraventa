@@ -55,18 +55,33 @@ const Marketplace: React.FC = () => {
     // Usar variable de entorno si está disponible
     const viteApiUrl = (import.meta as any).env?.VITE_API_URL;
     if (viteApiUrl) {
+      console.log('Using VITE_API_URL:', viteApiUrl);
       return viteApiUrl;
     }
     
     // En producción (Vercel), usar la URL de Render
-    if (window.location.hostname.includes('vercel.app')) {
-      // Reemplaza con tu URL de Render
-      return 'https://app-compraventa.onrender.com';
+    const hostname = window.location.hostname;
+    console.log('Current hostname:', hostname);
+    
+    if (hostname.includes('vercel.app') || hostname === 'localhost') {
+      // URL del backend en Render
+      const renderUrl = 'https://app-compraventa.onrender.com';
+      console.log('Using Render URL:', renderUrl);
+      return renderUrl;
     }
     
-    // Desarrollo local
-    return 'http://localhost:5000';
+    // Fallback para otros casos
+    return 'https://app-compraventa.onrender.com';
   };
+
+  // Debug: mostrar URL de imagen
+  const getImageUrl = (path: string): string => {
+    const baseUrl = getAPIURL();
+    const fullUrl = `${baseUrl}${path}`;
+    console.log('Image URL:', fullUrl);
+    return fullUrl;
+  };
+
 
 
   if (loading) {
