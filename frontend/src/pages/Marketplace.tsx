@@ -23,6 +23,7 @@ const Marketplace: React.FC = () => {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -114,6 +115,13 @@ const Marketplace: React.FC = () => {
   }
 
 
+  const hasValidImage = (vehicle: Vehicle): boolean => {
+    return (
+      !!vehicle.fotos?.exteriores?.[0] &&
+      !imageErrors[vehicle._id]
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -149,13 +157,14 @@ const Marketplace: React.FC = () => {
               <div key={vehicle._id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
                 {/* Vehicle Image */}
                 <div className="h-48 bg-gray-200">
-                  {vehicle.fotos.exteriores && vehicle.fotos.exteriores.length > 0 ? (
+                  {hasValidImage(vehicle) ? (
                     <img
                       src={getImageUrl(vehicle.fotos.exteriores[0])}
                       alt={`${vehicle.marca} ${vehicle.modelo}`}
                       className="w-full h-full object-cover"
                       onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).style.display = 'none';
+                        setImageErrors((prev) => ({ ...prev, [vehicle._id]: true }));
+                        (e.currentTarget as HTMLImageElement).onerror = null;
                       }}
                     />
                   ) : (

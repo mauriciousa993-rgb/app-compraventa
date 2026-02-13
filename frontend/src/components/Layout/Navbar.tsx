@@ -31,7 +31,7 @@ const Navbar: React.FC = () => {
             <span className="sm:hidden text-base font-bold truncate">Compraventa</span>
           </Link>
 
-          <div className="hidden md:flex items-center space-x-6">
+          <div className="hidden lg:flex items-center space-x-6">
             <Link to="/" className="hover:text-primary-200 transition-colors">
               Dashboard
             </Link>
@@ -75,7 +75,7 @@ const Navbar: React.FC = () => {
           <button
             type="button"
             onClick={toggleMobileMenu}
-            className="md:hidden p-2 hover:bg-primary-700 rounded-lg transition-colors flex-shrink-0"
+            className="lg:hidden p-2 hover:bg-primary-700 rounded-lg transition-colors flex-shrink-0"
             aria-label="Toggle menu"
             aria-expanded={isMobileMenuOpen}
           >
@@ -84,7 +84,7 @@ const Navbar: React.FC = () => {
         </div>
 
         {isMobileMenuOpen && (
-          <div className="md:hidden border-t border-primary-500 py-4">
+          <div className="lg:hidden border-t border-primary-500 py-4">
             <div className="flex flex-col space-y-4">
               <Link
                 to="/"
