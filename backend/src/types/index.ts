@@ -18,6 +18,7 @@ export interface AuthRequest extends Request {
     rol: string;
   };
   files?: any;
+  [key: string]: any;
 }
 
 export interface IVehicle {

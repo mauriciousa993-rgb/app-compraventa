@@ -8,7 +8,9 @@ export const authenticate = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
+    const authHeader = req.header('Authorization');
+    const authorization = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+    const token = authorization?.replace('Bearer ', '');
 
     if (!token) {
       res.status(401).json({ message: 'No se proporcionó token de autenticación' });
