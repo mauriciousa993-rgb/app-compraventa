@@ -18,8 +18,9 @@ const Login: React.FC = () => {
 
     try {
       await login(email, password);
-      navigate('/');
+      navigate('/vehicles');
     } catch (err: any) {
+
       setError(err.message || 'Error al iniciar sesión');
     } finally {
       setIsLoading(false);
