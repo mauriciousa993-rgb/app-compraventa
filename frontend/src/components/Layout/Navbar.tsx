@@ -31,7 +31,7 @@ const Navbar: React.FC = () => {
             <span className="sm:hidden text-base font-bold truncate">Compraventa</span>
           </Link>
 
-          <div className="hidden xl:flex items-center space-x-6">
+          <div className="hidden 2xl:flex items-center space-x-6">
             <Link to="/" className="hover:text-primary-200 transition-colors">
               Dashboard
             </Link>
@@ -75,11 +75,12 @@ const Navbar: React.FC = () => {
           <button
             type="button"
             onClick={toggleMobileMenu}
-            className="p-2 hover:bg-primary-700 rounded-lg transition-colors flex-shrink-0"
+            className="inline-flex items-center gap-2 p-2 bg-primary-700 hover:bg-primary-800 rounded-lg transition-colors flex-shrink-0 border border-primary-400"
             aria-label="Toggle menu"
             aria-expanded={isMobileMenuOpen}
           >
             {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            <span className="hidden sm:inline text-sm font-semibold">Menu</span>
           </button>
         </div>
 
