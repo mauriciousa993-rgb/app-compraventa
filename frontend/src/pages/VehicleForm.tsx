@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Upload, Save, Image, X, Plus, Trash2, Users } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
-import api from '../services/api';
+import api, { vehiclesAPI } from '../services/api';
 import { DatosVenta } from '../types';
 
 const VehicleForm: React.FC = () => {
@@ -507,27 +507,37 @@ const VehicleForm: React.FC = () => {
     setIsLoading(true);
 
     try {
+      let vehicleId = id;
+
       if (isEditMode && id) {
         // Modo edición: usar PUT
         await api.put(`/vehicles/${id}`, formData);
-        setSuccess(true);
-        setTimeout(() => {
-          navigate('/vehicles');
-        }, 1500);
       } else {
         // Modo creación: usar POST
-        await api.post('/vehicles', formData);
-        setSuccess(true);
-        setTimeout(() => {
-          navigate('/vehicles');
-        }, 1500);
+        const response = await api.post('/vehicles', formData);
+        vehicleId = response.data.vehicle._id;
       }
+
+      // Si hay una foto seleccionada, subirla
+      if (selectedFile && vehicleId) {
+        try {
+          await vehiclesAPI.uploadPhotos(vehicleId, 'exteriores', [selectedFile]);
+        } catch (photoError: any) {
+          console.error('Error al subir foto:', photoError);
+        }
+      }
+
+      setSuccess(true);
+      setTimeout(() => {
+        navigate('/vehicles');
+      }, 1500);
     } catch (err: any) {
       setError(err.response?.data?.message || `Error al ${isEditMode ? 'actualizar' : 'crear'} vehículo`);
     } finally {
       setIsLoading(false);
     }
   };
+
 
   // Mostrar loading mientras carga los datos del vehículo
   if (isLoadingData) {

@@ -16,10 +16,14 @@ import {
   saveSaleData,
   generateContract,
 } from '../controllers/vehicle.controller';
+import { getMarketplaceVehicles } from '../controllers/marketplace.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { uploadMultiple } from '../middleware/upload.middleware';
 
 const router = Router();
+
+// Ruta pública para marketplace (sin autenticación)
+router.get('/marketplace', getMarketplaceVehicles);
 
 // Todas las rutas requieren autenticación
 router.use(authenticate);
