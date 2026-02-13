@@ -32,6 +32,35 @@ const getAPIURL = (): string => {
 
 const API_URL = getAPIURL();
 
+const getPhotoFileName = (photoPath: string): string => {
+  const cleanPath = photoPath.split('?')[0].split('#')[0].trim();
+  const parts = cleanPath.split('/').filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] : '';
+};
+
+export const buildVehiclePhotoUrl = (photoPath?: string): string => {
+  if (!photoPath) return '';
+
+  if (photoPath.startsWith('http://') || photoPath.startsWith('https://')) {
+    try {
+      const parsed = new URL(photoPath);
+      if (parsed.pathname.includes('/api/vehicles/photo/')) {
+        return photoPath;
+      }
+      const fileNameFromAbsolute = getPhotoFileName(parsed.pathname);
+      if (!fileNameFromAbsolute) return photoPath;
+      return `${API_URL}/vehicles/photo/${encodeURIComponent(fileNameFromAbsolute)}`;
+    } catch {
+      return photoPath;
+    }
+  }
+
+  const fileName = getPhotoFileName(photoPath);
+  if (!fileName) return '';
+
+  return `${API_URL}/vehicles/photo/${encodeURIComponent(fileName)}`;
+};
+
 const api = axios.create({
   baseURL: API_URL,
   headers: {

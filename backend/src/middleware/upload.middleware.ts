@@ -1,12 +1,9 @@
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
+import { ensureUploadsDir } from '../utils/uploads';
 
 // Crear directorio de uploads si no existe
-const uploadDir = path.join(__dirname, '../../uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+const uploadDir = ensureUploadsDir();
 
 // Configuración de almacenamiento
 const storage = multer.diskStorage({

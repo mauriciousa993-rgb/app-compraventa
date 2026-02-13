@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Upload, Save, Image, X, Plus, Trash2, Users } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
-import api, { vehiclesAPI } from '../services/api';
+import api, { buildVehiclePhotoUrl, vehiclesAPI } from '../services/api';
 import { DatosVenta } from '../types';
 
 const VehicleForm: React.FC = () => {
@@ -113,24 +113,9 @@ const VehicleForm: React.FC = () => {
   const [usuarios, setUsuarios] = useState<Array<{ id: string; nombre: string; email: string }>>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const getBackendOrigin = (): string => {
-    const viteApiUrl = (import.meta as any).env?.VITE_API_URL;
-    if (viteApiUrl) {
-      try {
-        return new URL(viteApiUrl).origin;
-      } catch {
-        return String(viteApiUrl).replace(/\/api\/?$/, '');
-      }
-    }
-    return 'https://app-compraventa.onrender.com';
-  };
-
-  const getImageUrl = (path: string): string => {
-    if (!path) return '';
-    if (path.startsWith('http://') || path.startsWith('https://')) return path;
-    if (path.startsWith('/uploads/')) return `${getBackendOrigin()}${path}`;
-    if (path.startsWith('uploads/')) return `${getBackendOrigin()}/${path}`;
-    return `${getBackendOrigin()}/uploads/${path}`;
+  const getLastPhoto = (photos?: string[]): string => {
+    if (!photos || photos.length === 0) return '';
+    return photos[photos.length - 1];
   };
   
   // Estado para datos de venta
@@ -291,9 +276,13 @@ const VehicleForm: React.FC = () => {
           documentos: vehicle.fotos?.documentos || []
         }
       });
-      const mainPhoto = vehicle.fotos?.exteriores?.[0];
+      const mainPhoto =
+        getLastPhoto(vehicle.fotos?.exteriores) ||
+        getLastPhoto(vehicle.fotos?.interiores) ||
+        getLastPhoto(vehicle.fotos?.detalles) ||
+        '';
       setSelectedFile(null);
-      setPhotoPreview(mainPhoto ? getImageUrl(mainPhoto) : '');
+      setPhotoPreview(mainPhoto ? buildVehiclePhotoUrl(mainPhoto) : '');
     } catch (err: any) {
       console.error('Error al cargar vehículo:', err);
       setError(err.response?.data?.message || 'Error al cargar los datos del vehículo');

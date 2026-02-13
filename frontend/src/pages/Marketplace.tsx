@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import api, { buildVehiclePhotoUrl } from '../services/api';
 
 interface Vehicle {
   _id: string;
@@ -51,45 +51,16 @@ const Marketplace: React.FC = () => {
   const handleAdminLogin = () => {
     navigate('/login');
   };
-
-  const getBackendOrigin = (): string => {
-    // Si VITE_API_URL existe (ej. https://backend.com/api), quedarse con el origin
-    const viteApiUrl = (import.meta as any).env?.VITE_API_URL;
-    if (viteApiUrl) {
-      try {
-        return new URL(viteApiUrl).origin;
-      } catch {
-        return viteApiUrl.replace(/\/api\/?$/, '');
-      }
-    }
-
-    // En producción (Vercel), usar backend desplegado
-    const hostname = window.location.hostname;
-    if (hostname.includes('vercel.app') || hostname === 'localhost') {
-      return 'https://app-compraventa.onrender.com';
-    }
-
-    return 'https://app-compraventa.onrender.com';
-  };
-
-  const getImageUrl = (path: string): string => {
-    if (!path) return '';
-    if (path.startsWith('http://') || path.startsWith('https://')) return path;
-
-    const cleanPath = path.startsWith('/uploads/')
-      ? path
-      : path.startsWith('uploads/')
-      ? `/${path}`
-      : `/uploads/${path}`;
-
-    return `${getBackendOrigin()}${cleanPath}`;
+  const getLastPhoto = (photos?: string[]): string => {
+    if (!photos || photos.length === 0) return '';
+    return photos[photos.length - 1];
   };
 
   const getPrimaryPhoto = (vehicle: Vehicle): string => {
     return (
-      vehicle.fotos?.exteriores?.[0] ||
-      vehicle.fotos?.interiores?.[0] ||
-      vehicle.fotos?.detalles?.[0] ||
+      getLastPhoto(vehicle.fotos?.exteriores) ||
+      getLastPhoto(vehicle.fotos?.interiores) ||
+      getLastPhoto(vehicle.fotos?.detalles) ||
       ''
     );
   };
@@ -168,7 +139,7 @@ const Marketplace: React.FC = () => {
                 <div className="h-48 bg-gray-200">
                   {hasValidImage(vehicle) ? (
                     <img
-                      src={getImageUrl(getPrimaryPhoto(vehicle))}
+                      src={buildVehiclePhotoUrl(getPrimaryPhoto(vehicle))}
                       alt={`${vehicle.marca} ${vehicle.modelo}`}
                       className="w-full h-full object-cover"
                       onError={(e) => {
@@ -232,3 +203,4 @@ const Marketplace: React.FC = () => {
 };
 
 export default Marketplace;
+

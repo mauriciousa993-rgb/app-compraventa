@@ -15,6 +15,7 @@ import {
   exportExpensesTemplate,
   saveSaleData,
   generateContract,
+  getVehiclePhoto,
 } from '../controllers/vehicle.controller';
 import { getMarketplaceVehicles } from '../controllers/marketplace.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
@@ -24,6 +25,7 @@ const router = Router();
 
 // Ruta pública para marketplace (sin autenticación)
 router.get('/marketplace', getMarketplaceVehicles);
+router.get('/photo/:filename', getVehiclePhoto);
 
 // Todas las rutas requieren autenticación
 router.use(authenticate);

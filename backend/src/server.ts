@@ -1,10 +1,10 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import path from 'path';
 import { connectDB } from './config/database';
 import authRoutes from './routes/auth.routes';
 import vehicleRoutes from './routes/vehicle.routes';
+import { ensureUploadsDir } from './utils/uploads';
 
 // Configurar variables de entorno
 // REDEPLOY_TRIGGER: 2025-01-13-v4-marketplace-fotos
@@ -64,7 +64,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Servir archivos estáticos (fotos)
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/uploads', express.static(ensureUploadsDir()));
 
 // Rutas
 app.use('/api/auth', authRoutes);

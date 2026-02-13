@@ -1,10 +1,11 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import Vehicle from '../models/Vehicle';
 import { AuthRequest } from '../types';
 import ExcelJS from 'exceljs';
 import path from 'path';
 import fs from 'fs';
 import PDFDocument from 'pdfkit';
+import { ensureUploadsDir, getPhotoFileName, getUploadsDir } from '../utils/uploads';
 
 const calculateVehicleTotalExpenses = (vehicle: any): number => {
   const gastos = vehicle.gastos || {};
@@ -220,7 +221,9 @@ export const deleteVehicle = async (req: AuthRequest, res: Response): Promise<vo
     ];
 
     allPhotos.forEach((photo) => {
-      const photoPath = path.join(__dirname, '../../uploads', photo);
+      const fileName = getPhotoFileName(photo);
+      if (!fileName) return;
+      const photoPath = path.join(getUploadsDir(), fileName);
       if (fs.existsSync(photoPath)) {
         fs.unlinkSync(photoPath);
       }
@@ -229,6 +232,27 @@ export const deleteVehicle = async (req: AuthRequest, res: Response): Promise<vo
     res.json({ message: 'Vehículo eliminado exitosamente' });
   } catch (error: any) {
     res.status(500).json({ message: 'Error al eliminar vehículo', error: error.message });
+  }
+};
+
+// Servir foto por nombre de archivo
+export const getVehiclePhoto = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const fileName = getPhotoFileName(req.params.filename || '');
+    if (!fileName) {
+      res.status(404).json({ message: 'Foto no encontrada' });
+      return;
+    }
+
+    const photoPath = path.join(getUploadsDir(), fileName);
+    if (!fs.existsSync(photoPath)) {
+      res.status(404).json({ message: 'Foto no encontrada' });
+      return;
+    }
+
+    res.sendFile(photoPath);
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error al obtener foto', error: error.message });
   }
 };
 
@@ -421,7 +445,7 @@ export const exportToExcel = async (req: AuthRequest, res: Response): Promise<vo
 
     // Generar archivo
     const fileName = `inventario-vehiculos-${Date.now()}.xlsx`;
-    const filePath = path.join(__dirname, '../../uploads', fileName);
+    const filePath = path.join(ensureUploadsDir(), fileName);
 
     await workbook.xlsx.writeFile(filePath);
 
@@ -819,7 +843,7 @@ export const exportVehicleReport = async (
 
     // Generar archivo
     const fileName = `vehiculo-${vehicle.placa}-${Date.now()}.xlsx`;
-    const filePath = path.join(__dirname, '../../uploads', fileName);
+    const filePath = path.join(ensureUploadsDir(), fileName);
 
     await workbook.xlsx.writeFile(filePath);
 
@@ -962,7 +986,7 @@ export const exportMonthlyReport = async (
 
     // Generar archivo
     const fileName = `reporte-ventas-${selectedYear}-${Date.now()}.xlsx`;
-    const filePath = path.join(__dirname, '../../uploads', fileName);
+    const filePath = path.join(ensureUploadsDir(), fileName);
 
     await workbook.xlsx.writeFile(filePath);
 
@@ -1100,7 +1124,7 @@ export const exportExpensesTemplate = async (
 
     // Generar archivo
     const fileName = `gastos-${vehicle.placa}-${Date.now()}.xlsx`;
-    const filePath = path.join(__dirname, '../../uploads', fileName);
+    const filePath = path.join(ensureUploadsDir(), fileName);
 
     await workbook.xlsx.writeFile(filePath);
 
