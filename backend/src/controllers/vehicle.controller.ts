@@ -6,6 +6,25 @@ import path from 'path';
 import fs from 'fs';
 import PDFDocument from 'pdfkit';
 
+const calculateVehicleTotalExpenses = (vehicle: any): number => {
+  const gastos = vehicle.gastos || {};
+  const gastosGenerales =
+    (gastos.pintura || 0) +
+    (gastos.mecanica || 0) +
+    (gastos.traspaso || 0) +
+    (gastos.alistamiento || 0) +
+    (gastos.tapiceria || 0) +
+    (gastos.transporte || 0) +
+    (gastos.varios || 0);
+
+  const gastosInversionistas = (vehicle.inversionistas || []).reduce((sum: number, inv: any) => {
+    const totalInv = (inv.gastos || []).reduce((acc: number, g: any) => acc + (g.monto || 0), 0);
+    return sum + totalInv;
+  }, 0);
+
+  return gastosGenerales + gastosInversionistas;
+};
+
 // Crear nuevo vehículo
 export const createVehicle = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -159,17 +178,17 @@ export const getVehicleById = async (req: AuthRequest, res: Response): Promise<v
 export const updateVehicle = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-
-    const vehicle = await Vehicle.findByIdAndUpdate(
-      id,
-      req.body,
-      { new: true, runValidators: true }
-    ).populate('registradoPor', 'nombre email');
+    const vehicle = await Vehicle.findById(id);
 
     if (!vehicle) {
       res.status(404).json({ message: 'Vehículo no encontrado' });
       return;
     }
+
+    // Usar save() para disparar hooks de mongoose (recalcula gastos.total e inversionistas)
+    vehicle.set(req.body);
+    await vehicle.save();
+    await vehicle.populate('registradoPor', 'nombre email');
 
     res.json({
       message: 'Vehículo actualizado exitosamente',
@@ -240,20 +259,18 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
     // Si es admin, calcular totales completos
     if (userRole === 'admin') {
       // Valor del inventario = suma de (Precio Compra + Gastos TOTALES) de vehículos en stock
-      // gastos.total ya incluye gastos detallados + gastos de inversionistas
       valorInventario = vehiculosEnStock.reduce(
         (sum, vehicle) => {
           const precioCompra = vehicle.precioCompra || 0;
-          const gastosTotal = vehicle.gastos?.total || 0;
+          const gastosTotal = calculateVehicleTotalExpenses(vehicle);
           return sum + precioCompra + gastosTotal;
         },
         0
       );
 
       // Total de gastos solo de vehículos en stock
-      // gastos.total ya incluye todos los gastos (detallados + inversionistas)
       totalGastos = vehiculosEnStock.reduce(
-        (sum, vehicle) => sum + (vehicle.gastos?.total || 0),
+        (sum, vehicle) => sum + calculateVehicleTotalExpenses(vehicle),
         0
       );
 
@@ -263,7 +280,7 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
         (sum, vehicle) => {
           const precioVenta = vehicle.precioVenta || 0;
           const precioCompra = vehicle.precioCompra || 0;
-          const gastosTotal = vehicle.gastos?.total || 0;
+          const gastosTotal = calculateVehicleTotalExpenses(vehicle);
           const utilidad = precioVenta - precioCompra - gastosTotal;
           return sum + utilidad;
         },
@@ -275,7 +292,7 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
         (sum, vehicle) => {
           const precioVenta = vehicle.precioVenta || 0;
           const precioCompra = vehicle.precioCompra || 0;
-          const gastosTotal = vehicle.gastos?.total || 0;
+          const gastosTotal = calculateVehicleTotalExpenses(vehicle);
           const utilidad = precioVenta - precioCompra - gastosTotal;
           return sum + utilidad;
         },
@@ -298,7 +315,7 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
           valorInventario += inversionista.montoInversion + gastosInv;
           totalGastos += gastosInv;
           
-          const utilidadTotal = vehicle.precioVenta - vehicle.precioCompra - (vehicle.gastos?.total || 0);
+          const utilidadTotal = vehicle.precioVenta - vehicle.precioCompra - calculateVehicleTotalExpenses(vehicle);
           gananciasEstimadas += utilidadTotal * porcentaje;
         }
       });

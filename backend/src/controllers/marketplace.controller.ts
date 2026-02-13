@@ -12,7 +12,27 @@ export const getMarketplaceVehicles = async (req: AuthRequest, res: Response): P
       .select('marca modelo año placa color kilometraje precioVenta fotos.exteriores fotos.interiores fotos.detalles observaciones')
       .sort({ fechaIngreso: -1 });
 
-    res.json(vehicles);
+    const normalizePhotoPath = (photo: string): string => {
+      if (!photo) return '';
+      if (photo.startsWith('http://') || photo.startsWith('https://')) return photo;
+      if (photo.startsWith('/uploads/')) return photo;
+      if (photo.startsWith('uploads/')) return `/${photo}`;
+      return `/uploads/${photo}`;
+    };
+
+    const vehiclesWithNormalizedPhotos = vehicles.map((vehicle) => {
+      const v = vehicle.toObject();
+      return {
+        ...v,
+        fotos: {
+          exteriores: (v.fotos?.exteriores || []).map(normalizePhotoPath),
+          interiores: (v.fotos?.interiores || []).map(normalizePhotoPath),
+          detalles: (v.fotos?.detalles || []).map(normalizePhotoPath),
+        },
+      };
+    });
+
+    res.json(vehiclesWithNormalizedPhotos);
   } catch (error: any) {
     res.status(500).json({ message: 'Error al obtener vehículos del marketplace', error: error.message });
   }

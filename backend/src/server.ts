@@ -14,15 +14,37 @@ dotenv.config();
 // Crear aplicación Express
 const app = express();
 
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 // Configurar CORS para permitir acceso desde móviles
 const corsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    // Permitir requests sin origen (mobile apps) y localhost
-    if (!origin || origin.includes('localhost') || origin.includes('127.0.0.1') || origin.includes('192.168') || origin.includes('10.')) {
+    // Permitir requests sin origin (apps móviles/Postman) y lista explícita
+    if (!origin) {
       callback(null, true);
-    } else {
-      callback(null, true); // En desarrollo, permitir todas las origins
+      return;
     }
+
+    const isLocalNetwork =
+      origin.includes('localhost') ||
+      origin.includes('127.0.0.1') ||
+      origin.includes('192.168.') ||
+      origin.includes('10.');
+
+    if (process.env.NODE_ENV !== 'production' && isLocalNetwork) {
+      callback(null, true);
+      return;
+    }
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error('Origen no permitido por CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],

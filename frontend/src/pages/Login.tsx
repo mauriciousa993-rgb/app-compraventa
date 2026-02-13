@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Car, Mail, Lock, AlertCircle } from 'lucide-react';
 
@@ -102,14 +102,6 @@ const Login: React.FC = () => {
             </button>
           </form>
 
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              ¿No tienes cuenta?{' '}
-              <Link to="/register" className="text-primary-600 hover:text-primary-700 font-medium">
-                Regístrate aquí
-              </Link>
-            </p>
-          </div>
         </div>
 
         <div className="mt-8 text-center text-primary-100 text-sm">

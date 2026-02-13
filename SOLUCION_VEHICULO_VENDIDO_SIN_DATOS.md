@@ -1,4 +1,4 @@
-# Solución: Vehículo Marcado como Vendido Sin Datos de Venta
+y sigue # Solución: Vehículo Marcado como Vendido Sin Datos de Venta
 
 ## 🔍 Problema Identificado
 

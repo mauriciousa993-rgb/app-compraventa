@@ -1,4 +1,4 @@
-# Funcionalidad: Ver y Editar Datos de Venta
+ # Funcionalidad: Ver y Editar Datos de Venta
 
 ## 🎯 Problema Resuelto
 

@@ -1,6 +1,5 @@
 import { Router, Request, Response } from 'express';
 import {
-  register,
   login,
   getProfile,
   getAllUsers,
@@ -20,7 +19,7 @@ const router = Router();
 router.post('/login', login);
 
 // Endpoint de diagnóstico para verificar conexión a MongoDB
-router.get('/diagnostico', async (req: Request, res: Response) => {
+router.get('/diagnostico', authenticate, authorize('admin'), async (req: Request, res: Response) => {
   try {
     const dbState = mongoose.connection.readyState;
     const estados = ['desconectado', 'conectado', 'conectando', 'desconectando'];
@@ -58,6 +57,14 @@ router.get('/diagnostico', async (req: Request, res: Response) => {
 // Esta ruta se puede eliminar después de crear el primer admin
 router.post('/setup-admin', async (req: Request, res: Response) => {
   try {
+    const allowSetupAdmin = process.env.ALLOW_SETUP_ADMIN === 'true';
+    if (!allowSetupAdmin) {
+      res.status(403).json({
+        message: 'Setup de administrador deshabilitado. Activa ALLOW_SETUP_ADMIN=true temporalmente si lo necesitas.'
+      });
+      return;
+    }
+
     // Verificar si ya existe algún usuario admin
     const adminExistente = await User.findOne({ rol: 'admin' });
     if (adminExistente) {

@@ -51,35 +51,37 @@ const Marketplace: React.FC = () => {
     navigate('/login');
   };
 
-  const getAPIURL = (): string => {
-    // Usar variable de entorno si está disponible
+  const getBackendOrigin = (): string => {
+    // Si VITE_API_URL existe (ej. https://backend.com/api), quedarse con el origin
     const viteApiUrl = (import.meta as any).env?.VITE_API_URL;
     if (viteApiUrl) {
-      console.log('Using VITE_API_URL:', viteApiUrl);
-      return viteApiUrl;
+      try {
+        return new URL(viteApiUrl).origin;
+      } catch {
+        return viteApiUrl.replace(/\/api\/?$/, '');
+      }
     }
-    
-    // En producción (Vercel), usar la URL de Render
+
+    // En producción (Vercel), usar backend desplegado
     const hostname = window.location.hostname;
-    console.log('Current hostname:', hostname);
-    
     if (hostname.includes('vercel.app') || hostname === 'localhost') {
-      // URL del backend en Render
-      const renderUrl = 'https://app-compraventa.onrender.com';
-      console.log('Using Render URL:', renderUrl);
-      return renderUrl;
+      return 'https://app-compraventa.onrender.com';
     }
-    
-    // Fallback para otros casos
+
     return 'https://app-compraventa.onrender.com';
   };
 
-  // Debug: mostrar URL de imagen
   const getImageUrl = (path: string): string => {
-    const baseUrl = getAPIURL();
-    const fullUrl = `${baseUrl}${path}`;
-    console.log('Image URL:', fullUrl);
-    return fullUrl;
+    if (!path) return '';
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+
+    const cleanPath = path.startsWith('/uploads/')
+      ? path
+      : path.startsWith('uploads/')
+      ? `/${path}`
+      : `/uploads/${path}`;
+
+    return `${getBackendOrigin()}${cleanPath}`;
   };
 
 
@@ -149,9 +151,12 @@ const Marketplace: React.FC = () => {
                 <div className="h-48 bg-gray-200">
                   {vehicle.fotos.exteriores && vehicle.fotos.exteriores.length > 0 ? (
                     <img
-                      src={`${getAPIURL()}${vehicle.fotos.exteriores[0]}`}
+                      src={getImageUrl(vehicle.fotos.exteriores[0])}
                       alt={`${vehicle.marca} ${vehicle.modelo}`}
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = 'none';
+                      }}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-gray-400">

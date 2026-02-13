@@ -1,4 +1,4 @@
-# Funcionalidad: Gastos por Inversionista
+ detalles # Funcionalidad: Gastos por Inversionista
 
 ## Descripción
 Se ha implementado la capacidad de registrar gastos específicos para cada inversionista en un vehículo. Estos gastos se suman automáticamente a los gastos totales del vehículo.

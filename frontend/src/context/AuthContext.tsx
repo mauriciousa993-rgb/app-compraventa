@@ -6,7 +6,6 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
-  register: (nombre: string, email: string, password: string, rol?: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -43,18 +42,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const register = async (nombre: string, email: string, password: string, rol?: string) => {
-    try {
-      const response: AuthResponse = await authAPI.register({ nombre, email, password, rol });
-      setToken(response.token);
-      setUser(response.user);
-      localStorage.setItem('token', response.token);
-      localStorage.setItem('user', JSON.stringify(response.user));
-    } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Error al registrar usuario');
-    }
-  };
-
   const logout = () => {
     setUser(null);
     setToken(null);
@@ -68,7 +55,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         user,
         token,
         login,
-        register,
         logout,
         isAuthenticated: !!token,
         isLoading,

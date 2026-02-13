@@ -1,4 +1,4 @@
-# Cambios Finales - Sistema de Inversionistas
+actualiza el ex# Cambios Finales - Sistema de Inversionistas
 
 ## ✅ Problemas Resueltos
 
