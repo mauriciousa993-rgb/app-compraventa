@@ -52,13 +52,22 @@ const Marketplace: React.FC = () => {
   };
 
   const getAPIURL = (): string => {
+    // Usar variable de entorno si está disponible
     const viteApiUrl = (import.meta as any).env?.VITE_API_URL;
     if (viteApiUrl) {
       return viteApiUrl;
     }
-    const hostname = window.location.hostname;
-    return `http://${hostname}:5000`;
+    
+    // En producción (Vercel), usar la URL de Render
+    if (window.location.hostname.includes('vercel.app')) {
+      // Reemplaza con tu URL de Render
+      return 'https://app-compraventa.onrender.com';
+    }
+    
+    // Desarrollo local
+    return 'http://localhost:5000';
   };
+
 
   if (loading) {
     return (
