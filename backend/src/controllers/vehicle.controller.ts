@@ -450,7 +450,7 @@ export const uploadPhotos = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
-    const files = req.files as Express.Multer.File[];
+    const files = (req.files || []) as Array<{ filename: string }>;
     const fileNames = files.map((file) => file.filename);
 
     if (tipo === 'exteriores') {
