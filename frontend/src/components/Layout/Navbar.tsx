@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LogOut, User, Car, BarChart3, Menu, X } from 'lucide-react';
+import { LogOut, User, Car, BarChart3, Menu, X, Store } from 'lucide-react';
+
 
 const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
@@ -39,7 +40,12 @@ const Navbar: React.FC = () => {
             <Link to="/vehicles" className="hover:text-primary-200 transition-colors">
               Vehículos
             </Link>
+            <Link to="/marketplace" className="hover:text-primary-200 transition-colors flex items-center space-x-1">
+              <Store className="h-4 w-4" />
+              <span>Marketplace</span>
+            </Link>
             <Link to="/reports" className="hover:text-primary-200 transition-colors flex items-center space-x-1">
+
               <BarChart3 className="h-4 w-4" />
               <span>Reportes</span>
             </Link>
@@ -101,10 +107,19 @@ const Navbar: React.FC = () => {
                 Vehículos
               </Link>
               <Link 
+                to="/marketplace" 
+                onClick={closeMobileMenu}
+                className="hover:text-primary-200 transition-colors py-2 px-4 hover:bg-primary-700 rounded-lg flex items-center space-x-2"
+              >
+                <Store className="h-4 w-4" />
+                <span>Marketplace</span>
+              </Link>
+              <Link 
                 to="/reports" 
                 onClick={closeMobileMenu}
                 className="hover:text-primary-200 transition-colors py-2 px-4 hover:bg-primary-700 rounded-lg flex items-center space-x-2"
               >
+
                 <BarChart3 className="h-4 w-4" />
                 <span>Reportes</span>
               </Link>
