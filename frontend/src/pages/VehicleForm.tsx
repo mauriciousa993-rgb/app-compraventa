@@ -111,6 +111,26 @@ const VehicleForm: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string>('');
   const [usuarios, setUsuarios] = useState<Array<{ id: string; nombre: string; email: string }>>([]);
+
+  const getBackendOrigin = (): string => {
+    const viteApiUrl = (import.meta as any).env?.VITE_API_URL;
+    if (viteApiUrl) {
+      try {
+        return new URL(viteApiUrl).origin;
+      } catch {
+        return String(viteApiUrl).replace(/\/api\/?$/, '');
+      }
+    }
+    return 'https://app-compraventa.onrender.com';
+  };
+
+  const getImageUrl = (path: string): string => {
+    if (!path) return '';
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    if (path.startsWith('/uploads/')) return `${getBackendOrigin()}${path}`;
+    if (path.startsWith('uploads/')) return `${getBackendOrigin()}/${path}`;
+    return `${getBackendOrigin()}/uploads/${path}`;
+  };
   
   // Estado para datos de venta
   const [datosVenta, setDatosVenta] = useState<DatosVenta>({
@@ -270,6 +290,9 @@ const VehicleForm: React.FC = () => {
           documentos: vehicle.fotos?.documentos || []
         }
       });
+      const mainPhoto = vehicle.fotos?.exteriores?.[0];
+      setSelectedFile(null);
+      setPhotoPreview(mainPhoto ? getImageUrl(mainPhoto) : '');
     } catch (err: any) {
       console.error('Error al cargar vehículo:', err);
       setError(err.response?.data?.message || 'Error al cargar los datos del vehículo');
@@ -520,11 +543,7 @@ const VehicleForm: React.FC = () => {
 
       // Si hay una foto seleccionada, subirla
       if (selectedFile && vehicleId) {
-        try {
-          await vehiclesAPI.uploadPhotos(vehicleId, 'exteriores', [selectedFile]);
-        } catch (photoError: any) {
-          console.error('Error al subir foto:', photoError);
-        }
+        await vehiclesAPI.uploadPhotos(vehicleId, 'exteriores', [selectedFile]);
       }
 
       setSuccess(true);
@@ -1499,14 +1518,14 @@ const VehicleForm: React.FC = () => {
             </div>
           </div>
 
-          {/* Foto del Vehículo */}
+          {/* Foto del Vehiculo */}
           <div className="card">
             <h2 className="text-xl font-semibold mb-4 text-gray-900">
               <Image className="inline h-5 w-5 mr-2" />
-              Foto del Vehículo
+              Foto del Vehiculo
             </h2>
             <p className="text-sm text-gray-600 mb-4">
-              Sube una foto principal del vehículo
+              Sube una foto principal del vehiculo
             </p>
 
             {!photoPreview ? (
@@ -1515,7 +1534,7 @@ const VehicleForm: React.FC = () => {
                   <div className="flex flex-col items-center justify-center pt-5 pb-6">
                     <Upload className="w-12 h-12 mb-4 text-gray-400" />
                     <p className="mb-2 text-sm text-gray-700">
-                      <span className="font-semibold">Click para subir</span> o arrastra la foto aquí
+                      <span className="font-semibold">Click para subir</span> o arrastra la foto aqui
                     </p>
                     <p className="text-xs text-gray-500">PNG o JPG (MAX. 5MB)</p>
                   </div>
@@ -1534,25 +1553,33 @@ const VehicleForm: React.FC = () => {
                   alt="Preview"
                   className="w-full h-64 object-cover rounded-lg border-2 border-gray-200"
                 />
-                <button
-                  type="button"
-                  onClick={removeFile}
-                  className="absolute top-2 right-2 bg-red-600 text-white p-2 rounded-full hover:bg-red-700 transition-colors shadow-lg"
-                  title="Eliminar foto"
-                >
-                  <X className="h-5 w-5" />
-                </button>
+                {selectedFile && (
+                  <button
+                    type="button"
+                    onClick={removeFile}
+                    className="absolute top-2 right-2 bg-red-600 text-white p-2 rounded-full hover:bg-red-700 transition-colors shadow-lg"
+                    title="Eliminar foto"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                )}
                 {selectedFile && (
                   <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
                     <p className="text-sm text-green-800">
-                      <strong>✓ Foto seleccionada:</strong> {selectedFile.name}
+                      <strong>Foto seleccionada:</strong> {selectedFile.name}
+                    </p>
+                  </div>
+                )}
+                {!selectedFile && (
+                  <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      <strong>Foto guardada:</strong> si quieres reemplazarla, selecciona una nueva imagen.
                     </p>
                   </div>
                 )}
               </div>
             )}
           </div>
-
           {/* Observaciones y Comentarios */}
           <div className="card">
             <h2 className="text-xl font-semibold mb-4 text-gray-900">Observaciones y Comentarios</h2>
