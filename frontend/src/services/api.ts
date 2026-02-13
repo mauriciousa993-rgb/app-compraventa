@@ -3,11 +3,24 @@ import { AuthResponse, User, Vehicle, Statistics, DatosVenta } from '../types';
 
 // Detectar IP local para móviles o URL de producción
 const getAPIURL = (): string => {
+  const normalizeApiBase = (url: string): string => {
+    const clean = url.trim().replace(/\/+$/, '');
+    return clean.endsWith('/api') ? clean : `${clean}/api`;
+  };
+
   // Si está configurado VITE_API_URL, usarlo (producción)
   const viteApiUrl = (import.meta as any).env?.VITE_API_URL;
   if (viteApiUrl) {
-    console.log('🌍 URL de API (producción):', viteApiUrl);
-    return viteApiUrl;
+    const apiBase = normalizeApiBase(viteApiUrl);
+    console.log('🌍 URL de API (producción):', apiBase);
+    return apiBase;
+  }
+
+  // Fallback para Vercel cuando no hay variable configurada
+  if (window.location.hostname.includes('vercel.app')) {
+    const fallbackApi = 'https://compraventa-backend.onrender.com/api';
+    console.log('🌍 URL de API (fallback Vercel):', fallbackApi);
+    return fallbackApi;
   }
   
   // Detectar IP local para desarrollo

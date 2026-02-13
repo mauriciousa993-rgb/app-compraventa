@@ -18,6 +18,7 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
+const hasExplicitAllowedOrigins = allowedOrigins.length > 0;
 
 // Configurar CORS para permitir acceso desde móviles
 const corsOptions = {
@@ -40,6 +41,12 @@ const corsOptions = {
     }
 
     if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    // Fallback para no romper despliegues donde ALLOWED_ORIGINS no esté configurado aún.
+    if (!hasExplicitAllowedOrigins) {
       callback(null, true);
       return;
     }
