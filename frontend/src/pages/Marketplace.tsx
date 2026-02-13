@@ -85,6 +85,15 @@ const Marketplace: React.FC = () => {
     return `${getBackendOrigin()}${cleanPath}`;
   };
 
+  const getPrimaryPhoto = (vehicle: Vehicle): string => {
+    return (
+      vehicle.fotos?.exteriores?.[0] ||
+      vehicle.fotos?.interiores?.[0] ||
+      vehicle.fotos?.detalles?.[0] ||
+      ''
+    );
+  };
+
 
 
   if (loading) {
@@ -117,7 +126,7 @@ const Marketplace: React.FC = () => {
 
   const hasValidImage = (vehicle: Vehicle): boolean => {
     return (
-      !!vehicle.fotos?.exteriores?.[0] &&
+      !!getPrimaryPhoto(vehicle) &&
       !imageErrors[vehicle._id]
     );
   };
@@ -159,7 +168,7 @@ const Marketplace: React.FC = () => {
                 <div className="h-48 bg-gray-200">
                   {hasValidImage(vehicle) ? (
                     <img
-                      src={getImageUrl(vehicle.fotos.exteriores[0])}
+                      src={getImageUrl(getPrimaryPhoto(vehicle))}
                       alt={`${vehicle.marca} ${vehicle.modelo}`}
                       className="w-full h-full object-cover"
                       onError={(e) => {

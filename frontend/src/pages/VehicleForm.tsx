@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Upload, Save, Image, X, Plus, Trash2, Users } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
@@ -111,6 +111,7 @@ const VehicleForm: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string>('');
   const [usuarios, setUsuarios] = useState<Array<{ id: string; nombre: string; email: string }>>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const getBackendOrigin = (): string => {
     const viteApiUrl = (import.meta as any).env?.VITE_API_URL;
@@ -373,6 +374,10 @@ const VehicleForm: React.FC = () => {
   const removeFile = () => {
     setSelectedFile(null);
     setPhotoPreview('');
+  };
+
+  const openFilePicker = () => {
+    fileInputRef.current?.click();
   };
 
   // Funciones para manejar inversionistas
@@ -1547,33 +1552,56 @@ const VehicleForm: React.FC = () => {
                 </label>
               </div>
             ) : (
-              <div className="relative">
-                <img
-                  src={photoPreview}
-                  alt="Preview"
-                  className="w-full h-64 object-cover rounded-lg border-2 border-gray-200"
-                />
-                {selectedFile && (
+              <div className="space-y-3">
+                <div className="relative">
+                  <img
+                    src={photoPreview}
+                    alt="Preview"
+                    className="w-full h-64 object-cover rounded-lg border-2 border-gray-200"
+                    onError={() => {
+                      setPhotoPreview('');
+                      setError('La foto guardada no esta disponible. Sube una nueva imagen.');
+                    }}
+                  />
+                </div>
+
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={removeFile}
-                    className="absolute top-2 right-2 bg-red-600 text-white p-2 rounded-full hover:bg-red-700 transition-colors shadow-lg"
-                    title="Eliminar foto"
+                    onClick={openFilePicker}
+                    className="btn-secondary"
                   >
-                    <X className="h-5 w-5" />
+                    Cambiar foto
                   </button>
-                )}
-                {selectedFile && (
+                  {selectedFile && (
+                    <button
+                      type="button"
+                      onClick={removeFile}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-red-300 text-red-700 hover:bg-red-50"
+                    >
+                      <X className="h-4 w-4" />
+                      Quitar seleccion
+                    </button>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                  />
+                </div>
+
+                {selectedFile ? (
                   <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
                     <p className="text-sm text-green-800">
                       <strong>Foto seleccionada:</strong> {selectedFile.name}
                     </p>
                   </div>
-                )}
-                {!selectedFile && (
+                ) : (
                   <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                     <p className="text-sm text-blue-800">
-                      <strong>Foto guardada:</strong> si quieres reemplazarla, selecciona una nueva imagen.
+                      <strong>Foto guardada:</strong> usa "Cambiar foto" para reemplazarla.
                     </p>
                   </div>
                 )}
