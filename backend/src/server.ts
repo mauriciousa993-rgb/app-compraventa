@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { connectDB } from './config/database';
 import authRoutes from './routes/auth.routes';
 import vehicleRoutes from './routes/vehicle.routes';
+import fixedExpenseRoutes from './routes/fixedExpense.routes';
 import { ensureUploadsDir } from './utils/uploads';
 
 // Configurar variables de entorno
@@ -69,6 +70,7 @@ app.use('/uploads', express.static(ensureUploadsDir()));
 // Rutas
 app.use('/api/auth', authRoutes);
 app.use('/api/vehicles', vehicleRoutes);
+app.use('/api/fixed-expenses', fixedExpenseRoutes);
 
 // Ruta de prueba
 app.get('/', (req, res) => {
@@ -78,6 +80,7 @@ app.get('/', (req, res) => {
     endpoints: {
       auth: '/api/auth',
       vehicles: '/api/vehicles',
+      fixedExpenses: '/api/fixed-expenses',
     },
   });
 });

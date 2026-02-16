@@ -516,7 +516,7 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
               type="submit"
               className="btn-primary"
             >
-              {isEditMode ? 'Actualizar Datos de Venta' : 'Guardar y Marcar como Vendido'}
+              {isEditMode ? 'Actualizar Datos de Venta' : 'Guardar, Vender y Generar Documentos'}
             </button>
           </div>
         </form>

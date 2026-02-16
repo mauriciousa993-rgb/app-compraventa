@@ -12,6 +12,39 @@ export interface AuthResponse {
   user: User;
 }
 
+export type FixedExpenseCategory =
+  | 'arriendo'
+  | 'nomina'
+  | 'servicios'
+  | 'marketing'
+  | 'software'
+  | 'impuestos'
+  | 'seguros'
+  | 'mantenimiento'
+  | 'otros';
+
+export interface FixedExpense {
+  _id: string;
+  nombre: string;
+  categoria: FixedExpenseCategory;
+  monto: number;
+  diaPago: number;
+  proveedor: string;
+  metodoPago: string;
+  fechaInicio: string;
+  fechaFin?: string;
+  observaciones: string;
+  activo: boolean;
+  registradoPor?: {
+    _id?: string;
+    id?: string;
+    nombre?: string;
+    email?: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface GastoInversionista {
   categoria: 'pintura' | 'mecanica' | 'traspaso' | 'alistamiento' | 'tapiceria' | 'transporte' | 'varios';
   monto: number;

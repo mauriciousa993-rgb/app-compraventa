@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AuthResponse, User, Vehicle, Statistics, DatosVenta } from '../types';
+import { AuthResponse, User, Vehicle, Statistics, DatosVenta, FixedExpense } from '../types';
 
 // Detectar IP local para móviles o URL de producción
 const getAPIURL = (): string => {
@@ -224,6 +224,43 @@ export const vehiclesAPI = {
     document.body.appendChild(link);
     link.click();
     link.remove();
+  },
+
+  generateTransferForm: async (id: string) => {
+    const response = await api.get(`/vehicles/${id}/transfer-form`, {
+      responseType: 'blob',
+    });
+
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `formulario-traspaso-${id}-${Date.now()}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  },
+};
+
+// Fixed expenses API
+export const fixedExpensesAPI = {
+  getAll: async (params?: { includeInactive?: boolean; categoria?: string }) => {
+    const response = await api.get<FixedExpense[]>('/fixed-expenses', { params });
+    return response.data;
+  },
+
+  create: async (data: Partial<FixedExpense>) => {
+    const response = await api.post<{ message: string; expense: FixedExpense }>('/fixed-expenses', data);
+    return response.data;
+  },
+
+  update: async (id: string, data: Partial<FixedExpense>) => {
+    const response = await api.put<{ message: string; expense: FixedExpense }>(`/fixed-expenses/${id}`, data);
+    return response.data;
+  },
+
+  archive: async (id: string) => {
+    const response = await api.delete<{ message: string }>(`/fixed-expenses/${id}`);
+    return response.data;
   },
 };
 

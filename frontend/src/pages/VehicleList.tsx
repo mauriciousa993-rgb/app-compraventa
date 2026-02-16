@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search, Car, Edit, Trash2, FileDown, X, ChevronDown, ChevronUp, FileText, DollarSign, Edit2 } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
 import api from '../services/api';
 import { Vehicle, DatosVenta } from '../types';
 import SaleDataModal from '../components/SaleDataModal';
-import ViewSaleDataModal from '../components/ViewSaleDataModal';
 import { vehiclesAPI } from '../services/api';
 
 const VehicleList: React.FC = () => {
@@ -24,7 +23,6 @@ const VehicleList: React.FC = () => {
     loadVehicles();
   }, []);
 
-  // Leer parámetros de la URL al cargar
   useEffect(() => {
     const estadoParam = searchParams.get('estado');
     if (estadoParam) {
@@ -41,7 +39,7 @@ const VehicleList: React.FC = () => {
       const response = await api.get('/vehicles');
       setVehicles(response.data);
     } catch (error) {
-      console.error('Error al cargar vehículos:', error);
+      console.error('Error al cargar vehiculos:', error);
     } finally {
       setIsLoading(false);
     }
@@ -50,12 +48,10 @@ const VehicleList: React.FC = () => {
   const filterVehicles = () => {
     let filtered = vehicles;
 
-    // Filtrar por estado
     if (filterEstado !== 'todos') {
       filtered = filtered.filter(v => v.estado === filterEstado);
     }
 
-    // Filtrar por búsqueda
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(v =>
@@ -89,7 +85,7 @@ const VehicleList: React.FC = () => {
     const labels: Record<string, string> = {
       listo_venta: 'Listos para Venta',
       en_proceso: 'En Proceso',
-      en_negociacion: 'En Negociación',
+      en_negociacion: 'En Negociacion',
       vendido: 'Vendidos',
       retirado: 'Retirados'
     };
@@ -97,14 +93,14 @@ const VehicleList: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('¿Estás seguro de eliminar este vehículo?')) return;
+    if (!window.confirm('Estas seguro de eliminar este vehiculo?')) return;
 
     try {
       await api.delete(`/vehicles/${id}`);
       loadVehicles();
     } catch (error) {
-      console.error('Error al eliminar vehículo:', error);
-      alert('Error al eliminar el vehículo');
+      console.error('Error al eliminar vehiculo:', error);
+      alert('Error al eliminar el vehiculo');
     }
   };
 
@@ -117,14 +113,35 @@ const VehicleList: React.FC = () => {
     if (!selectedVehicle) return;
 
     try {
-      // Si el vehículo ya está vendido, actualizar; si no, crear
       if (selectedVehicle.estado === 'vendido' && selectedVehicle.datosVenta) {
         await vehiclesAPI.updateSaleData(selectedVehicle._id, data);
         alert('Datos de venta actualizados exitosamente.');
       } else {
         await vehiclesAPI.saveSaleData(selectedVehicle._id, data);
-        alert('Datos de venta guardados exitosamente. El vehículo ha sido marcado como vendido.');
+
+        const documentErrors: string[] = [];
+
+        try {
+          await vehiclesAPI.generateContract(selectedVehicle._id);
+        } catch (error) {
+          console.error('Error al generar contrato en venta:', error);
+          documentErrors.push('contrato de compraventa');
+        }
+
+        try {
+          await vehiclesAPI.generateTransferForm(selectedVehicle._id);
+        } catch (error) {
+          console.error('Error al generar formulario de traspaso en venta:', error);
+          documentErrors.push('formulario de traspaso');
+        }
+
+        if (documentErrors.length === 0) {
+          alert('Datos de venta guardados exitosamente. El vehiculo fue marcado como vendido y se descargaron contrato + formulario de traspaso.');
+        } else {
+          alert(`Datos de venta guardados y vehiculo marcado como vendido, pero no se pudo descargar: ${documentErrors.join(', ')}.`);
+        }
       }
+
       setSaleModalOpen(false);
       setSelectedVehicle(null);
       loadVehicles();
@@ -144,7 +161,16 @@ const VehicleList: React.FC = () => {
       await vehiclesAPI.generateContract(vehicleId);
     } catch (error) {
       console.error('Error al generar contrato:', error);
-      alert('Error al generar el contrato. Asegúrate de que el vehículo tenga datos de venta registrados.');
+      alert('Error al generar el contrato. Asegurate de que el vehiculo tenga datos de venta registrados.');
+    }
+  };
+
+  const handleGenerateTransferForm = async (vehicleId: string) => {
+    try {
+      await vehiclesAPI.generateTransferForm(vehicleId);
+    } catch (error) {
+      console.error('Error al generar formulario de traspaso:', error);
+      alert('Error al generar el formulario de traspaso. Asegurate de que el vehiculo tenga datos de venta completos.');
     }
   };
 
@@ -154,7 +180,7 @@ const VehicleList: React.FC = () => {
       listo_venta: { class: 'badge-success', text: 'Listo para Venta' },
       en_negociacion: { class: 'badge-info', text: 'En Negociación' },
       vendido: { class: 'badge-gray', text: 'Vendido' },
-      retirado: { class: 'badge-danger', text: 'Retirado' }
+      retrasado: { class: 'badge-danger', text: 'Retrasado' }
     };
     const badge = badges[estado] || badges.en_proceso;
     return <span className={`badge ${badge.class}`}>{badge.text}</span>;
@@ -173,8 +199,9 @@ const VehicleList: React.FC = () => {
       <Layout>
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Cargando vehículos...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto"></div>
+            <p className="mt-4 text-ink-200">Cargando vehículos...</p>
+
           </div>
         </div>
       </Layout>
@@ -186,17 +213,18 @@ const VehicleList: React.FC = () => {
       <div className="mb-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            <h1 className="text-3xl font-bold text-white mb-2">
               Inventario de Vehículos
             </h1>
+
             {filterEstado !== 'todos' && (
               <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">
+                <span className="text-sm text-ink-200">
                   Mostrando: <span className="font-semibold">{getEstadoLabel(filterEstado)}</span>
                 </span>
                 <button
                   onClick={clearFilters}
-                  className="text-xs text-primary-600 hover:text-primary-700 flex items-center gap-1"
+                  className="text-xs text-primary-300 hover:text-primary-200 flex items-center gap-1"
                 >
                   <X className="h-3 w-3" />
                   Limpiar filtros
@@ -210,18 +238,21 @@ const VehicleList: React.FC = () => {
           >
             <Plus className="h-5 w-5 mr-2" />
             Nuevo Vehículo
+
           </button>
         </div>
 
         {/* Filtros y Búsqueda */}
+
         <div className="card mb-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-2">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-ink-300" />
                 <input
                   type="text"
                   placeholder="Buscar por marca, modelo, placa o año..."
+
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="input-field pl-10"
@@ -238,6 +269,7 @@ const VehicleList: React.FC = () => {
                 <option value="listo_venta">Listos para Venta</option>
                 <option value="en_proceso">Con Pendientes</option>
                 <option value="en_negociacion">En Negociación</option>
+
                 <option value="vendido">Vendidos</option>
               </select>
             </div>
@@ -245,6 +277,7 @@ const VehicleList: React.FC = () => {
         </div>
 
         {/* Estadísticas Rápidas */}
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <button
             onClick={() => {
@@ -253,12 +286,13 @@ const VehicleList: React.FC = () => {
             }}
             className={`card transition-all ${
               filterEstado === 'todos'
-                ? 'bg-blue-100 border-blue-300 ring-2 ring-blue-500'
-                : 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+                ? 'bg-[#2b1215] border-primary-500 ring-2 ring-primary-500'
+                : 'bg-[#1c1f26] border-[#30343d] hover:border-primary-700'
             }`}
           >
-            <p className="text-sm text-blue-600 font-medium">Total Vehículos</p>
-            <p className="text-2xl font-bold text-blue-900">{vehicles.length}</p>
+            <p className="text-sm text-ink-200 font-medium">Total Vehículos</p>
+
+            <p className="text-2xl font-bold text-white">{vehicles.length}</p>
           </button>
           <button
             onClick={() => {
@@ -267,12 +301,12 @@ const VehicleList: React.FC = () => {
             }}
             className={`card transition-all ${
               filterEstado === 'listo_venta'
-                ? 'bg-green-100 border-green-300 ring-2 ring-green-500'
-                : 'bg-green-50 border-green-200 hover:bg-green-100'
+                ? 'bg-[#1d242b] border-[#8f9aa8] ring-2 ring-[#8f9aa8]'
+                : 'bg-[#1c2027] border-[#30343d] hover:border-[#7f8a98]'
             }`}
           >
-            <p className="text-sm text-green-600 font-medium">Listos para Venta</p>
-            <p className="text-2xl font-bold text-green-900">
+            <p className="text-sm text-ink-200 font-medium">Listos para Venta</p>
+            <p className="text-2xl font-bold text-silver">
               {vehicles.filter(v => v.estado === 'listo_venta').length}
             </p>
           </button>
@@ -283,12 +317,12 @@ const VehicleList: React.FC = () => {
             }}
             className={`card transition-all ${
               filterEstado === 'en_proceso'
-                ? 'bg-yellow-100 border-yellow-300 ring-2 ring-yellow-500'
-                : 'bg-yellow-50 border-yellow-200 hover:bg-yellow-100'
+                ? 'bg-[#2b2116] border-[#7e6642] ring-2 ring-[#7e6642]'
+                : 'bg-[#221a12] border-[#3b3125] hover:border-[#7e6642]'
             }`}
           >
-            <p className="text-sm text-yellow-600 font-medium">Con Pendientes</p>
-            <p className="text-2xl font-bold text-yellow-900">
+            <p className="text-sm text-[#f4c26b] font-medium">Con Pendientes</p>
+            <p className="text-2xl font-bold text-[#f4c26b]">
               {vehicles.filter(v => v.estado === 'en_proceso').length}
             </p>
           </button>
@@ -299,39 +333,42 @@ const VehicleList: React.FC = () => {
             }}
             className={`card transition-all ${
               filterEstado === 'vendido'
-                ? 'bg-purple-100 border-purple-300 ring-2 ring-purple-500'
-                : 'bg-purple-50 border-purple-200 hover:bg-purple-100'
+                ? 'bg-[#351418] border-primary-500 ring-2 ring-primary-500'
+                : 'bg-[#251317] border-[#412228] hover:border-primary-600'
             }`}
           >
-            <p className="text-sm text-purple-600 font-medium">Vendidos</p>
-            <p className="text-2xl font-bold text-purple-900">
+            <p className="text-sm text-primary-300 font-medium">Vendidos</p>
+            <p className="text-2xl font-bold text-signal">
               {vehicles.filter(v => v.estado === 'vendido').length}
             </p>
           </button>
         </div>
       </div>
 
-      {/* Lista de Vehículos */}
+        {/* Lista de Vehículos */}
+
       {filteredVehicles.length === 0 ? (
         <div className="card text-center py-12">
-          <Car className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
+          <Car className="h-16 w-16 text-ink-300 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-white mb-2">
             {searchTerm || filterEstado !== 'todos' 
               ? 'No se encontraron vehículos' 
               : 'No hay vehículos registrados'}
           </h3>
-          <p className="text-gray-600 mb-4">
+          <p className="text-ink-200 mb-4">
             {searchTerm || filterEstado !== 'todos'
               ? 'Intenta con otros filtros de búsqueda'
               : 'Comienza agregando tu primer vehículo al inventario'}
+
           </p>
           {!searchTerm && filterEstado === 'todos' && (
             <button
               onClick={() => navigate('/vehicles/new')}
               className="btn-primary inline-flex items-center"
             >
-              <Plus className="h-5 w-5 mr-2" />
-              Agregar Primer Vehículo
+            <Plus className="h-5 w-5 mr-2" />
+            Agregar Primer Vehículo
+
             </button>
           )}
         </div>
@@ -351,13 +388,13 @@ const VehicleList: React.FC = () => {
                   <div className="flex items-center space-x-4 flex-1">
                     <div className="flex-1">
                       <div className="flex items-center gap-3">
-                        <h3 className="text-lg font-semibold text-gray-900">
+                        <h3 className="text-lg font-semibold text-white">
                           {vehicle.marca} {vehicle.modelo}
                         </h3>
                         <span className={`text-xs px-2 py-1 rounded-full font-medium ${
                           vehicle.estado === 'vendido' 
-                            ? 'bg-green-100 text-green-700' 
-                            : 'bg-blue-100 text-blue-700'
+                            ? 'bg-[#311418] text-primary-300 border border-primary-700/60' 
+                            : 'bg-[#1a2129] text-silver border border-[#4d5663]'
                         }`}>
                           {(() => {
                             const fechaIngreso = new Date(vehicle.fechaIngreso);
@@ -371,20 +408,21 @@ const VehicleList: React.FC = () => {
                           })()}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-ink-200">
                         {vehicle.año} • <span className="font-medium">{vehicle.placa}</span>
                       </p>
+
                     </div>
                     <div className="hidden md:flex items-center space-x-4">
                       {getEstadoBadge(vehicle.estado)}
                       <div className="text-right">
-                        <p className="text-xs text-gray-500">Precio Venta</p>
-                        <p className="text-sm font-semibold text-blue-600">
+                        <p className="text-xs text-ink-300">Precio Venta</p>
+                        <p className="text-sm font-semibold text-white">
                           {formatCurrency(vehicle.precioVenta)}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-xs text-gray-500">Utilidad</p>
+                        <p className="text-xs text-ink-300">Utilidad</p>
                         <p className={`text-sm font-semibold ${
                           utilidad >= 0 ? 'text-green-600' : 'text-red-600'
                         }`}>
@@ -393,30 +431,32 @@ const VehicleList: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                  <button className="ml-4 p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                  <button className="ml-4 p-2 hover:bg-[#252930] rounded-lg transition-colors">
                     {isExpanded ? (
-                      <ChevronUp className="h-5 w-5 text-gray-600" />
+                      <ChevronUp className="h-5 w-5 text-ink-200" />
                     ) : (
-                      <ChevronDown className="h-5 w-5 text-gray-600" />
+                      <ChevronDown className="h-5 w-5 text-ink-200" />
                     )}
                   </button>
                 </div>
 
                 {/* Información Detallada - Desplegable */}
+
                 {isExpanded && (
-                  <div className="mt-4 pt-4 border-t border-gray-200 space-y-4">
-                    {/* Información Financiera */}
+                  <div className="mt-4 pt-4 border-t border-[#32353d] space-y-4">
+                    {/* InformaciÃ³n Financiera */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Información Financiera</h4>
+                        <h4 className="text-sm font-semibold text-ink-200 mb-2">Información Financiera</h4>
+
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Precio Compra:</span>
-                          <span className="font-medium text-gray-900">
+                          <span className="text-ink-200">Precio Compra:</span>
+                          <span className="font-medium text-white">
                             {formatCurrency(vehicle.precioCompra)}
                           </span>
                         </div>
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Gastos Totales:</span>
+                          <span className="text-ink-200">Gastos Totales:</span>
                           <span className="font-medium text-orange-600">
                             {formatCurrency((() => {
                               const gastosVehiculo = vehicle.gastos?.total || 0;
@@ -429,19 +469,19 @@ const VehicleList: React.FC = () => {
                           </span>
                         </div>
                         <div className="flex justify-between text-sm border-t pt-2">
-                          <span className="text-gray-600 font-semibold">Costo Total:</span>
-                          <span className="font-semibold text-gray-900">
+                          <span className="text-ink-200 font-semibold">Costo Total:</span>
+                          <span className="font-semibold text-white">
                             {formatCurrency(vehicle.precioCompra + (vehicle.gastos?.total || 0))}
                           </span>
                         </div>
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Precio Venta:</span>
+                          <span className="text-ink-200">Precio Venta:</span>
                           <span className="font-medium text-green-600">
                             {formatCurrency(vehicle.precioVenta)}
                           </span>
                         </div>
                         <div className="flex justify-between text-sm border-t pt-2">
-                          <span className="text-gray-600 font-semibold">Utilidad:</span>
+                          <span className="text-ink-200 font-semibold">Utilidad:</span>
                           <span className={`font-semibold ${
                             utilidad >= 0 ? 'text-green-600' : 'text-red-600'
                           }`}>
@@ -449,7 +489,7 @@ const VehicleList: React.FC = () => {
                           </span>
                         </div>
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600 font-semibold">Margen de Ganancia:</span>
+                          <span className="text-ink-200 font-semibold">Margen de Ganancia:</span>
                           <span className={`font-semibold ${
                             utilidad >= 0 ? 'text-green-600' : 'text-red-600'
                           }`}>
@@ -463,23 +503,24 @@ const VehicleList: React.FC = () => {
                       </div>
 
                       <div className="space-y-2">
-                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Detalles del Vehículo</h4>
+                        <h4 className="text-sm font-semibold text-ink-200 mb-2">Detalles del Vehículo</h4>
+
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Color:</span>
-                          <span className="font-medium text-gray-900">{vehicle.color}</span>
+                          <span className="text-ink-200">Color:</span>
+                          <span className="font-medium text-white">{vehicle.color}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Kilometraje:</span>
-                          <span className="font-medium text-gray-900">
+                          <span className="text-ink-200">Kilometraje:</span>
+                          <span className="font-medium text-white">
                             {vehicle.kilometraje.toLocaleString()} km
                           </span>
                         </div>
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">VIN:</span>
-                          <span className="font-medium text-gray-900 text-xs">{vehicle.vin}</span>
+                          <span className="text-ink-200">VIN:</span>
+                          <span className="font-medium text-white text-xs">{vehicle.vin}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Estado:</span>
+                          <span className="text-ink-200">Estado:</span>
                           {getEstadoBadge(vehicle.estado)}
                         </div>
                       </div>
@@ -489,60 +530,62 @@ const VehicleList: React.FC = () => {
                     {vehicle.gastos && (vehicle.gastos.pintura > 0 || vehicle.gastos.mecanica > 0 || vehicle.gastos.traspaso > 0 || 
                                         vehicle.gastos.alistamiento > 0 || vehicle.gastos.tapiceria > 0 || vehicle.gastos.transporte > 0 || vehicle.gastos.varios > 0) && (
                       <div>
-                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Desglose de Gastos</h4>
+                        <h4 className="text-sm font-semibold text-ink-200 mb-2">Desglose de Gastos</h4>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                           {vehicle.gastos.pintura > 0 && (
-                            <div className="bg-orange-50 p-2 rounded">
-                              <p className="text-xs text-gray-600">Pintura</p>
+                            <div className="bg-[#2b1d16] p-2 rounded">
+                              <p className="text-xs text-ink-200">Pintura</p>
                               <p className="text-sm font-medium text-orange-600">
                                 {formatCurrency(vehicle.gastos.pintura)}
                               </p>
                             </div>
                           )}
                           {vehicle.gastos.mecanica > 0 && (
-                            <div className="bg-blue-50 p-2 rounded">
-                              <p className="text-xs text-gray-600">Mecánica</p>
+                            <div className="bg-[#17212f] p-2 rounded">
+                              <p className="text-xs text-ink-200">Mecánica</p>
+
                               <p className="text-sm font-medium text-blue-600">
                                 {formatCurrency(vehicle.gastos.mecanica)}
                               </p>
                             </div>
                           )}
                           {vehicle.gastos.traspaso > 0 && (
-                            <div className="bg-purple-50 p-2 rounded">
-                              <p className="text-xs text-gray-600">Traspaso</p>
+                            <div className="bg-[#241828] p-2 rounded">
+                              <p className="text-xs text-ink-200">Traspaso</p>
                               <p className="text-sm font-medium text-purple-600">
                                 {formatCurrency(vehicle.gastos.traspaso)}
                               </p>
                             </div>
                           )}
                           {vehicle.gastos.alistamiento > 0 && (
-                            <div className="bg-green-50 p-2 rounded">
-                              <p className="text-xs text-gray-600">Alistamiento</p>
+                            <div className="bg-[#16251f] p-2 rounded">
+                              <p className="text-xs text-ink-200">Alistamiento</p>
                               <p className="text-sm font-medium text-green-600">
                                 {formatCurrency(vehicle.gastos.alistamiento)}
                               </p>
                             </div>
                           )}
                           {vehicle.gastos.tapiceria > 0 && (
-                            <div className="bg-pink-50 p-2 rounded">
-                              <p className="text-xs text-gray-600">Tapicería</p>
+                            <div className="bg-[#2b1823] p-2 rounded">
+                              <p className="text-xs text-ink-200">Tapicería</p>
+
                               <p className="text-sm font-medium text-pink-600">
                                 {formatCurrency(vehicle.gastos.tapiceria)}
                               </p>
                             </div>
                           )}
                           {vehicle.gastos.transporte > 0 && (
-                            <div className="bg-cyan-50 p-2 rounded">
-                              <p className="text-xs text-gray-600">Transporte</p>
+                            <div className="bg-[#14242b] p-2 rounded">
+                              <p className="text-xs text-ink-200">Transporte</p>
                               <p className="text-sm font-medium text-cyan-600">
                                 {formatCurrency(vehicle.gastos.transporte)}
                               </p>
                             </div>
                           )}
                           {vehicle.gastos.varios > 0 && (
-                            <div className="bg-gray-50 p-2 rounded">
-                              <p className="text-xs text-gray-600">Varios</p>
-                              <p className="text-sm font-medium text-gray-600">
+                            <div className="bg-[#1a1d23] p-2 rounded">
+                              <p className="text-xs text-ink-200">Varios</p>
+                              <p className="text-sm font-medium text-ink-200">
                                 {formatCurrency(vehicle.gastos.varios)}
                               </p>
                             </div>
@@ -552,51 +595,55 @@ const VehicleList: React.FC = () => {
                     )}
 
                     {/* Documentación */}
+
                     <div>
-                      <h4 className="text-sm font-semibold text-gray-700 mb-2">Documentación</h4>
+                      <h4 className="text-sm font-semibold text-ink-200 mb-2">DocumentaciÃ³n</h4>
                       <div className="flex flex-wrap gap-2">
                         {vehicle.documentacion?.prenda?.tiene && (
-                          <span className="text-xs bg-red-100 text-red-800 px-3 py-1 rounded-full">
+                          <span className="text-xs bg-[#311418] text-primary-300 px-3 py-1 rounded-full border border-primary-700/60">
                             ⚠️ Prenda
                           </span>
                         )}
                         {vehicle.documentacion?.soat?.tiene && (
-                          <span className="text-xs bg-green-100 text-green-800 px-3 py-1 rounded-full">
+                          <span className="text-xs bg-[#1a2129] text-silver px-3 py-1 rounded-full border border-[#4d5663]">
                             ✓ SOAT
                           </span>
                         )}
+
                         {vehicle.documentacion?.tecnomecanica?.tiene && (
-                          <span className="text-xs bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
+                          <span className="text-xs bg-[#17212f] text-[#83b3e5] px-3 py-1 rounded-full border border-[#33577f]">
                             ✓ Tecnomecánica
                           </span>
                         )}
+
                         {vehicle.documentacion?.tarjetaPropiedad?.tiene && (
-                          <span className="text-xs bg-purple-100 text-purple-800 px-3 py-1 rounded-full">
+                          <span className="text-xs bg-[#2b1215] text-primary-300 px-3 py-1 rounded-full border border-primary-700/60">
                             ✓ Tarjeta Propiedad
                           </span>
                         )}
+
                       </div>
                     </div>
 
                     {/* Inversionistas */}
                     {vehicle.inversionistas && vehicle.inversionistas.length > 0 && (
                       <div>
-                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Inversionistas</h4>
+                        <h4 className="text-sm font-semibold text-ink-200 mb-2">Inversionistas</h4>
                         <div className="space-y-2">
                           {vehicle.inversionistas.map((inv, idx) => {
                             const totalGastosInv = inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0;
                             return (
-                              <div key={idx} className="bg-indigo-50 p-3 rounded border border-indigo-200">
+                              <div key={idx} className="bg-[#18212d] p-3 rounded border border-[#2f455f]">
                                 <div className="flex justify-between items-start mb-2">
-                                  <span className="text-sm font-medium text-gray-700">{inv.nombre}</span>
-                                  <span className="text-sm font-semibold text-indigo-600">
+                                  <span className="text-sm font-medium text-ink-200">{inv.nombre}</span>
+                                  <span className="text-sm font-semibold text-[#83b3e5]">
                                     {formatCurrency(inv.montoInversion)}
                                   </span>
                                 </div>
                                 {totalGastosInv > 0 && (
-                                  <div className="mt-2 pt-2 border-t border-indigo-200">
+                                  <div className="mt-2 pt-2 border-t border-[#2f455f]">
                                     <div className="flex justify-between items-start text-xs mb-2">
-                                      <span className="text-gray-600">Total Gastos:</span>
+                                      <span className="text-ink-200">Total Gastos:</span>
                                       <span className="font-medium text-orange-600">
                                         {formatCurrency(totalGastosInv)}
                                       </span>
@@ -604,7 +651,7 @@ const VehicleList: React.FC = () => {
                                     {inv.gastos && inv.gastos.length > 0 && (
                                       <div className="space-y-1">
                                         {inv.gastos.map((gasto, gIdx) => (
-                                          <div key={gIdx} className="text-xs text-gray-600 flex justify-between">
+                                          <div key={gIdx} className="text-xs text-ink-200 flex justify-between">
                                             <span className="capitalize">{gasto.categoria}:</span>
                                             <span className="font-medium">{formatCurrency(gasto.monto)}</span>
                                           </div>
@@ -621,10 +668,11 @@ const VehicleList: React.FC = () => {
                     )}
 
                     {/* Observaciones */}
+
                     {vehicle.observaciones && (
                       <div>
-                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Observaciones</h4>
-                        <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
+                        <h4 className="text-sm font-semibold text-ink-200 mb-2">Observaciones</h4>
+                        <p className="text-sm text-ink-200 bg-[#1a1d23] p-3 rounded">
                           {vehicle.observaciones}
                         </p>
                       </div>
@@ -633,13 +681,14 @@ const VehicleList: React.FC = () => {
                     {/* Acciones */}
                     <div className="flex flex-wrap justify-end gap-2 pt-2 border-t">
                       {/* Botones para vehículos NO vendidos */}
+
                       {vehicle.estado !== 'vendido' && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             handleOpenSaleModal(vehicle);
                           }}
-                          className="px-4 py-2 text-sm bg-green-600 text-white hover:bg-green-700 rounded-lg transition-colors flex items-center gap-2"
+                          className="px-4 py-2 text-sm bg-primary-500 text-white hover:bg-primary-400 rounded-lg transition-colors border border-primary-400 flex items-center gap-2"
                         >
                           <DollarSign className="h-4 w-4" />
                           Vender Vehículo
@@ -647,6 +696,7 @@ const VehicleList: React.FC = () => {
                       )}
                       
                       {/* Botones para vehículos vendidos */}
+
                       {vehicle.estado === 'vendido' && (
                         <>
                           <button
@@ -654,23 +704,35 @@ const VehicleList: React.FC = () => {
                               e.stopPropagation();
                               handleEditSaleData(vehicle);
                             }}
-                            className="px-4 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2"
+                            className="px-4 py-2 text-sm bg-[#2a2d34] text-white hover:bg-[#333740] rounded-lg transition-colors border border-[#3d434e] flex items-center gap-2"
                           >
                             <Edit2 className="h-4 w-4" />
                             Editar Datos de Venta
                           </button>
                           
                           {vehicle.datosVenta && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleGenerateContract(vehicle._id);
-                              }}
-                              className="px-4 py-2 text-sm bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-2"
-                            >
-                              <FileText className="h-4 w-4" />
-                              Generar Contrato
-                            </button>
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleGenerateContract(vehicle._id);
+                                }}
+                                className="px-4 py-2 text-sm bg-[#15253a] text-white hover:bg-[#1c314c] rounded-lg transition-colors border border-[#325278] flex items-center gap-2"
+                              >
+                                <FileText className="h-4 w-4" />
+                                Generar Contrato
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleGenerateTransferForm(vehicle._id);
+                                }}
+                                className="px-4 py-2 text-sm bg-[#2b1b12] text-white hover:bg-[#352217] rounded-lg transition-colors border border-[#6a4530] flex items-center gap-2"
+                              >
+                                <FileText className="h-4 w-4" />
+                                Formulario Traspaso
+                              </button>
+                            </>
                           )}
                         </>
                       )}
@@ -694,7 +756,8 @@ const VehicleList: React.FC = () => {
                             alert('Error al exportar plantilla de gastos');
                           }
                         }}
-                        className="px-4 py-2 text-sm text-purple-600 hover:bg-purple-50 rounded-lg transition-colors flex items-center gap-2"
+
+                        className="px-4 py-2 text-sm text-primary-300 hover:bg-[#2a161a] rounded-lg transition-colors flex items-center gap-2"
                       >
                         <FileDown className="h-4 w-4" />
                         Plantilla Gastos
@@ -717,8 +780,9 @@ const VehicleList: React.FC = () => {
                             console.error('Error al exportar:', error);
                             alert('Error al exportar el vehículo');
                           }
+
                         }}
-                        className="px-4 py-2 text-sm text-green-600 hover:bg-green-50 rounded-lg transition-colors flex items-center gap-2"
+                        className="px-4 py-2 text-sm text-silver hover:bg-[#1f252c] rounded-lg transition-colors flex items-center gap-2"
                       >
                         <FileDown className="h-4 w-4" />
                         Reporte Completo
@@ -728,7 +792,7 @@ const VehicleList: React.FC = () => {
                           e.stopPropagation();
                           navigate(`/vehicles/${vehicle._id}/edit`);
                         }}
-                        className="px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2"
+                        className="px-4 py-2 text-sm text-[#83b3e5] hover:bg-[#17212f] rounded-lg transition-colors flex items-center gap-2"
                       >
                         <Edit className="h-4 w-4" />
                         Editar
@@ -738,7 +802,7 @@ const VehicleList: React.FC = () => {
                           e.stopPropagation();
                           handleDelete(vehicle._id);
                         }}
-                        className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2"
+                        className="px-4 py-2 text-sm text-primary-300 hover:bg-[#2a1114] rounded-lg transition-colors flex items-center gap-2"
                       >
                         <Trash2 className="h-4 w-4" />
                         Eliminar
