@@ -1,6 +1,5 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import Vehicle from '../models/Vehicle';
-import FixedExpense from '../models/FixedExpense';
 import { AuthRequest } from '../types';
 import ExcelJS from 'exceljs';
 import path from 'path';
@@ -27,75 +26,7 @@ const calculateVehicleTotalExpenses = (vehicle: any): number => {
   return gastosGenerales + gastosInversionistas;
 };
 
-const MONTH_NAMES = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-];
-
-const normalizeText = (value: string): string =>
-  value
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim();
-
-const resolveMonthIndex = (monthValue: any): number | null => {
-  if (!monthValue && monthValue !== 0) return null;
-
-  const raw = `${monthValue}`.trim();
-  if (!raw) return null;
-
-  const maybeNumber = parseInt(raw, 10);
-  if (!Number.isNaN(maybeNumber) && maybeNumber >= 1 && maybeNumber <= 12) {
-    return maybeNumber - 1;
-  }
-
-  const normalizedMonth = normalizeText(raw);
-  const monthIndex = MONTH_NAMES.findIndex((month) => normalizeText(month) === normalizedMonth);
-  return monthIndex >= 0 ? monthIndex : null;
-};
-
-const getFixedExpenseAmountForMonth = (
-  expense: any,
-  year: number,
-  monthIndex: number
-): number => {
-  if (!expense) return 0;
-
-  const amount = Number(expense.monto || 0);
-  if (amount <= 0) return 0;
-
-  const startDate = expense.fechaInicio ? new Date(expense.fechaInicio) : new Date(year, 0, 1);
-  const endDate = expense.fechaFin ? new Date(expense.fechaFin) : null;
-
-  const maxDay = new Date(year, monthIndex + 1, 0).getDate();
-  const paymentDay = Math.max(1, Math.min(31, Number(expense.diaPago || 1)));
-  const dueDate = new Date(year, monthIndex, Math.min(paymentDay, maxDay));
-
-  if (dueDate < startDate) return 0;
-  if (endDate && dueDate > endDate) return 0;
-
-  return amount;
-};
-
-const buildFixedExpenseMonthlyMap = (expenses: any[], year: number): number[] => {
-  const monthlyMap = Array.from({ length: 12 }, () => 0);
-
-  expenses.forEach((expense) => {
-    for (let monthIndex = 0; monthIndex < 12; monthIndex += 1) {
-      monthlyMap[monthIndex] += getFixedExpenseAmountForMonth(expense, year, monthIndex);
-    }
-  });
-
-  return monthlyMap;
-};
-
-const YEAR_FIELD = 'a\u00f1o';
-
-const getVehicleYear = (vehicle: any): number | string =>
-  vehicle?.[YEAR_FIELD] ?? vehicle?.anio ?? '';
-
-// Crear nuevo vehÃ­culo
+// Crear nuevo vehículo
 export const createVehicle = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const vehicleData = req.body;
@@ -107,17 +38,17 @@ export const createVehicle = async (req: AuthRequest, res: Response): Promise<vo
     await vehicle.save();
 
     res.status(201).json({
-      message: 'VehÃ­culo creado exitosamente',
+      message: 'Vehículo creado exitosamente',
       vehicle,
     });
   } catch (error: any) {
-    console.error('Error al crear vehÃ­culo:', error);
+    console.error('Error al crear vehículo:', error);
     
-    // Manejar errores de validaciÃ³n de Mongoose
+    // Manejar errores de validación de Mongoose
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map((err: any) => err.message);
       res.status(400).json({ 
-        message: 'Error de validaciÃ³n', 
+        message: 'Error de validación', 
         errors: errors,
         details: error.message 
       });
@@ -128,26 +59,24 @@ export const createVehicle = async (req: AuthRequest, res: Response): Promise<vo
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern)[0];
       res.status(400).json({ 
-        message: `Ya existe un vehÃ­culo con ${field === 'placa' ? 'esta placa' : 'este VIN'}`,
+        message: `Ya existe un vehículo con ${field === 'placa' ? 'esta placa' : 'este VIN'}`,
         field: field
       });
       return;
     }
     
     res.status(500).json({ 
-      message: 'Error al crear vehÃ­culo', 
+      message: 'Error al crear vehículo', 
       error: error.message 
     });
   }
 };
 
 
-// Obtener todos los vehÃ­culos
+// Obtener todos los vehículos
 export const getAllVehicles = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { estado, marca, modelo } = req.query;
-    const yearQuery =
-      (req.query as Record<string, unknown>)[YEAR_FIELD] ?? (req.query as Record<string, unknown>).anio;
+    const { estado, marca, modelo, año } = req.query;
     const userRole = req.user?.rol;
     
     const filter: any = {};
@@ -155,19 +84,14 @@ export const getAllVehicles = async (req: AuthRequest, res: Response): Promise<v
     if (estado) filter.estado = estado;
     if (marca) filter.marca = new RegExp(marca as string, 'i');
     if (modelo) filter.modelo = new RegExp(modelo as string, 'i');
-    if (yearQuery !== undefined && yearQuery !== null && `${yearQuery}`.trim()) {
-      const parsedYear = parseInt(`${yearQuery}`, 10);
-      if (!Number.isNaN(parsedYear)) {
-        filter[YEAR_FIELD] = parsedYear;
-      }
-    }
+    if (año) filter.año = parseInt(año as string);
 
     const vehicles = await Vehicle.find(filter)
       .populate('registradoPor', 'nombre email')
       .sort({ fechaIngreso: -1 });
 
-    // Si el usuario es visualizador, ocultar informaciÃ³n financiera
-    // Los vendedores SÃ pueden ver precio de venta
+    // Si el usuario es visualizador, ocultar información financiera
+    // Los vendedores SÍ pueden ver precio de venta
     if (userRole === 'visualizador') {
       const vehiclesSinFinanzas = vehicles.map(vehicle => {
         const vehicleObj = vehicle.toObject();
@@ -182,7 +106,7 @@ export const getAllVehicles = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
     
-    // Si el usuario es vendedor, ocultar solo informaciÃ³n sensible (costos e inversionistas)
+    // Si el usuario es vendedor, ocultar solo información sensible (costos e inversionistas)
     if (userRole === 'vendedor') {
       const vehiclesVendedor = vehicles.map(vehicle => {
         const vehicleObj = vehicle.toObject();
@@ -198,11 +122,11 @@ export const getAllVehicles = async (req: AuthRequest, res: Response): Promise<v
 
     res.json(vehicles);
   } catch (error: any) {
-    res.status(500).json({ message: 'Error al obtener vehÃ­culos', error: error.message });
+    res.status(500).json({ message: 'Error al obtener vehículos', error: error.message });
   }
 };
 
-// Obtener vehÃ­culo por ID
+// Obtener vehículo por ID
 export const getVehicleById = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
@@ -211,11 +135,11 @@ export const getVehicleById = async (req: AuthRequest, res: Response): Promise<v
     const vehicle = await Vehicle.findById(id).populate('registradoPor', 'nombre email');
 
     if (!vehicle) {
-      res.status(404).json({ message: 'VehÃ­culo no encontrado' });
+      res.status(404).json({ message: 'Vehículo no encontrado' });
       return;
     }
 
-    // Si el usuario es visualizador, ocultar informaciÃ³n financiera
+    // Si el usuario es visualizador, ocultar información financiera
     if (userRole === 'visualizador') {
       const vehicleObj = vehicle.toObject();
       const vehicleSinFinanzas = {
@@ -230,7 +154,7 @@ export const getVehicleById = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
     
-    // Si el usuario es vendedor, ocultar solo informaciÃ³n sensible (costos e inversionistas)
+    // Si el usuario es vendedor, ocultar solo información sensible (costos e inversionistas)
     if (userRole === 'vendedor') {
       const vehicleObj = vehicle.toObject();
       const vehicleVendedor = {
@@ -247,18 +171,18 @@ export const getVehicleById = async (req: AuthRequest, res: Response): Promise<v
 
     res.json(vehicle);
   } catch (error: any) {
-    res.status(500).json({ message: 'Error al obtener vehÃ­culo', error: error.message });
+    res.status(500).json({ message: 'Error al obtener vehículo', error: error.message });
   }
 };
 
-// Actualizar vehÃ­culo
+// Actualizar vehículo
 export const updateVehicle = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const vehicle = await Vehicle.findById(id);
 
     if (!vehicle) {
-      res.status(404).json({ message: 'VehÃ­culo no encontrado' });
+      res.status(404).json({ message: 'Vehículo no encontrado' });
       return;
     }
 
@@ -268,15 +192,15 @@ export const updateVehicle = async (req: AuthRequest, res: Response): Promise<vo
     await vehicle.populate('registradoPor', 'nombre email');
 
     res.json({
-      message: 'VehÃ­culo actualizado exitosamente',
+      message: 'Vehículo actualizado exitosamente',
       vehicle,
     });
   } catch (error: any) {
-    res.status(500).json({ message: 'Error al actualizar vehÃ­culo', error: error.message });
+    res.status(500).json({ message: 'Error al actualizar vehículo', error: error.message });
   }
 };
 
-// Eliminar vehÃ­culo
+// Eliminar vehículo
 export const deleteVehicle = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
@@ -284,7 +208,7 @@ export const deleteVehicle = async (req: AuthRequest, res: Response): Promise<vo
     const vehicle = await Vehicle.findByIdAndDelete(id);
 
     if (!vehicle) {
-      res.status(404).json({ message: 'VehÃ­culo no encontrado' });
+      res.status(404).json({ message: 'Vehículo no encontrado' });
       return;
     }
 
@@ -305,9 +229,9 @@ export const deleteVehicle = async (req: AuthRequest, res: Response): Promise<vo
       }
     });
 
-    res.json({ message: 'VehÃ­culo eliminado exitosamente' });
+    res.json({ message: 'Vehículo eliminado exitosamente' });
   } catch (error: any) {
-    res.status(500).json({ message: 'Error al eliminar vehÃ­culo', error: error.message });
+    res.status(500).json({ message: 'Error al eliminar vehículo', error: error.message });
   }
 };
 
@@ -332,7 +256,7 @@ export const getVehiclePhoto = async (req: Request, res: Response): Promise<void
   }
 };
 
-// Obtener estadÃ­sticas
+// Obtener estadísticas
 export const getStatistics = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user?.userId;
@@ -343,12 +267,12 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
     const vehiculosPendientes = await Vehicle.countDocuments({ estado: 'en_proceso' });
     const vehiculosVendidos = await Vehicle.countDocuments({ estado: 'vendido' });
 
-    // Obtener solo vehÃ­culos que NO estÃ¡n vendidos (inventario actual)
+    // Obtener solo vehículos que NO están vendidos (inventario actual)
     const vehiculosEnStock = await Vehicle.find({
       estado: { $in: ['en_proceso', 'listo_venta', 'en_negociacion'] },
     });
 
-    // Obtener vehÃ­culos vendidos
+    // Obtener vehículos vendidos
     const vehiculosVendidosData = await Vehicle.find({ estado: 'vendido' });
 
     let valorInventario = 0;
@@ -358,7 +282,7 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
 
     // Si es admin, calcular totales completos
     if (userRole === 'admin') {
-      // Valor del inventario = suma de (Precio Compra + Gastos TOTALES) de vehÃ­culos en stock
+      // Valor del inventario = suma de (Precio Compra + Gastos TOTALES) de vehículos en stock
       valorInventario = vehiculosEnStock.reduce(
         (sum, vehicle) => {
           const precioCompra = vehicle.precioCompra || 0;
@@ -368,14 +292,14 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
         0
       );
 
-      // Total de gastos solo de vehÃ­culos en stock
+      // Total de gastos solo de vehículos en stock
       totalGastos = vehiculosEnStock.reduce(
         (sum, vehicle) => sum + calculateVehicleTotalExpenses(vehicle),
         0
       );
 
-      // Ganancias estimadas solo de vehÃ­culos en stock
-      // FÃ³rmula: Precio Venta - Precio Compra - Gastos Totales
+      // Ganancias estimadas solo de vehículos en stock
+      // Fórmula: Precio Venta - Precio Compra - Gastos Totales
       gananciasEstimadas = vehiculosEnStock.reduce(
         (sum, vehicle) => {
           const precioVenta = vehicle.precioVenta || 0;
@@ -387,7 +311,7 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
         0
       );
 
-      // Ganancias reales de vehÃ­culos vendidos
+      // Ganancias reales de vehículos vendidos
       gananciasReales = vehiculosVendidosData.reduce(
         (sum, vehicle) => {
           const precioVenta = vehicle.precioVenta || 0;
@@ -400,7 +324,7 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
       );
     } else {
       // Para inversionistas, calcular solo SUS utilidades
-      // VehÃ­culos en stock donde el usuario es inversionista
+      // Vehículos en stock donde el usuario es inversionista
       vehiculosEnStock.forEach(vehicle => {
         const inversionista = vehicle.inversionistas?.find(
           inv => inv.usuario?.toString() === userId
@@ -420,7 +344,7 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
         }
       });
 
-      // VehÃ­culos vendidos donde el usuario es inversionista
+      // Vehículos vendidos donde el usuario es inversionista
       vehiculosVendidosData.forEach(vehicle => {
         const inversionista = vehicle.inversionistas?.find(
           inv => inv.usuario?.toString() === userId
@@ -444,7 +368,7 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
       vehiculosEnStock: vehiculosEnStock.length,
     });
   } catch (error: any) {
-    res.status(500).json({ message: 'Error al obtener estadÃ­sticas', error: error.message });
+    res.status(500).json({ message: 'Error al obtener estadísticas', error: error.message });
   }
 };
 
@@ -461,14 +385,14 @@ export const exportToExcel = async (req: AuthRequest, res: Response): Promise<vo
       .sort({ fechaIngreso: -1 });
 
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Inventario de VehÃ­culos');
+    const worksheet = workbook.addWorksheet('Inventario de Vehículos');
 
     // Definir columnas
     worksheet.columns = [
       { header: 'Placa', key: 'placa', width: 12 },
       { header: 'Marca', key: 'marca', width: 15 },
       { header: 'Modelo', key: 'modelo', width: 15 },
-      { header: 'AÃ±o', key: 'aÃ±o', width: 10 },
+      { header: 'Año', key: 'año', width: 10 },
       { header: 'Color', key: 'color', width: 12 },
       { header: 'VIN', key: 'vin', width: 20 },
       { header: 'Kilometraje', key: 'kilometraje', width: 12 },
@@ -477,7 +401,7 @@ export const exportToExcel = async (req: AuthRequest, res: Response): Promise<vo
       { header: 'Ganancia', key: 'ganancia', width: 15 },
       { header: 'Estado', key: 'estado', width: 15 },
       { header: 'SOAT', key: 'soat', width: 12 },
-      { header: 'TecnomecÃ¡nica', key: 'tecnomecanica', width: 15 },
+      { header: 'Tecnomecánica', key: 'tecnomecanica', width: 15 },
       { header: 'Prenda', key: 'prenda', width: 10 },
       { header: 'Fecha Ingreso', key: 'fechaIngreso', width: 15 },
       { header: 'Registrado Por', key: 'registradoPor', width: 20 },
@@ -498,7 +422,7 @@ export const exportToExcel = async (req: AuthRequest, res: Response): Promise<vo
         placa: vehicle.placa,
         marca: vehicle.marca,
         modelo: vehicle.modelo,
-        aÃ±o: vehicle.aÃ±o,
+        año: vehicle.año,
         color: vehicle.color,
         vin: vehicle.vin,
         kilometraje: vehicle.kilometraje,
@@ -506,9 +430,9 @@ export const exportToExcel = async (req: AuthRequest, res: Response): Promise<vo
         precioVenta: vehicle.precioVenta,
         ganancia: vehicle.precioVenta - vehicle.precioCompra,
         estado: vehicle.estado.replace('_', ' ').toUpperCase(),
-        soat: vehicle.documentacion.soat.tiene ? 'SÃ­' : 'No',
-        tecnomecanica: vehicle.documentacion.tecnomecanica.tiene ? 'SÃ­' : 'No',
-        prenda: vehicle.documentacion.prenda.tiene ? 'SÃ­' : 'No',
+        soat: vehicle.documentacion.soat.tiene ? 'Sí' : 'No',
+        tecnomecanica: vehicle.documentacion.tecnomecanica.tiene ? 'Sí' : 'No',
+        prenda: vehicle.documentacion.prenda.tiene ? 'Sí' : 'No',
         fechaIngreso: vehicle.fechaIngreso.toLocaleDateString('es-CO'),
         registradoPor: (vehicle.registradoPor as any).nombre || 'N/A',
       });
@@ -529,7 +453,7 @@ export const exportToExcel = async (req: AuthRequest, res: Response): Promise<vo
       if (err) {
         console.error('Error al descargar archivo:', err);
       }
-      // Eliminar archivo despuÃ©s de descarga
+      // Eliminar archivo después de descarga
       fs.unlinkSync(filePath);
     });
   } catch (error: any) {
@@ -546,7 +470,7 @@ export const uploadPhotos = async (req: AuthRequest, res: Response): Promise<voi
     const vehicle = await Vehicle.findById(id);
 
     if (!vehicle) {
-      res.status(404).json({ message: 'VehÃ­culo no encontrado' });
+      res.status(404).json({ message: 'Vehículo no encontrado' });
       return;
     }
 
@@ -574,13 +498,13 @@ export const uploadPhotos = async (req: AuthRequest, res: Response): Promise<voi
   }
 };
 
-// Obtener vehÃ­culos con documentos prÃ³ximos a vencer
+// Obtener vehículos con documentos próximos a vencer
 export const getVehiclesWithExpiringDocuments = async (
   req: AuthRequest,
   res: Response
 ): Promise<void> => {
   try {
-    const diasAlerta = 30; // Alertar 30 dÃ­as antes
+    const diasAlerta = 30; // Alertar 30 días antes
     const fechaLimite = new Date();
     fechaLimite.setDate(fechaLimite.getDate() + diasAlerta);
 
@@ -604,13 +528,13 @@ export const getVehiclesWithExpiringDocuments = async (
     res.json(vehicles);
   } catch (error: any) {
     res.status(500).json({
-      message: 'Error al obtener vehÃ­culos con documentos por vencer',
+      message: 'Error al obtener vehículos con documentos por vencer',
       error: error.message,
     });
   }
 };
 
-// Exportar reporte individual de vehÃ­culo a Excel
+// Exportar reporte individual de vehículo a Excel
 export const exportVehicleReport = async (
   req: AuthRequest,
   res: Response
@@ -621,12 +545,12 @@ export const exportVehicleReport = async (
     const vehicle = await Vehicle.findById(id).populate('registradoPor', 'nombre email');
 
     if (!vehicle) {
-      res.status(404).json({ message: 'VehÃ­culo no encontrado' });
+      res.status(404).json({ message: 'Vehículo no encontrado' });
       return;
     }
 
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Detalle del VehÃ­culo');
+    const worksheet = workbook.addWorksheet('Detalle del Vehículo');
 
     // Configurar ancho de columnas
     worksheet.columns = [
@@ -634,10 +558,10 @@ export const exportVehicleReport = async (
       { width: 30 },
     ];
 
-    // TÃ­tulo
+    // Título
     worksheet.mergeCells('A1:B1');
     const titleCell = worksheet.getCell('A1');
-    titleCell.value = 'REPORTE DETALLADO DE VEHÃCULO';
+    titleCell.value = 'REPORTE DETALLADO DE VEHÍCULO';
     titleCell.font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
     titleCell.fill = {
       type: 'pattern',
@@ -649,7 +573,7 @@ export const exportVehicleReport = async (
 
     let currentRow = 3;
 
-    // FunciÃ³n helper para agregar secciÃ³n
+    // Función helper para agregar sección
     const addSection = (title: string) => {
       worksheet.mergeCells(`A${currentRow}:B${currentRow}`);
       const cell = worksheet.getCell(`A${currentRow}`);
@@ -663,7 +587,7 @@ export const exportVehicleReport = async (
       currentRow++;
     };
 
-    // FunciÃ³n helper para agregar fila de datos
+    // Función helper para agregar fila de datos
     const addDataRow = (label: string, value: any) => {
       worksheet.getCell(`A${currentRow}`).value = label;
       worksheet.getCell(`A${currentRow}`).font = { bold: true };
@@ -671,18 +595,18 @@ export const exportVehicleReport = async (
       currentRow++;
     };
 
-    // InformaciÃ³n BÃ¡sica
-    addSection('INFORMACIÃ“N BÃSICA');
+    // Información Básica
+    addSection('INFORMACIÓN BÁSICA');
     addDataRow('Marca', vehicle.marca);
     addDataRow('Modelo', vehicle.modelo);
-    addDataRow('AÃ±o', vehicle.aÃ±o);
+    addDataRow('Año', vehicle.año);
     addDataRow('Placa', vehicle.placa);
     addDataRow('Color', vehicle.color);
     addDataRow('Kilometraje', vehicle.kilometraje.toLocaleString('es-CO'));
     currentRow++;
 
-    // InformaciÃ³n Financiera
-    addSection('INFORMACIÃ“N FINANCIERA');
+    // Información Financiera
+    addSection('INFORMACIÓN FINANCIERA');
     addDataRow('Precio de Compra', `$${vehicle.precioCompra.toLocaleString('es-CO')}`);
     addDataRow('Precio de Venta', `$${vehicle.precioVenta.toLocaleString('es-CO')}`);
     currentRow++;
@@ -690,10 +614,10 @@ export const exportVehicleReport = async (
     // Gastos
     addSection('GASTOS');
     addDataRow('Gastos en Pintura', `$${vehicle.gastos.pintura.toLocaleString('es-CO')}`);
-    addDataRow('Gastos en MecÃ¡nica', `$${vehicle.gastos.mecanica.toLocaleString('es-CO')}`);
+    addDataRow('Gastos en Mecánica', `$${vehicle.gastos.mecanica.toLocaleString('es-CO')}`);
     addDataRow('Gastos de Traspaso', `$${vehicle.gastos.traspaso.toLocaleString('es-CO')}`);
     addDataRow('Gastos de Alistamiento', `$${vehicle.gastos.alistamiento.toLocaleString('es-CO')}`);
-    addDataRow('Gastos de TapicerÃ­a', `$${vehicle.gastos.tapiceria.toLocaleString('es-CO')}`);
+    addDataRow('Gastos de Tapicería', `$${vehicle.gastos.tapiceria.toLocaleString('es-CO')}`);
     addDataRow('Gastos de Transporte', `$${vehicle.gastos.transporte.toLocaleString('es-CO')}`);
     addDataRow('Gastos Varios', `$${vehicle.gastos.varios.toLocaleString('es-CO')}`);
     addDataRow('TOTAL GASTOS', `$${vehicle.gastos.total.toLocaleString('es-CO')}`);
@@ -725,26 +649,26 @@ export const exportVehicleReport = async (
     }
     currentRow++;
 
-    // DocumentaciÃ³n
-    addSection('DOCUMENTACIÃ“N');
-    addDataRow('Prenda', vehicle.documentacion.prenda.tiene ? 'SÃ' : 'NO');
+    // Documentación
+    addSection('DOCUMENTACIÓN');
+    addDataRow('Prenda', vehicle.documentacion.prenda.tiene ? 'SÍ' : 'NO');
     if (vehicle.documentacion.prenda.tiene && vehicle.documentacion.prenda.detalles) {
       addDataRow('Detalles Prenda', vehicle.documentacion.prenda.detalles);
     }
-    addDataRow('SOAT', vehicle.documentacion.soat.tiene ? 'SÃ' : 'NO');
+    addDataRow('SOAT', vehicle.documentacion.soat.tiene ? 'SÍ' : 'NO');
     if (vehicle.documentacion.soat.fechaVencimiento) {
       addDataRow('Vencimiento SOAT', new Date(vehicle.documentacion.soat.fechaVencimiento).toLocaleDateString('es-CO'));
     }
-    addDataRow('TecnomecÃ¡nica', vehicle.documentacion.tecnomecanica.tiene ? 'SÃ' : 'NO');
+    addDataRow('Tecnomecánica', vehicle.documentacion.tecnomecanica.tiene ? 'SÍ' : 'NO');
     if (vehicle.documentacion.tecnomecanica.fechaVencimiento) {
-      addDataRow('Vencimiento TecnomecÃ¡nica', new Date(vehicle.documentacion.tecnomecanica.fechaVencimiento).toLocaleDateString('es-CO'));
+      addDataRow('Vencimiento Tecnomecánica', new Date(vehicle.documentacion.tecnomecanica.fechaVencimiento).toLocaleDateString('es-CO'));
     }
-    addDataRow('Tarjeta de Propiedad', vehicle.documentacion.tarjetaPropiedad.tiene ? 'SÃ' : 'NO');
+    addDataRow('Tarjeta de Propiedad', vehicle.documentacion.tarjetaPropiedad.tiene ? 'SÍ' : 'NO');
     currentRow++;
 
     // Inversionistas
     if (vehicle.inversionistas && vehicle.inversionistas.length > 0) {
-      addSection('INVERSIONISTAS Y DISTRIBUCIÃ“N DE UTILIDADES');
+      addSection('INVERSIONISTAS Y DISTRIBUCIÓN DE UTILIDADES');
       
       // Encabezados de la tabla de inversionistas
       worksheet.getCell(`A${currentRow}`).value = 'Nombre';
@@ -755,7 +679,7 @@ export const exportVehicleReport = async (
         fgColor: { argb: 'FFE7E6E6' },
       };
       
-      worksheet.getCell(`B${currentRow}`).value = 'Monto InversiÃ³n';
+      worksheet.getCell(`B${currentRow}`).value = 'Monto Inversión';
       worksheet.getCell(`B${currentRow}`).font = { bold: true };
       worksheet.getCell(`B${currentRow}`).fill = {
         type: 'pattern',
@@ -775,7 +699,7 @@ export const exportVehicleReport = async (
       currentRow++;
 
       worksheet.getCell(`A${currentRow}`).value = '';
-      worksheet.getCell(`B${currentRow}`).value = 'ParticipaciÃ³n %';
+      worksheet.getCell(`B${currentRow}`).value = 'Participación %';
       worksheet.getCell(`B${currentRow}`).font = { bold: true };
       worksheet.getCell(`B${currentRow}`).fill = {
         type: 'pattern',
@@ -819,7 +743,7 @@ export const exportVehicleReport = async (
       // Utilidad bruta (sin considerar gastos de inversionistas)
       const utilidadBruta = vehicle.precioVenta - vehicle.precioCompra - gastosGenerales;
       
-      // Utilidad neta a distribuir (despuÃ©s de restar gastos de inversionistas)
+      // Utilidad neta a distribuir (después de restar gastos de inversionistas)
       const utilidadNeta = utilidadBruta - totalGastosInv;
 
       // Datos de cada inversionista
@@ -857,7 +781,7 @@ export const exportVehicleReport = async (
           currentRow++;
         }
 
-        // ParticipaciÃ³n
+        // Participación
         worksheet.getCell(`A${currentRow}`).value = '';
         worksheet.getCell(`B${currentRow}`).value = porcentaje;
         worksheet.getCell(`B${currentRow}`).numFmt = '0.00"%"';
@@ -899,7 +823,7 @@ export const exportVehicleReport = async (
 
       addDataRow('Total Invertido', `$${totalInversion.toLocaleString('es-CO')}`);
       addDataRow('Total Gastos Inversionistas', `$${totalGastosInv.toLocaleString('es-CO')}`);
-      addDataRow('NÃºmero de Socios', vehicle.inversionistas.length);
+      addDataRow('Número de Socios', vehicle.inversionistas.length);
       addDataRow('Utilidad Bruta', `$${utilidadBruta.toLocaleString('es-CO')}`);
       addDataRow('Utilidad Neta a Distribuir', `$${utilidadNeta.toLocaleString('es-CO')}`);
       
@@ -930,26 +854,21 @@ export const exportVehicleReport = async (
       fs.unlinkSync(filePath);
     });
   } catch (error: any) {
-    res.status(500).json({ message: 'Error al exportar reporte del vehÃ­culo', error: error.message });
+    res.status(500).json({ message: 'Error al exportar reporte del vehículo', error: error.message });
   }
 };
 
-// Exportar reporte ejecutivo mensual/anual a Excel
+// Exportar reporte mensual de ventas a Excel
 export const exportMonthlyReport = async (
   req: AuthRequest,
   res: Response
 ): Promise<void> => {
   try {
     const { year, month } = req.query;
-    const selectedYear = year ? parseInt(year as string, 10) : new Date().getFullYear();
-    const selectedMonthIndex = resolveMonthIndex(month);
+    const selectedYear = year ? parseInt(year as string) : new Date().getFullYear();
 
-    const startDate = selectedMonthIndex !== null
-      ? new Date(selectedYear, selectedMonthIndex, 1)
-      : new Date(selectedYear, 0, 1);
-    const endDate = selectedMonthIndex !== null
-      ? new Date(selectedYear, selectedMonthIndex + 1, 0, 23, 59, 59, 999)
-      : new Date(selectedYear, 11, 31, 23, 59, 59, 999);
+    const startDate = new Date(selectedYear, 0, 1);
+    const endDate = new Date(selectedYear, 11, 31, 23, 59, 59);
 
     const vehiculosVendidos = await Vehicle.find({
       estado: 'vendido',
@@ -959,230 +878,114 @@ export const exportMonthlyReport = async (
       },
     }).sort({ fechaVenta: 1 });
 
-    const fixedExpenses = await FixedExpense.find({
-      fechaInicio: { $lte: endDate },
-      $or: [
-        { activo: true },
-        { fechaFin: { $gte: startDate } },
-      ],
-    }).lean();
-
-    const monthlyFixedExpenses = buildFixedExpenseMonthlyMap(fixedExpenses, selectedYear);
-    const monthsToInclude = selectedMonthIndex !== null
-      ? [selectedMonthIndex]
-      : Array.from({ length: 12 }, (_, index) => index);
-
-    const monthlySummary = new Map<number, any>();
-    monthsToInclude.forEach((monthIndex) => {
-      monthlySummary.set(monthIndex, {
-        monthIndex,
-        month: MONTH_NAMES[monthIndex],
-        soldUnits: 0,
-        totalSales: 0,
-        totalSalesCost: 0,
-        fixedExpenses: monthlyFixedExpenses[monthIndex] || 0,
-      });
-    });
-
-    vehiculosVendidos.forEach((vehicle) => {
-      if (!vehicle.fechaVenta) return;
-
-      const soldDate = new Date(vehicle.fechaVenta);
-      const monthIndex = soldDate.getMonth();
-      if (!monthlySummary.has(monthIndex)) return;
-
-      const vehicleExpense = calculateVehicleTotalExpenses(vehicle);
-      const totalSalesCost = (vehicle.precioCompra || 0) + vehicleExpense;
-
-      const monthData = monthlySummary.get(monthIndex)!;
-      monthData.soldUnits += 1;
-      monthData.totalSales += vehicle.precioVenta || 0;
-      monthData.totalSalesCost += totalSalesCost;
-    });
-
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'AutoTech';
-    workbook.created = new Date();
+    const worksheet = workbook.addWorksheet(`Ventas ${selectedYear}`);
 
-    const summarySheet = workbook.addWorksheet('Resumen Ejecutivo');
-    summarySheet.mergeCells('A1:H1');
-    summarySheet.getCell('A1').value = selectedMonthIndex !== null
-      ? `REPORTE EJECUTIVO - ${MONTH_NAMES[selectedMonthIndex]} ${selectedYear}`
-      : `REPORTE EJECUTIVO ANUAL - ${selectedYear}`;
-    summarySheet.getCell('A1').font = { size: 15, bold: true, color: { argb: 'FFFFFFFF' } };
-    summarySheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
-    summarySheet.getCell('A1').fill = {
+    // Título
+    worksheet.mergeCells('A1:I1');
+    const titleCell = worksheet.getCell('A1');
+    titleCell.value = `REPORTE DE VENTAS - AÑO ${selectedYear}`;
+    titleCell.font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+    titleCell.fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FF1F2937' },
+      fgColor: { argb: 'FF4472C4' },
     };
-    summarySheet.getRow(1).height = 26;
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    worksheet.getRow(1).height = 30;
 
-    summarySheet.columns = [
-      { header: 'Mes', key: 'month', width: 14 },
-      { header: 'Vehiculos Vendidos', key: 'soldUnits', width: 18 },
-      { header: 'Ventas', key: 'totalSales', width: 16 },
-      { header: 'Costos de Venta', key: 'totalSalesCost', width: 16 },
-      { header: 'Gastos Fijos', key: 'fixedExpenses', width: 14 },
-      { header: 'Utilidad Bruta', key: 'grossProfit', width: 16 },
-      { header: 'Utilidad Neta', key: 'netProfit', width: 16 },
-      { header: 'Margen Neto %', key: 'netMargin', width: 14 },
+    // Encabezados
+    worksheet.columns = [
+      { header: 'Fecha Venta', key: 'fechaVenta', width: 15 },
+      { header: 'Mes', key: 'mes', width: 12 },
+      { header: 'Placa', key: 'placa', width: 12 },
+      { header: 'Marca', key: 'marca', width: 15 },
+      { header: 'Modelo', key: 'modelo', width: 15 },
+      { header: 'Año', key: 'año', width: 10 },
+      { header: 'Precio Compra', key: 'precioCompra', width: 15 },
+      { header: 'Gastos Totales', key: 'gastos', width: 15 },
+      { header: 'Costo Total', key: 'costoTotal', width: 15 },
+      { header: 'Precio Venta', key: 'precioVenta', width: 15 },
+      { header: 'Utilidad', key: 'utilidad', width: 15 },
+      { header: 'Margen %', key: 'margen', width: 12 },
     ];
 
-    const summaryHeader = summarySheet.getRow(3);
-    summaryHeader.values = summarySheet.columns.map((column: any) => column.header);
-    summaryHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    summaryHeader.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFDC2626' },
-    };
-
-    let totalSoldUnits = 0;
-    let totalSales = 0;
-    let totalSalesCost = 0;
-    let totalFixed = 0;
-
-    const sortedSummary = Array.from(monthlySummary.values()).sort((a, b) => a.monthIndex - b.monthIndex);
-    sortedSummary.forEach((item) => {
-      const grossProfit = item.totalSales - item.totalSalesCost;
-      const netProfit = grossProfit - item.fixedExpenses;
-      const netMargin = item.totalSales > 0 ? netProfit / item.totalSales : 0;
-
-      summarySheet.addRow({
-        month: item.month,
-        soldUnits: item.soldUnits,
-        totalSales: item.totalSales,
-        totalSalesCost: item.totalSalesCost,
-        fixedExpenses: item.fixedExpenses,
-        grossProfit,
-        netProfit,
-        netMargin,
-      });
-
-      totalSoldUnits += item.soldUnits;
-      totalSales += item.totalSales;
-      totalSalesCost += item.totalSalesCost;
-      totalFixed += item.fixedExpenses;
-    });
-
-    const summaryTotalRowIndex = summarySheet.lastRow ? summarySheet.lastRow.number + 2 : 5;
-    summarySheet.getCell(`A${summaryTotalRowIndex}`).value = 'TOTAL';
-    summarySheet.getCell(`A${summaryTotalRowIndex}`).font = { bold: true };
-    summarySheet.getCell(`B${summaryTotalRowIndex}`).value = totalSoldUnits;
-    summarySheet.getCell(`B${summaryTotalRowIndex}`).font = { bold: true };
-    summarySheet.getCell(`C${summaryTotalRowIndex}`).value = totalSales;
-    summarySheet.getCell(`D${summaryTotalRowIndex}`).value = totalSalesCost;
-    summarySheet.getCell(`E${summaryTotalRowIndex}`).value = totalFixed;
-    summarySheet.getCell(`F${summaryTotalRowIndex}`).value = totalSales - totalSalesCost;
-    summarySheet.getCell(`G${summaryTotalRowIndex}`).value = totalSales - totalSalesCost - totalFixed;
-    summarySheet.getCell(`H${summaryTotalRowIndex}`).value =
-      totalSales > 0 ? (totalSales - totalSalesCost - totalFixed) / totalSales : 0;
-
-    ['C', 'D', 'E', 'F', 'G'].forEach((column) => {
-      summarySheet.getCell(`${column}${summaryTotalRowIndex}`).font = { bold: true };
-    });
-    summarySheet.getCell(`H${summaryTotalRowIndex}`).font = { bold: true };
-
-    ['totalSales', 'totalSalesCost', 'fixedExpenses', 'grossProfit', 'netProfit'].forEach((key) => {
-      summarySheet.getColumn(key).numFmt = '"$"#,##0';
-    });
-    summarySheet.getColumn('netMargin').numFmt = '0.00%';
-    summarySheet.getCell(`C${summaryTotalRowIndex}`).numFmt = '"$"#,##0';
-    summarySheet.getCell(`D${summaryTotalRowIndex}`).numFmt = '"$"#,##0';
-    summarySheet.getCell(`E${summaryTotalRowIndex}`).numFmt = '"$"#,##0';
-    summarySheet.getCell(`F${summaryTotalRowIndex}`).numFmt = '"$"#,##0';
-    summarySheet.getCell(`G${summaryTotalRowIndex}`).numFmt = '"$"#,##0';
-    summarySheet.getCell(`H${summaryTotalRowIndex}`).numFmt = '0.00%';
-
-    const detailSheet = workbook.addWorksheet('Detalle Ventas');
-    detailSheet.columns = [
-      { header: 'Fecha Venta', key: 'saleDate', width: 15 },
-      { header: 'Mes', key: 'month', width: 12 },
-      { header: 'Placa', key: 'plate', width: 12 },
-      { header: 'Marca', key: 'brand', width: 15 },
-      { header: 'Modelo', key: 'model', width: 15 },
-      { header: 'AÃ±o', key: 'year', width: 10 },
-      { header: 'Precio Compra', key: 'purchasePrice', width: 15 },
-      { header: 'Gastos Variable', key: 'variableExpense', width: 15 },
-      { header: 'Costo Venta', key: 'saleCost', width: 15 },
-      { header: 'Precio Venta', key: 'salePrice', width: 15 },
-      { header: 'Utilidad Bruta', key: 'grossProfit', width: 15 },
-      { header: 'Margen %', key: 'margin', width: 12 },
-    ];
-
-    const detailHeader = detailSheet.getRow(1);
-    detailHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    detailHeader.fill = {
+    const headerRow = worksheet.getRow(3);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = {
       type: 'pattern',
       pattern: 'solid',
       fgColor: { argb: 'FF5B9BD5' },
     };
 
-    let detailTotalSales = 0;
-    let detailTotalCost = 0;
-    let detailTotalGross = 0;
+    const meses = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
 
-    vehiculosVendidos.forEach((vehicle) => {
-      if (!vehicle.fechaVenta) return;
+    let totalVentas = 0;
+    let totalGastos = 0;
+    let totalUtilidad = 0;
 
-      const saleDate = new Date(vehicle.fechaVenta);
-      const monthIndex = saleDate.getMonth();
-      if (!monthsToInclude.includes(monthIndex)) return;
+    // Agregar datos
+    vehiculosVendidos.forEach((vehiculo) => {
+      if (!vehiculo.fechaVenta) return;
 
-      const variableExpense = calculateVehicleTotalExpenses(vehicle);
-      const saleCost = (vehicle.precioCompra || 0) + variableExpense;
-      const grossProfit = (vehicle.precioVenta || 0) - saleCost;
-      const margin = saleCost > 0 ? grossProfit / saleCost : 0;
+      const fecha = new Date(vehiculo.fechaVenta);
+      const mesNombre = meses[fecha.getMonth()];
+      const costoTotal = vehiculo.precioCompra + vehiculo.gastos.total;
+      const utilidad = vehiculo.precioVenta - costoTotal;
+      const margen = costoTotal > 0 ? ((utilidad / costoTotal) * 100).toFixed(2) : '0';
 
-      detailSheet.addRow({
-        saleDate: saleDate.toLocaleDateString('es-CO'),
-        month: MONTH_NAMES[monthIndex],
-        plate: vehicle.placa,
-        brand: vehicle.marca,
-        model: vehicle.modelo,
-        year: vehicle.aÃ±o,
-        purchasePrice: vehicle.precioCompra || 0,
-        variableExpense,
-        saleCost,
-        salePrice: vehicle.precioVenta || 0,
-        grossProfit,
-        margin,
+      totalVentas += vehiculo.precioVenta;
+      totalGastos += costoTotal;
+      totalUtilidad += utilidad;
+
+      worksheet.addRow({
+        fechaVenta: fecha.toLocaleDateString('es-CO'),
+        mes: mesNombre,
+        placa: vehiculo.placa,
+        marca: vehiculo.marca,
+        modelo: vehiculo.modelo,
+        año: vehiculo.año,
+        precioCompra: vehiculo.precioCompra,
+        gastos: vehiculo.gastos.total,
+        costoTotal: costoTotal,
+        precioVenta: vehiculo.precioVenta,
+        utilidad: utilidad,
+        margen: `${margen}%`,
       });
-
-      detailTotalSales += vehicle.precioVenta || 0;
-      detailTotalCost += saleCost;
-      detailTotalGross += grossProfit;
     });
 
-    if (detailSheet.rowCount === 1) {
-      detailSheet.addRow({
-        saleDate: 'Sin ventas registradas para el periodo seleccionado',
-      });
-    } else {
-      const detailTotalRow = detailSheet.lastRow!.number + 2;
-      detailSheet.getCell(`A${detailTotalRow}`).value = 'TOTALES';
-      detailSheet.getCell(`A${detailTotalRow}`).font = { bold: true };
-      detailSheet.getCell(`I${detailTotalRow}`).value = detailTotalCost;
-      detailSheet.getCell(`J${detailTotalRow}`).value = detailTotalSales;
-      detailSheet.getCell(`K${detailTotalRow}`).value = detailTotalGross;
-      detailSheet.getCell(`L${detailTotalRow}`).value = detailTotalCost > 0 ? detailTotalGross / detailTotalCost : 0;
-      ['I', 'J', 'K', 'L'].forEach((column) => {
-        detailSheet.getCell(`${column}${detailTotalRow}`).font = { bold: true };
-      });
-      detailSheet.getCell(`I${detailTotalRow}`).numFmt = '"$"#,##0';
-      detailSheet.getCell(`J${detailTotalRow}`).numFmt = '"$"#,##0';
-      detailSheet.getCell(`K${detailTotalRow}`).numFmt = '"$"#,##0';
-      detailSheet.getCell(`L${detailTotalRow}`).numFmt = '0.00%';
-    }
+    // Formato de moneda
+    worksheet.getColumn('precioCompra').numFmt = '"$"#,##0';
+    worksheet.getColumn('gastos').numFmt = '"$"#,##0';
+    worksheet.getColumn('costoTotal').numFmt = '"$"#,##0';
+    worksheet.getColumn('precioVenta').numFmt = '"$"#,##0';
+    worksheet.getColumn('utilidad').numFmt = '"$"#,##0';
 
-    ['purchasePrice', 'variableExpense', 'saleCost', 'salePrice', 'grossProfit'].forEach((key) => {
-      detailSheet.getColumn(key).numFmt = '"$"#,##0';
-    });
-    detailSheet.getColumn('margin').numFmt = '0.00%';
+    // Fila de totales
+    const lastRow = worksheet.lastRow!.number + 2;
+    worksheet.mergeCells(`A${lastRow}:F${lastRow}`);
+    const totalLabelCell = worksheet.getCell(`A${lastRow}`);
+    totalLabelCell.value = 'TOTALES';
+    totalLabelCell.font = { bold: true, size: 12 };
+    totalLabelCell.alignment = { horizontal: 'right' };
 
-    const monthSuffix = selectedMonthIndex !== null ? `-${MONTH_NAMES[selectedMonthIndex].toLowerCase()}` : '';
-    const fileName = `reporte-ejecutivo-${selectedYear}${monthSuffix}-${Date.now()}.xlsx`;
+    worksheet.getCell(`G${lastRow}`).value = totalGastos;
+    worksheet.getCell(`G${lastRow}`).numFmt = '"$"#,##0';
+    worksheet.getCell(`G${lastRow}`).font = { bold: true };
+
+    worksheet.getCell(`I${lastRow}`).value = totalVentas;
+    worksheet.getCell(`I${lastRow}`).numFmt = '"$"#,##0';
+    worksheet.getCell(`I${lastRow}`).font = { bold: true };
+
+    worksheet.getCell(`J${lastRow}`).value = totalUtilidad;
+    worksheet.getCell(`J${lastRow}`).numFmt = '"$"#,##0';
+    worksheet.getCell(`J${lastRow}`).font = { bold: true, color: { argb: totalUtilidad >= 0 ? 'FF00B050' : 'FFFF0000' } };
+
+    // Generar archivo
+    const fileName = `reporte-ventas-${selectedYear}-${Date.now()}.xlsx`;
     const filePath = path.join(ensureUploadsDir(), fileName);
 
     await workbook.xlsx.writeFile(filePath);
@@ -1209,7 +1012,7 @@ export const exportExpensesTemplate = async (
     const vehicle = await Vehicle.findById(id).populate('registradoPor', 'nombre email');
 
     if (!vehicle) {
-      res.status(404).json({ message: 'VehÃ­culo no encontrado' });
+      res.status(404).json({ message: 'Vehículo no encontrado' });
       return;
     }
 
@@ -1218,7 +1021,7 @@ export const exportExpensesTemplate = async (
 
     // Configurar ancho de columnas
     worksheet.columns = [
-      { width: 40 }, // DescripciÃ³n
+      { width: 40 }, // Descripción
       { width: 20 }, // Encargado
       { width: 15 }, // Fecha
     ];
@@ -1239,9 +1042,9 @@ export const exportExpensesTemplate = async (
 
     let currentRow = 3;
 
-    // FunciÃ³n para crear secciÃ³n con datos
+    // Función para crear sección con datos
     const createSection = (title: string, color: string, gastos: any[]) => {
-      // TÃ­tulo de secciÃ³n
+      // Título de sección
       worksheet.mergeCells(`A${currentRow}:C${currentRow}`);
       const titleCell = worksheet.getCell(`A${currentRow}`);
       titleCell.value = title;
@@ -1278,7 +1081,7 @@ export const exportExpensesTemplate = async (
       });
       currentRow++;
 
-      // Agregar datos reales o filas vacÃ­as
+      // Agregar datos reales o filas vacías
       const minRows = 6;
       const rowsToAdd = Math.max(minRows, gastos.length);
       
@@ -1343,9 +1146,9 @@ export const getMonthlyReports = async (
 ): Promise<void> => {
   try {
     const { year } = req.query;
-    const selectedYear = year ? parseInt(year as string, 10) : new Date().getFullYear();
+    const selectedYear = year ? parseInt(year as string) : new Date().getFullYear();
 
-    // Obtener vehÃ­culos vendidos en el aÃ±o seleccionado
+    // Obtener vehículos vendidos en el año seleccionado
     const startDate = new Date(selectedYear, 0, 1);
     const endDate = new Date(selectedYear, 11, 31, 23, 59, 59);
 
@@ -1357,70 +1160,59 @@ export const getMonthlyReports = async (
       },
     }).sort({ fechaVenta: 1 });
 
-    const fixedExpenses = await FixedExpense.find({
-      fechaInicio: { $lte: endDate },
-      $or: [
-        { activo: true },
-        { fechaFin: { $gte: startDate } },
-      ],
-    }).lean();
+    // Agrupar por mes
+    const meses = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
 
-    const monthlyFixedExpenses = buildFixedExpenseMonthlyMap(fixedExpenses, selectedYear);
-    const reportes = MONTH_NAMES.map((mes, monthIndex) => ({
-      mes,
-      aÃ±o: selectedYear,
-      totalVentas: 0,
-      totalCostosVenta: 0,
-      totalGastosFijos: monthlyFixedExpenses[monthIndex] || 0,
-      totalGastos: monthlyFixedExpenses[monthIndex] || 0,
-      utilidadBruta: 0,
-      utilidad: 0,
-      cantidadVehiculos: 0,
-      ticketPromedio: 0,
-      margenNeto: 0,
-      vehiculos: [] as any[],
-    }));
+    const reportesPorMes: any = {};
 
     vehiculosVendidos.forEach((vehiculo) => {
       if (!vehiculo.fechaVenta) return;
 
       const fecha = new Date(vehiculo.fechaVenta);
-      const monthIndex = fecha.getMonth();
-      const vehicleExpense = calculateVehicleTotalExpenses(vehiculo);
-      const costoVenta = (vehiculo.precioCompra || 0) + vehicleExpense;
-      const utilidadBruta = (vehiculo.precioVenta || 0) - costoVenta;
-      const report = reportes[monthIndex];
+      const mesIndex = fecha.getMonth();
+      const mesNombre = meses[mesIndex];
 
-      report.totalVentas += vehiculo.precioVenta || 0;
-      report.totalCostosVenta += costoVenta;
-      report.utilidadBruta += utilidadBruta;
-      report.cantidadVehiculos += 1;
-      report.vehiculos.push({
+      if (!reportesPorMes[mesNombre]) {
+        reportesPorMes[mesNombre] = {
+          mes: mesNombre,
+          año: selectedYear,
+          totalVentas: 0,
+          totalGastos: 0,
+          utilidad: 0,
+          cantidadVehiculos: 0,
+          vehiculos: [],
+        };
+      }
+
+      const costoTotal = vehiculo.precioCompra + vehiculo.gastos.total;
+      const utilidad = vehiculo.precioVenta - costoTotal;
+
+      reportesPorMes[mesNombre].totalVentas += vehiculo.precioVenta;
+      reportesPorMes[mesNombre].totalGastos += costoTotal;
+      reportesPorMes[mesNombre].utilidad += utilidad;
+      reportesPorMes[mesNombre].cantidadVehiculos += 1;
+      reportesPorMes[mesNombre].vehiculos.push({
         marca: vehiculo.marca,
         modelo: vehiculo.modelo,
-        aÃ±o: vehiculo.aÃ±o,
+        año: vehiculo.año,
         placa: vehiculo.placa,
         precioVenta: vehiculo.precioVenta,
         precioCompra: vehiculo.precioCompra,
-        gastosTotal: vehicleExpense,
-        costoTotal: costoVenta,
-        utilidad: utilidadBruta,
+        gastosTotal: vehiculo.gastos.total,
+        utilidad: utilidad,
         fechaVenta: vehiculo.fechaVenta,
       });
     });
 
-    reportes.forEach((report) => {
-      report.totalGastos = report.totalCostosVenta + report.totalGastosFijos;
-      report.utilidad = report.totalVentas - report.totalGastos;
-      report.ticketPromedio = report.cantidadVehiculos > 0 ? report.totalVentas / report.cantidadVehiculos : 0;
-      report.margenNeto = report.totalVentas > 0 ? report.utilidad / report.totalVentas : 0;
-    });
+    // Convertir a array y ordenar por mes
+    const reportes = meses
+      .map((mes) => reportesPorMes[mes])
+      .filter((reporte) => reporte !== undefined);
 
-    const reportesConActividad = reportes.filter(
-      (report) => report.cantidadVehiculos > 0 || report.totalGastosFijos > 0
-    );
-
-    res.json(reportesConActividad);
+    res.json(reportes);
   } catch (error: any) {
     res.status(500).json({
       message: 'Error al generar reportes mensuales',
@@ -1438,7 +1230,7 @@ export const saveSaleData = async (req: AuthRequest, res: Response): Promise<voi
     const vehicle = await Vehicle.findById(id);
 
     if (!vehicle) {
-      res.status(404).json({ message: 'VehÃ­culo no encontrado' });
+      res.status(404).json({ message: 'Vehículo no encontrado' });
       return;
     }
 
@@ -1461,26 +1253,6 @@ export const saveSaleData = async (req: AuthRequest, res: Response): Promise<voi
   }
 };
 
-const validateSaleDataForDocuments = (vehicle: any): string | null => {
-  if (!vehicle?.datosVenta) {
-    return 'El vehiculo no tiene datos de venta registrados.';
-  }
-
-  if (!vehicle.datosVenta.comprador?.nombre || !vehicle.datosVenta.comprador?.identificacion) {
-    return 'Faltan datos del comprador para generar documentos.';
-  }
-
-  if (!vehicle.datosVenta.vendedor?.nombre || !vehicle.datosVenta.vendedor?.identificacion) {
-    return 'Faltan datos del vendedor para generar documentos.';
-  }
-
-  if (!vehicle.datosVenta.transaccion?.lugarCelebracion) {
-    return 'Falta lugar de celebracion en los datos de venta.';
-  }
-
-  return null;
-};
-
 // Generar contrato de compraventa en PDF
 export const generateContract = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -1489,14 +1261,18 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
     const vehicle = await Vehicle.findById(id);
 
     if (!vehicle) {
-      res.status(404).json({ message: 'VehÃ­culo no encontrado' });
+      res.status(404).json({ message: 'Vehículo no encontrado' });
       return;
     }
 
-    const validationError = validateSaleDataForDocuments(vehicle);
-    if (validationError) {
-      res.status(400).json({
-        message: `${validationError} Por favor, completa los datos requeridos antes de generar el contrato.`,
+    // Validar que existan datos de venta Y que tengan contenido real
+    if (!vehicle.datosVenta || 
+        !vehicle.datosVenta.comprador?.nombre || 
+        !vehicle.datosVenta.comprador?.identificacion ||
+        !vehicle.datosVenta.vendedor?.nombre ||
+        !vehicle.datosVenta.transaccion?.lugarCelebracion) {
+      res.status(400).json({ 
+        message: 'El vehículo no tiene datos de venta completos. Por favor, completa todos los campos requeridos antes de generar el contrato.' 
       });
       return;
     }
@@ -1527,12 +1303,12 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
     // Pipe el PDF directamente a la respuesta
     doc.pipe(res);
 
-    // TÃTULO
+    // TÍTULO
     doc.fontSize(14).font('Helvetica-Bold')
        .text('CONTRATO DE COMPRAVENTA DE VEHICULO AUTOMOTOR', { align: 'center' });
     doc.moveDown(2);
 
-    // LUGAR Y FECHA DE CELEBRACIÃ“N
+    // LUGAR Y FECHA DE CELEBRACIÓN
     doc.fontSize(11).font('Helvetica-Bold').text('LUGAR Y FECHA DE CELEBRACION DEL CONTRATO:');
     doc.fontSize(10).font('Helvetica')
        .text(`${vehicle.datosVenta.transaccion.lugarCelebracion}, ${fechaCelebracion.getDate()} de ${mesNombre} de ${fechaCelebracion.getFullYear()}`);
@@ -1541,18 +1317,18 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
     // VENDEDOR
     doc.fontSize(11).font('Helvetica-Bold').text('VENDEDOR(ES):');
     doc.fontSize(10).font('Helvetica')
-       .text(`Nombre e IdentificaciÃ³n: ${vehicle.datosVenta.vendedor.nombre} - ${vehicle.datosVenta.vendedor.identificacion}`)
-       .text(`DirecciÃ³n: ${vehicle.datosVenta.vendedor.direccion}`)
-       .text(`TelÃ©fono: ${vehicle.datosVenta.vendedor.telefono}`);
+       .text(`Nombre e Identificación: ${vehicle.datosVenta.vendedor.nombre} - ${vehicle.datosVenta.vendedor.identificacion}`)
+       .text(`Dirección: ${vehicle.datosVenta.vendedor.direccion}`)
+       .text(`Teléfono: ${vehicle.datosVenta.vendedor.telefono}`);
     doc.moveDown();
 
     // COMPRADOR
     doc.fontSize(11).font('Helvetica-Bold').text('COMPRADOR(ES):');
     doc.fontSize(10).font('Helvetica')
-       .text(`Nombre e IdentificaciÃ³n: ${vehicle.datosVenta.comprador.nombre} - ${vehicle.datosVenta.comprador.identificacion}`)
-       .text(`DirecciÃ³n: ${vehicle.datosVenta.comprador.direccion}`)
-       .text(`TelÃ©fono: ${vehicle.datosVenta.comprador.telefono}`)
-       .text(`Correo electrÃ³nico: ${vehicle.datosVenta.comprador.email}`);
+       .text(`Nombre e Identificación: ${vehicle.datosVenta.comprador.nombre} - ${vehicle.datosVenta.comprador.identificacion}`)
+       .text(`Dirección: ${vehicle.datosVenta.comprador.direccion}`)
+       .text(`Teléfono: ${vehicle.datosVenta.comprador.telefono}`)
+       .text(`Correo electrónico: ${vehicle.datosVenta.comprador.email}`);
     doc.moveDown();
 
     // DOMICILIO CONTRACTUAL
@@ -1561,70 +1337,70 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
        .text(vehicle.datosVenta.transaccion.domicilioContractual);
     doc.moveDown();
 
-    // INTRODUCCIÃ“N A LAS CLÃUSULAS
+    // INTRODUCCIÓN A LAS CLÁUSULAS
     doc.fontSize(10).font('Helvetica')
-       .text('Las partes convienen celebrar el presente contrato de compraventa, que se regirÃ¡ por las anteriores estipulaciones, las normas legales aplicables a la materia y en especial por las siguientes clÃ¡usulas:', { align: 'justify' });
+       .text('Las partes convienen celebrar el presente contrato de compraventa, que se regirá por las anteriores estipulaciones, las normas legales aplicables a la materia y en especial por las siguientes cláusulas:', { align: 'justify' });
     doc.moveDown();
 
-    // CLÃUSULA PRIMERA
+    // CLÁUSULA PRIMERA
     doc.fontSize(10).font('Helvetica-Bold').text('PRIMERA.-OBJETO DEL CONTRATO: ', { continued: true })
-       .font('Helvetica').text('mediante el presente contrato EL VENDEDOR transfiere a tÃ­tulo de venta y EL COMPRADOR adquiere la propiedad del vehÃ­culo automotor que a continuaciÃ³n se identifica:', { align: 'justify' });
+       .font('Helvetica').text('mediante el presente contrato EL VENDEDOR transfiere a título de venta y EL COMPRADOR adquiere la propiedad del vehículo automotor que a continuación se identifica:', { align: 'justify' });
     doc.moveDown(0.5);
     
     doc.fontSize(10).font('Helvetica')
-       .text(`CLASE: AUTOMÃ“VIL                    MARCA: ${vehicle.marca}                    MODELO: ${vehicle.aÃ±o}`)
+       .text(`CLASE: AUTOMÓVIL                    MARCA: ${vehicle.marca}                    MODELO: ${vehicle.año}`)
        .text(`TIPO DE CARROCERIA: ${vehicle.datosVenta.vehiculoAdicional.tipoCarroceria || 'N/A'}        COLOR: ${vehicle.color}        CAPACIDAD: ${vehicle.datosVenta.vehiculoAdicional.capacidad || 'N/A'}`)
        .text(`CHASIS No.: ${vehicle.vin}`)
        .text(`MOTOR No.: ${vehicle.datosVenta.vehiculoAdicional.numeroMotor || 'N/A'}        LINEA: ${vehicle.datosVenta.vehiculoAdicional.linea || vehicle.modelo}        PUERTAS: ${vehicle.datosVenta.vehiculoAdicional.numeroPuertas || 4}`)
        .text(`SITIO DE MATRICULA: ${vehicle.datosVenta.vehiculoAdicional.sitioMatricula || 'N/A'}        PLACA No.: ${vehicle.placa}        SERVICIO: ${vehicle.datosVenta.vehiculoAdicional.tipoServicio || 'PARTICULAR'}`);
     doc.moveDown();
 
-    // CLÃUSULA SEGUNDA
+    // CLÁUSULA SEGUNDA
     doc.fontSize(10).font('Helvetica-Bold').text('SEGUNDA.- PRECIO: ', { continued: true })
-       .font('Helvetica').text(`como precio del automotor descrito las partes acuerdan la suma de ${vehicle.datosVenta.transaccion.precioLetras} ($${vehicle.precioVenta.toLocaleString('es-CO')}), suma que deberÃ¡ ser pagada en su totalidad, libre de descuentos por concepto de costos bancarios tales como 4xmil, cambio de plaza, entre otros.`, { align: 'justify' });
+       .font('Helvetica').text(`como precio del automotor descrito las partes acuerdan la suma de ${vehicle.datosVenta.transaccion.precioLetras} ($${vehicle.precioVenta.toLocaleString('es-CO')}), suma que deberá ser pagada en su totalidad, libre de descuentos por concepto de costos bancarios tales como 4xmil, cambio de plaza, entre otros.`, { align: 'justify' });
     doc.moveDown();
 
-    // CLÃUSULA TERCERA
+    // CLÁUSULA TERCERA
     doc.fontSize(10).font('Helvetica-Bold').text('TERCERA.- FORMA DE PAGO: ', { continued: true })
-       .font('Helvetica').text(`EL COMPRADOR se compromete a pagar el precio a que se refiere la clÃ¡usula anterior de la siguiente forma: ${vehicle.datosVenta.transaccion.formaPago}`, { align: 'justify' });
+       .font('Helvetica').text(`EL COMPRADOR se compromete a pagar el precio a que se refiere la cláusula anterior de la siguiente forma: ${vehicle.datosVenta.transaccion.formaPago}`, { align: 'justify' });
     doc.moveDown();
 
-    // CLÃUSULA CUARTA
+    // CLÁUSULA CUARTA
     const vendedorAnterior = vehicle.datosVenta.transaccion.vendedorAnterior || '[NOMBRE DEL VENDEDOR ANTERIOR]';
-    const cedulaVendedorAnterior = vehicle.datosVenta.transaccion.cedulaVendedorAnterior || '[CÃ‰DULA]';
+    const cedulaVendedorAnterior = vehicle.datosVenta.transaccion.cedulaVendedorAnterior || '[CÉDULA]';
     
     doc.fontSize(10).font('Helvetica-Bold').text('CUARTA.- ', { continued: true })
-       .font('Helvetica').text(`EL VENDEDOR manifiesta que adquiriÃ³ el vehÃ­culo antes descrito por compra a ${vendedorAnterior} identificado con CC ${cedulaVendedorAnterior}. Y declara que estÃ¡ libre de toda clase de gravÃ¡menes, embargos, multas, comparendos, pactos de reserva de dominio y cualquier otra circunstancia que afecte el libre comercio del bien objeto del presente contrato.`, { align: 'justify' });
+       .font('Helvetica').text(`EL VENDEDOR manifiesta que adquirió el vehículo antes descrito por compra a ${vendedorAnterior} identificado con CC ${cedulaVendedorAnterior}. Y declara que está libre de toda clase de gravámenes, embargos, multas, comparendos, pactos de reserva de dominio y cualquier otra circunstancia que afecte el libre comercio del bien objeto del presente contrato.`, { align: 'justify' });
     doc.moveDown();
 
-    // CLÃUSULA QUINTA
+    // CLÁUSULA QUINTA
     doc.fontSize(10).font('Helvetica-Bold').text('QUINTA.- ', { continued: true })
-       .font('Helvetica').text('EL COMPRADOR declara que conoce el estado jurÃ­dico y factico en que se encuentra el vehÃ­culo y asÃ­ lo acepta. Y que por tratarse de un vehÃ­culo usado EL VENDEDOR no garantiza el estado de sus partes, condiciones tÃ©cnicas, fÃ­sicos o de funcionamiento, que lo afecten total o parcialmente, o por defectos de fabricaciÃ³n o vicios ocultos, habida cuenta que este fue elegido por EL COMPRADOR, quien a su elecciÃ³n ha realizado o no peritaje y revisiÃ³n de antecedentes, y por lo tanto asume la responsabilidad por su elecciÃ³n, y como consecuencia renuncia a cualquier reclamaciÃ³n futura, exonerando a EL VENDEDOR de toda responsabilidad.', { align: 'justify' });
+       .font('Helvetica').text('EL COMPRADOR declara que conoce el estado jurídico y factico en que se encuentra el vehículo y así lo acepta. Y que por tratarse de un vehículo usado EL VENDEDOR no garantiza el estado de sus partes, condiciones técnicas, físicos o de funcionamiento, que lo afecten total o parcialmente, o por defectos de fabricación o vicios ocultos, habida cuenta que este fue elegido por EL COMPRADOR, quien a su elección ha realizado o no peritaje y revisión de antecedentes, y por lo tanto asume la responsabilidad por su elección, y como consecuencia renuncia a cualquier reclamación futura, exonerando a EL VENDEDOR de toda responsabilidad.', { align: 'justify' });
     doc.moveDown();
 
-    // CLÃUSULA SEXTA
+    // CLÁUSULA SEXTA
     const diasTraspaso = vehicle.datosVenta.transaccion.diasTraspaso || 30;
     doc.fontSize(10).font('Helvetica-Bold').text('SEXTA.- TRASPASO Y GASTOS: ', { continued: true })
-       .font('Helvetica').text(`Las partes se obligan a realizar las gestiones de traspaso ante las autoridades de trÃ¡nsito dentro de los ${diasTraspaso} (${diasTraspaso === 30 ? 'treinta' : diasTraspaso}) dÃ­as posteriores a la firma del presente contrato. El vehÃ­culo se entrega al dÃ­a a la fecha de la firma del presente contrato, y por lo tanto valores tales como, los correspondientes a Impuestos se liquidarÃ¡n proporcionalmente segÃºn le corresponda a cada una de las partes, entre otros. EL COMPRADOR declara que, en caso de requerir de la prestaciÃ³n de los servicios de un asesor de trÃ¡mites ante las autoridades de trÃ¡nsito, asumirÃ¡ la totalidad del valor de los respectivos honorarios.`, { align: 'justify' });
+       .font('Helvetica').text(`Las partes se obligan a realizar las gestiones de traspaso ante las autoridades de tránsito dentro de los ${diasTraspaso} (${diasTraspaso === 30 ? 'treinta' : diasTraspaso}) días posteriores a la firma del presente contrato. El vehículo se entrega al día a la fecha de la firma del presente contrato, y por lo tanto valores tales como, los correspondientes a Impuestos se liquidarán proporcionalmente según le corresponda a cada una de las partes, entre otros. EL COMPRADOR declara que, en caso de requerir de la prestación de los servicios de un asesor de trámites ante las autoridades de tránsito, asumirá la totalidad del valor de los respectivos honorarios.`, { align: 'justify' });
     doc.moveDown();
 
-    // CLÃUSULA SÃ‰PTIMA
+    // CLÁUSULA SÉPTIMA
     const horaEntrega = vehicle.datosVenta.transaccion.horaEntrega || '[HORA]';
     doc.fontSize(10).font('Helvetica-Bold').text('SEPTIMA.- ENTREGA: ', { continued: true })
-       .font('Helvetica').text(`En la fecha ${fechaEntrega.toLocaleDateString('es-CO')} y hora ${horaEntrega} EL VENDEDOR hace entrega real y material del vehÃ­culo objeto del presente contrato a EL COMPRADOR, y Ã©ste declara conocer y aceptar el estado en que se encuentra, y recibirlo a entera satisfacciÃ³n. Por lo tanto, a partir de este momento EL COMPRADOR asume los riesgos mecÃ¡nicos y las responsabilidades jurÃ­dicas relativos al vehÃ­culo.`, { align: 'justify' });
+       .font('Helvetica').text(`En la fecha ${fechaEntrega.toLocaleDateString('es-CO')} y hora ${horaEntrega} EL VENDEDOR hace entrega real y material del vehículo objeto del presente contrato a EL COMPRADOR, y éste declara conocer y aceptar el estado en que se encuentra, y recibirlo a entera satisfacción. Por lo tanto, a partir de este momento EL COMPRADOR asume los riesgos mecánicos y las responsabilidades jurídicas relativos al vehículo.`, { align: 'justify' });
     doc.moveDown();
 
-    // CLÃUSULA OCTAVA
+    // CLÁUSULA OCTAVA
     doc.fontSize(10).font('Helvetica-Bold').text('OCTAVA.- RESERVA DEL DOMINIO: ', { continued: true })
-       .font('Helvetica').text('EL VENDEDOR se reserva la propiedad del vehÃ­culo identificado en la clÃ¡usula primera del presente contrato, hasta el momento en que se pague la totalidad del precio estipulado, de conformidad con el Art. 952 del CÃ³digo de Comercio, y por lo tanto, no se encuentra obligado a realizar la entrega fÃ­sica del mismo hasta tanto se realice la cancelaciÃ³n total. Se entiende por cancelaciÃ³n total el que la transferencia o el cheque se haya hecho efectiva/o.', { align: 'justify' });
+       .font('Helvetica').text('EL VENDEDOR se reserva la propiedad del vehículo identificado en la cláusula primera del presente contrato, hasta el momento en que se pague la totalidad del precio estipulado, de conformidad con el Art. 952 del Código de Comercio, y por lo tanto, no se encuentra obligado a realizar la entrega física del mismo hasta tanto se realice la cancelación total. Se entiende por cancelación total el que la transferencia o el cheque se haya hecho efectiva/o.', { align: 'justify' });
     doc.moveDown();
 
-    // CLÃUSULA NOVENA
+    // CLÁUSULA NOVENA
     doc.fontSize(10).font('Helvetica-Bold').text('NOVENA.- CLAUSULA PENAL: ', { continued: true })
-       .font('Helvetica').text('Las partes establecen como sanciÃ³n pecuniaria a cargo de quien incumpla una cualquiera de las estipulaciones derivadas de este contrato, la suma correspondiente al diez por ciento (10%) del precio pactado en el presente contrato.', { align: 'justify' });
+       .font('Helvetica').text('Las partes establecen como sanción pecuniaria a cargo de quien incumpla una cualquiera de las estipulaciones derivadas de este contrato, la suma correspondiente al diez por ciento (10%) del precio pactado en el presente contrato.', { align: 'justify' });
     doc.moveDown();
 
-    // CLÃUSULAS ADICIONALES
+    // CLÁUSULAS ADICIONALES
     if (vehicle.datosVenta.transaccion.clausulasAdicionales && vehicle.datosVenta.transaccion.clausulasAdicionales !== 'Ninguna') {
       doc.fontSize(10).font('Helvetica-Bold').text('CLAUSULAS ADICIONALES:');
       doc.fontSize(10).font('Helvetica')
@@ -1632,7 +1408,7 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
       doc.moveDown();
     }
 
-    // Verificar si necesitamos nueva pÃ¡gina para firmas
+    // Verificar si necesitamos nueva página para firmas
     if (doc.y > 600) {
       doc.addPage();
     }
@@ -1640,10 +1416,10 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
     // CONSTANCIA Y FIRMAS
     doc.moveDown();
     doc.fontSize(10).font('Helvetica')
-       .text(`En constancia de lo anterior, los contratantes suscriben el presente documento en la ciudad de ${vehicle.datosVenta.transaccion.lugarCelebracion}, el dÃ­a ${fechaCelebracion.getDate()} (${fechaCelebracion.getDate()}), del mes de ${mesNombre}, del aÃ±o ${fechaCelebracion.getFullYear()} (${fechaCelebracion.getFullYear()}).`, { align: 'justify' });
+       .text(`En constancia de lo anterior, los contratantes suscriben el presente documento en la ciudad de ${vehicle.datosVenta.transaccion.lugarCelebracion}, el día ${fechaCelebracion.getDate()} (${fechaCelebracion.getDate()}), del mes de ${mesNombre}, del año ${fechaCelebracion.getFullYear()} (${fechaCelebracion.getFullYear()}).`, { align: 'justify' });
     doc.moveDown(3);
 
-    // LÃ­neas de firma
+    // Líneas de firma
     const signatureY = doc.y;
     const pageWidth = doc.page.width - 120;
     const signatureWidth = 220;
@@ -1677,158 +1453,3 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
     });
   }
 };
-
-// Generar formulario de traspaso en PDF
-export const generateTransferForm = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const vehicle = await Vehicle.findById(id);
-
-    if (!vehicle) {
-      res.status(404).json({ message: 'Vehiculo no encontrado' });
-      return;
-    }
-
-    const validationError = validateSaleDataForDocuments(vehicle);
-    if (validationError) {
-      res.status(400).json({
-        message: `${validationError} Por favor, completa los datos requeridos antes de generar el formulario de traspaso.`,
-      });
-      return;
-    }
-
-    const saleData = vehicle.datosVenta!;
-    const celebrationDate = saleData.transaccion?.fechaCelebracion
-      ? new Date(saleData.transaccion.fechaCelebracion)
-      : new Date();
-    const deliveryDate = saleData.transaccion?.fechaEntrega
-      ? new Date(saleData.transaccion.fechaEntrega)
-      : new Date();
-    const generatedDate = new Date().toLocaleDateString('es-CO');
-
-    const doc = new PDFDocument({
-      size: 'LETTER',
-      margins: { top: 50, bottom: 50, left: 55, right: 55 },
-    });
-
-    const fileName = `formulario-traspaso-${vehicle.placa}-${Date.now()}.pdf`;
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    doc.pipe(res);
-
-    doc.fontSize(14).font('Helvetica-Bold').text('FORMULARIO DE TRASPASO DE VEHICULO', { align: 'center' });
-    doc.fontSize(10).font('Helvetica').text(`Generado por AutoTech - ${generatedDate}`, { align: 'center' });
-    doc.moveDown(1.2);
-
-    doc.fontSize(11).font('Helvetica-Bold').text('1. INFORMACION GENERAL DEL TRASPASO');
-    doc.moveDown(0.4);
-    doc.fontSize(10).font('Helvetica')
-      .text(`Ciudad/Lugar: ${saleData.transaccion?.lugarCelebracion || 'N/A'}`)
-      .text(`Fecha de celebracion: ${celebrationDate.toLocaleDateString('es-CO')}`)
-      .text(`Fecha de entrega: ${deliveryDate.toLocaleDateString('es-CO')}`)
-      .text(`Hora de entrega: ${saleData.transaccion?.horaEntrega || 'N/A'}`)
-      .text(`Plazo para traspaso (dias): ${saleData.transaccion?.diasTraspaso || 30}`);
-    doc.moveDown(0.9);
-
-    doc.fontSize(11).font('Helvetica-Bold').text('2. DATOS DEL VEHICULO');
-    doc.moveDown(0.4);
-    doc.fontSize(10).font('Helvetica')
-      .text(`Placa: ${vehicle.placa || 'N/A'}`)
-      .text(`Marca: ${vehicle.marca || 'N/A'}`)
-      .text(`Modelo: ${vehicle.modelo || 'N/A'}`)
-      .text(`Ano: ${vehicle.año || 'N/A'}`)
-      .text(`VIN/Chasis: ${vehicle.vin || 'N/A'}`)
-      .text(`Color: ${vehicle.color || 'N/A'}`)
-      .text(`Kilometraje: ${vehicle.kilometraje?.toLocaleString('es-CO') || 'N/A'} km`)
-      .text(`No. motor: ${saleData.vehiculoAdicional?.numeroMotor || 'N/A'}`)
-      .text(`Linea: ${saleData.vehiculoAdicional?.linea || vehicle.modelo || 'N/A'}`)
-      .text(`Tipo de servicio: ${saleData.vehiculoAdicional?.tipoServicio || 'N/A'}`)
-      .text(`Sitio matricula: ${saleData.vehiculoAdicional?.sitioMatricula || 'N/A'}`);
-    doc.moveDown(0.9);
-
-    doc.fontSize(11).font('Helvetica-Bold').text('3. DATOS DEL VENDEDOR ACTUAL');
-    doc.moveDown(0.4);
-    doc.fontSize(10).font('Helvetica')
-      .text(`Nombre: ${saleData.vendedor?.nombre || 'N/A'}`)
-      .text(`Identificacion: ${saleData.vendedor?.identificacion || 'N/A'}`)
-      .text(`Direccion: ${saleData.vendedor?.direccion || 'N/A'}`)
-      .text(`Telefono: ${saleData.vendedor?.telefono || 'N/A'}`);
-    doc.moveDown(0.9);
-
-    doc.fontSize(11).font('Helvetica-Bold').text('4. DATOS DEL COMPRADOR (NUEVO PROPIETARIO)');
-    doc.moveDown(0.4);
-    doc.fontSize(10).font('Helvetica')
-      .text(`Nombre: ${saleData.comprador?.nombre || 'N/A'}`)
-      .text(`Identificacion: ${saleData.comprador?.identificacion || 'N/A'}`)
-      .text(`Direccion: ${saleData.comprador?.direccion || 'N/A'}`)
-      .text(`Telefono: ${saleData.comprador?.telefono || 'N/A'}`)
-      .text(`Email: ${saleData.comprador?.email || 'N/A'}`);
-    doc.moveDown(0.9);
-
-    doc.fontSize(11).font('Helvetica-Bold').text('5. DATOS ECONOMICOS DE LA TRANSACCION');
-    doc.moveDown(0.4);
-    doc.fontSize(10).font('Helvetica')
-      .text(`Precio pactado: $${vehicle.precioVenta?.toLocaleString('es-CO') || '0'}`)
-      .text(`Precio en letras: ${saleData.transaccion?.precioLetras || 'N/A'}`)
-      .text(`Forma de pago: ${saleData.transaccion?.formaPago || 'N/A'}`);
-    doc.moveDown(0.8);
-
-    const hasPrenda = vehicle.documentacion?.prenda?.tiene ? 'SI' : 'NO';
-    const hasSoat = vehicle.documentacion?.soat?.tiene ? 'SI' : 'NO';
-    const hasTecno = vehicle.documentacion?.tecnomecanica?.tiene ? 'SI' : 'NO';
-    const hasCard = vehicle.documentacion?.tarjetaPropiedad?.tiene ? 'SI' : 'NO';
-
-    doc.fontSize(11).font('Helvetica-Bold').text('6. DOCUMENTACION SOPORTE');
-    doc.moveDown(0.4);
-    doc.fontSize(10).font('Helvetica')
-      .text(`SOAT: ${hasSoat}`)
-      .text(`Tecnomecanica: ${hasTecno}`)
-      .text(`Tarjeta de propiedad: ${hasCard}`)
-      .text(`Vehiculo con prenda: ${hasPrenda}`)
-      .text('Adjuntar cedulas, improntas y paz y salvo de comparendos segun corresponda.');
-    doc.moveDown(1.4);
-
-    if (doc.y > 610) {
-      doc.addPage();
-    }
-
-    doc.fontSize(10).font('Helvetica').text(
-      'Declaracion: Las partes autorizan el tramite de traspaso y manifiestan que la informacion ' +
-      'aqui registrada corresponde a los datos entregados durante la venta del vehiculo.',
-      { align: 'justify' }
-    );
-    doc.moveDown(2.3);
-
-    const signatureWidth = 220;
-    const leftX = 55;
-    const rightX = doc.page.width - signatureWidth - 55;
-    const signY = doc.y;
-
-    doc.fontSize(10).font('Helvetica-Bold').text('FIRMA VENDEDOR', leftX, signY, { width: signatureWidth, align: 'center' });
-    doc.moveTo(leftX, signY + 35).lineTo(leftX + signatureWidth, signY + 35).stroke();
-    doc.fontSize(9).font('Helvetica').text(
-      `C.C. ${saleData.vendedor?.identificacion || 'N/A'}`,
-      leftX,
-      signY + 40,
-      { width: signatureWidth, align: 'center' }
-    );
-
-    doc.fontSize(10).font('Helvetica-Bold').text('FIRMA COMPRADOR', rightX, signY, { width: signatureWidth, align: 'center' });
-    doc.moveTo(rightX, signY + 35).lineTo(rightX + signatureWidth, signY + 35).stroke();
-    doc.fontSize(9).font('Helvetica').text(
-      `C.C. ${saleData.comprador?.identificacion || 'N/A'}`,
-      rightX,
-      signY + 40,
-      { width: signatureWidth, align: 'center' }
-    );
-
-    doc.end();
-  } catch (error: any) {
-    console.error('Error al generar formulario de traspaso:', error);
-    res.status(500).json({
-      message: 'Error al generar formulario de traspaso',
-      error: error.message,
-    });
-  }
-};
-

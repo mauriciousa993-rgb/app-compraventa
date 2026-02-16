@@ -15,10 +15,8 @@ import {
   exportExpensesTemplate,
   saveSaleData,
   generateContract,
-  generateTransferForm,
   getVehiclePhoto,
 } from '../controllers/vehicle.controller';
-import { exportBusinessTemplate } from '../controllers/reportTemplates.controller';
 import { getMarketplaceVehicles } from '../controllers/marketplace.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { uploadMultiple } from '../middleware/upload.middleware';
@@ -38,7 +36,6 @@ router.get('/', getAllVehicles);
 router.get('/statistics', getStatistics);
 router.get('/reports/monthly', getMonthlyReports);
 router.get('/reports/monthly/export', exportMonthlyReport);
-router.get('/reports/templates/:templateType', exportBusinessTemplate);
 router.get('/expiring-documents', getVehiclesWithExpiringDocuments);
 router.get('/export', exportToExcel);
 router.get('/:id', getVehicleById);
@@ -54,6 +51,5 @@ router.post('/:id/photos', authorize('admin', 'vendedor'), uploadMultiple, uploa
 router.post('/:id/sale-data', authorize('admin', 'vendedor'), saveSaleData);
 router.put('/:id/sale-data', authorize('admin', 'vendedor'), saveSaleData); // Reutiliza la misma función
 router.get('/:id/contract', authorize('admin', 'vendedor'), generateContract);
-router.get('/:id/transfer-form', authorize('admin', 'vendedor'), generateTransferForm);
 
 export default router;
