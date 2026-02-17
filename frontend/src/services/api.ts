@@ -201,6 +201,11 @@ export const vehiclesAPI = {
     return response.data;
   },
 
+  getVehiclesWithExpiringDocuments: async () => {
+    const response = await api.get<Vehicle[]>('/vehicles/expiring-documents');
+    return response.data;
+  },
+
   saveSaleData: async (id: string, data: DatosVenta) => {
     const response = await api.post(`/vehicles/${id}/sale-data`, data);
     return response.data;

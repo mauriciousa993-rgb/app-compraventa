@@ -1,13 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LogOut, User, BarChart3, Menu, X, Store, Receipt } from 'lucide-react';
+import { LogOut, User, BarChart3, Menu, X, Store, Receipt, Bell, Search } from 'lucide-react';
 import autoTechLogo from '../../assets/autotech-logo.png';
+import { vehiclesAPI } from '../../services/api';
 
 const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
+
+  useEffect(() => {
+    loadNotificationCount();
+    const interval = setInterval(loadNotificationCount, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadNotificationCount = async () => {
+    try {
+      const vehicles = await vehiclesAPI.getVehiclesWithExpiringDocuments();
+      let count = 0;
+      const today = new Date();
+
+      vehicles.forEach((vehicle) => {
+        if (vehicle.documentacion?.soat?.fechaVencimiento) {
+          const soatDate = new Date(vehicle.documentacion.soat.fechaVencimiento);
+          const daysRemaining = Math.ceil((soatDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysRemaining >= 0 && daysRemaining <= 30) count++;
+        }
+
+        if (vehicle.documentacion?.tecnomecanica?.fechaVencimiento) {
+          const tecnoDate = new Date(vehicle.documentacion.tecnomecanica.fechaVencimiento);
+          const daysRemaining = Math.ceil((tecnoDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysRemaining >= 0 && daysRemaining <= 30) count++;
+        }
+      });
+
+      setNotificationCount(count);
+    } catch (error) {
+      console.error('Error al cargar notificaciones:', error);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -53,9 +87,22 @@ const Navbar: React.FC = () => {
             <Link to="/vehicles" className={navLinkClass}>
               Vehiculos
             </Link>
+            <Link to="/notifications" className={`${navLinkClass} flex items-center space-x-1 relative`}>
+              <Bell className="h-4 w-4 text-primary-400" />
+              <span>Notificaciones</span>
+              {notificationCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                  {notificationCount > 9 ? '9+' : notificationCount}
+                </span>
+              )}
+            </Link>
             <Link to="/marketplace" className={`${navLinkClass} flex items-center space-x-1`}>
               <Store className="h-4 w-4 text-primary-400" />
               <span>Marketplace</span>
+            </Link>
+            <Link to="/consulta-tramite" className={`${navLinkClass} flex items-center space-x-1`}>
+              <Search className="h-4 w-4 text-primary-400" />
+              <span>Consulta Trámite</span>
             </Link>
             <Link to="/reports" className={`${navLinkClass} flex items-center space-x-1`}>
               <BarChart3 className="h-4 w-4 text-primary-400" />
@@ -121,12 +168,33 @@ const Navbar: React.FC = () => {
                 Vehiculos
               </Link>
               <Link
+                to="/notifications"
+                onClick={closeMobileMenu}
+                className="text-ink-100 hover:text-white transition-colors py-2 px-4 hover:bg-[#23252a] rounded-lg flex items-center space-x-2 relative"
+              >
+                <Bell className="h-4 w-4 text-primary-400" />
+                <span>Notificaciones</span>
+                {notificationCount > 0 && (
+                  <span className="bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center ml-auto">
+                    {notificationCount > 9 ? '9+' : notificationCount}
+                  </span>
+                )}
+              </Link>
+              <Link
                 to="/marketplace"
                 onClick={closeMobileMenu}
                 className="text-ink-100 hover:text-white transition-colors py-2 px-4 hover:bg-[#23252a] rounded-lg flex items-center space-x-2"
               >
                 <Store className="h-4 w-4 text-primary-400" />
                 <span>Marketplace</span>
+              </Link>
+              <Link
+                to="/consulta-tramite"
+                onClick={closeMobileMenu}
+                className="text-ink-100 hover:text-white transition-colors py-2 px-4 hover:bg-[#23252a] rounded-lg flex items-center space-x-2"
+              >
+                <Search className="h-4 w-4 text-primary-400" />
+                <span>Consulta Trámite</span>
               </Link>
               <Link
                 to="/reports"

@@ -9,6 +9,8 @@ import Reports from './pages/Reports';
 import UserManagement from './pages/UserManagement';
 import Marketplace from './pages/Marketplace';
 import FixedExpenses from './pages/FixedExpenses';
+import Notifications from './pages/Notifications';
+import ConsultaTramite from './pages/ConsultaTramite';
 
 // Componente para proteger rutas
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -34,6 +36,7 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
 
       <Route path="/marketplace" element={<Marketplace />} />
+      <Route path="/consulta-tramite" element={<ConsultaTramite />} />
       <Route
         path="/dashboard"
         element={
@@ -82,6 +85,14 @@ function AppRoutes() {
         element={
           <PrivateRoute>
             <FixedExpenses />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/notifications"
+        element={
+          <PrivateRoute>
+            <Notifications />
           </PrivateRoute>
         }
       />

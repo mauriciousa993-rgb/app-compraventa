@@ -62,6 +62,7 @@ const VehicleForm: React.FC = () => {
     
     // Estado
     estado: 'en_proceso',
+    estadoTramite: '',
     fechaVenta: '',
     
     // Documentación
@@ -233,6 +234,7 @@ const VehicleForm: React.FC = () => {
         inversionistas: vehicle.inversionistas || [],
         tieneInversionistas: vehicle.tieneInversionistas || false,
         estado: vehicle.estado || 'en_proceso',
+        estadoTramite: vehicle.estadoTramite || '',
         fechaVenta: vehicle.fechaVenta 
           ? new Date(vehicle.fechaVenta).toISOString().split('T')[0]
           : '',
@@ -1473,40 +1475,64 @@ const VehicleForm: React.FC = () => {
 
               {/* Mostrar campo de fecha de venta solo si el estado es "vendido" */}
               {formData.estado === 'vendido' && (
-                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                  <label className="block text-sm font-medium text-green-700 mb-1">
-                    Fecha de Venta *
-                  </label>
-                  <input
-                    type="date"
-                    name="fechaVenta"
-                    value={formData.fechaVenta || ''}
-                    onChange={handleChange}
-                    className="input-field"
-                    required={formData.estado === 'vendido'}
-                    min={formData.fechaIngreso}
-                  />
-                  <p className="mt-2 text-xs text-green-600">
-                    Esta fecha se usará para generar informes de ventas mensuales
-                  </p>
-                  
-                  {/* Calcular y mostrar días en inventario */}
-                  {formData.fechaVenta && formData.fechaIngreso && (
-                    <div className="mt-3 p-3 bg-white rounded border border-green-300">
-                      <p className="text-sm font-medium text-gray-700 mb-1">
-                        Tiempo en Inventario
-                      </p>
-                      <p className="text-2xl font-bold text-green-700">
-                        {Math.floor(
-                          (new Date(formData.fechaVenta).getTime() - new Date(formData.fechaIngreso).getTime()) / 
-                          (1000 * 60 * 60 * 24)
-                        )} días
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Desde {new Date(formData.fechaIngreso).toLocaleDateString('es-CO')} hasta {new Date(formData.fechaVenta).toLocaleDateString('es-CO')}
-                      </p>
-                    </div>
-                  )}
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-green-700 mb-1">
+                      Fecha de Venta *
+                    </label>
+                    <input
+                      type="date"
+                      name="fechaVenta"
+                      value={formData.fechaVenta || ''}
+                      onChange={handleChange}
+                      className="input-field"
+                      required={formData.estado === 'vendido'}
+                      min={formData.fechaIngreso}
+                    />
+                    <p className="mt-2 text-xs text-green-600">
+                      Esta fecha se usará para generar informes de ventas mensuales
+                    </p>
+                    
+                    {/* Calcular y mostrar días en inventario */}
+                    {formData.fechaVenta && formData.fechaIngreso && (
+                      <div className="mt-3 p-3 bg-white rounded border border-green-300">
+                        <p className="text-sm font-medium text-gray-700 mb-1">
+                          Tiempo en Inventario
+                        </p>
+                        <p className="text-2xl font-bold text-green-700">
+                          {Math.floor(
+                            (new Date(formData.fechaVenta).getTime() - new Date(formData.fechaIngreso).getTime()) / 
+                            (1000 * 60 * 60 * 24)
+                          )} días
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Desde {new Date(formData.fechaIngreso).toLocaleDateString('es-CO')} hasta {new Date(formData.fechaVenta).toLocaleDateString('es-CO')}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-green-700 mb-1">
+                      Estado del Trámite
+                    </label>
+                    <select
+                      name="estadoTramite"
+                      value={formData.estadoTramite || ''}
+                      onChange={handleChange}
+                      className="input-field"
+                    >
+                      <option value="">Seleccionar estado...</option>
+                      <option value="firma_documentos">Firma de Documentos</option>
+                      <option value="radicacion">Radicación</option>
+                      <option value="recepcion_tarjeta">Recepción de Tarjeta de Propiedad</option>
+                      <option value="entrega_cliente">Entrega de Tarjeta al Cliente</option>
+                      <option value="completado">Completado</option>
+                    </select>
+                    <p className="mt-2 text-xs text-green-600">
+                      Seguimiento del proceso de traspaso del vehículo
+                    </p>
+                  </div>
                 </div>
               )}
             </div>

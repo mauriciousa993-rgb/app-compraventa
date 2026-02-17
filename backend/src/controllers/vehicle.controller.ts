@@ -1453,3 +1453,264 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
     });
   }
 };
+
+// Generar formulario de traspaso en PDF (Formato Oficial Ministerio de Transporte)
+export const generateTransferForm = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const vehicle = await Vehicle.findById(id);
+
+    if (!vehicle) {
+      res.status(404).json({ message: 'Vehículo no encontrado' });
+      return;
+    }
+
+    if (!vehicle.datosVenta || 
+        !vehicle.datosVenta.comprador?.nombre || 
+        !vehicle.datosVenta.comprador?.identificacion ||
+        !vehicle.datosVenta.vendedor?.nombre) {
+      res.status(400).json({ 
+        message: 'El vehículo no tiene datos de venta completos.' 
+      });
+      return;
+    }
+
+    const fechaCelebracion = vehicle.datosVenta.transaccion.fechaCelebracion 
+      ? new Date(vehicle.datosVenta.transaccion.fechaCelebracion)
+      : new Date();
+
+    const doc = new PDFDocument({ 
+      size: 'LETTER',
+      margins: { top: 40, bottom: 40, left: 50, right: 50 }
+    });
+
+    const fileName = `formulario-traspaso-${vehicle.placa}-${Date.now()}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    doc.pipe(res);
+
+    // ENCABEZADO OFICIAL
+    doc.fontSize(8).font('Helvetica').text('MINISTERIO DE TRANSPORTE', { align: 'center' });
+    doc.fontSize(10).font('Helvetica-Bold')
+       .text('FORMULARIO DE SOLICITUD DE TRÁMITES DEL', { align: 'center' });
+    doc.fontSize(10).font('Helvetica-Bold')
+       .text('REGISTRO NACIONAL AUTOMOTOR', { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(7).font('Helvetica-Oblique')
+       .text('Libertad y Orden', { align: 'center' });
+    doc.moveDown(1);
+
+    // Línea separadora
+    doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke();
+    doc.moveDown(0.5);
+
+    // Helper para crear cajas de texto
+    const drawBox = (x: number, y: number, width: number, height: number, label: string, value: string) => {
+      doc.rect(x, y, width, height).stroke();
+      doc.fontSize(7).font('Helvetica-Bold').text(label, x + 2, y + 2);
+      doc.fontSize(9).font('Helvetica').text(value, x + 2, y + 12);
+    };
+
+    // 1. ORGANISMO DE TRÁNSITO Y FECHA
+    let yPos = doc.y;
+    drawBox(50, yPos, 200, 30, '1. ORGANISMO DE TRÁNSITO', vehicle.datosVenta.vehiculoAdicional.sitioMatricula || 'N/A');
+    drawBox(260, yPos, 150, 30, 'CIUDAD', vehicle.datosVenta.transaccion.lugarCelebracion || 'N/A');
+    drawBox(420, yPos, 142, 30, 'FECHA DE TRÁMITE', fechaCelebracion.toLocaleDateString('es-CO'));
+    
+    yPos += 35;
+
+    // 2. PLACA
+    drawBox(50, yPos, 150, 30, '2. PLACA', vehicle.placa);
+    
+    // 3. TRÁMITE SOLICITADO
+    doc.fontSize(7).font('Helvetica-Bold').text('3. TRÁMITE SOLICITADO', 210, yPos + 2);
+    doc.fontSize(8).font('Helvetica').text('[X] TRASPASO', 210, yPos + 12);
+    
+    yPos += 35;
+
+    // 4. CLASE DE VEHÍCULO
+    doc.fontSize(7).font('Helvetica-Bold').text('4. CLASE DE VEHÍCULO', 50, yPos);
+    doc.fontSize(8).font('Helvetica').text('[X] AUTOMÓVIL', 50, yPos + 10);
+    
+    yPos += 25;
+
+    // 5. MARCA
+    drawBox(50, yPos, 150, 25, '5. MARCA', vehicle.marca);
+    
+    // 6. LÍNEA
+    drawBox(210, yPos, 150, 25, '6. LÍNEA', vehicle.datosVenta.vehiculoAdicional.linea || vehicle.modelo);
+    
+    // 7. COMBUSTIBLE
+    doc.fontSize(7).font('Helvetica-Bold').text('7. COMBUSTIBLE', 370, yPos + 2);
+    doc.fontSize(8).font('Helvetica').text('[X] GASOLINA', 370, yPos + 12);
+    
+    yPos += 30;
+
+    // 8. COLORES
+    drawBox(50, yPos, 100, 25, '8. COLORES', vehicle.color);
+    
+    // 9. MODELO
+    drawBox(160, yPos, 80, 25, '9. MODELO', vehicle.año.toString());
+    
+    // 10. CILINDRADA
+    drawBox(250, yPos, 100, 25, '10. CILINDRADA', 'N/A');
+    
+    yPos += 30;
+
+    // 11. CAPACIDAD
+    drawBox(50, yPos, 150, 25, '11. CAPACIDAD Kg/Psj', vehicle.datosVenta.vehiculoAdicional.capacidad || 'N/A');
+    
+    // 15. CARROCERÍA
+    drawBox(210, yPos, 150, 25, '15. CARROCERÍA', vehicle.datosVenta.vehiculoAdicional.tipoCarroceria || 'SEDAN');
+    
+    yPos += 30;
+
+    // 16. IDENTIFICACIÓN INTERNA DEL VEHÍCULO
+    doc.fontSize(7).font('Helvetica-Bold').text('16. IDENTIFICACIÓN INTERNA DEL VEHÍCULO', 50, yPos);
+    yPos += 10;
+    drawBox(50, yPos, 250, 20, 'No. DE MOTOR', vehicle.datosVenta.vehiculoAdicional.numeroMotor || 'N/A');
+    yPos += 25;
+    drawBox(50, yPos, 250, 20, 'No. DE CHASIS', vehicle.vin.substring(0, 17));
+    yPos += 25;
+    drawBox(50, yPos, 250, 20, 'No. DE VIN', vehicle.vin);
+    
+    yPos += 30;
+
+    // 18. TIPO DE SERVICIO
+    doc.fontSize(7).font('Helvetica-Bold').text('18. TIPO DE SERVICIO', 50, yPos);
+    doc.fontSize(8).font('Helvetica').text(`[X] ${vehicle.datosVenta.vehiculoAdicional.tipoServicio || 'PARTICULAR'}`, 50, yPos + 10);
+    
+    yPos += 25;
+
+    // 21. DATOS DEL PROPIETARIO (VENDEDOR)
+    doc.fontSize(8).font('Helvetica-Bold').text('21. DATOS DEL PROPIETARIO', 50, yPos);
+    yPos += 12;
+    
+    const vendedorNombreCompleto = vehicle.datosVenta.vendedor.nombre.split(' ');
+    const vendedorApellidos = vendedorNombreCompleto.slice(0, 2).join(' ');
+    const vendedorNombres = vendedorNombreCompleto.slice(2).join(' ') || vendedorNombreCompleto[0];
+    
+    drawBox(50, yPos, 150, 20, 'APELLIDOS', vendedorApellidos);
+    drawBox(210, yPos, 150, 20, 'NOMBRES', vendedorNombres);
+    yPos += 25;
+    drawBox(50, yPos, 200, 20, 'DIRECCIÓN', vehicle.datosVenta.vendedor.direccion);
+    drawBox(260, yPos, 150, 20, 'CIUDAD', vehicle.datosVenta.transaccion.lugarCelebracion || 'N/A');
+    drawBox(420, yPos, 142, 20, 'TELÉFONO', vehicle.datosVenta.vendedor.telefono);
+    yPos += 25;
+    doc.fontSize(7).font('Helvetica').text('[X] C.C.', 50, yPos);
+    drawBox(100, yPos, 200, 20, 'No. DOCUMENTO', vehicle.datosVenta.vendedor.identificacion);
+    
+    yPos += 25;
+
+    // 22. DATOS DEL COMPRADOR
+    doc.fontSize(8).font('Helvetica-Bold').text('22. DATOS DEL COMPRADOR (TRASPASO)', 50, yPos);
+    yPos += 12;
+    
+    const compradorNombreCompleto = vehicle.datosVenta.comprador.nombre.split(' ');
+    const compradorApellidos = compradorNombreCompleto.slice(0, 2).join(' ');
+    const compradorNombres = compradorNombreCompleto.slice(2).join(' ') || compradorNombreCompleto[0];
+    
+    drawBox(50, yPos, 150, 20, 'APELLIDOS', compradorApellidos);
+    drawBox(210, yPos, 150, 20, 'NOMBRES', compradorNombres);
+    yPos += 25;
+    drawBox(50, yPos, 200, 20, 'DIRECCIÓN', vehicle.datosVenta.comprador.direccion);
+    drawBox(260, yPos, 150, 20, 'CIUDAD', vehicle.datosVenta.transaccion.lugarCelebracion || 'N/A');
+    drawBox(420, yPos, 142, 20, 'TELÉFONO', vehicle.datosVenta.comprador.telefono);
+    yPos += 25;
+    doc.fontSize(7).font('Helvetica').text('[X] C.C.', 50, yPos);
+    drawBox(100, yPos, 200, 20, 'No. DOCUMENTO', vehicle.datosVenta.comprador.identificacion);
+    
+    yPos += 30;
+
+    // 23. OBSERVACIONES
+    doc.fontSize(8).font('Helvetica-Bold').text('23. OBSERVACIONES', 50, yPos);
+    yPos += 12;
+    doc.rect(50, yPos, 512, 40).stroke();
+    doc.fontSize(7).font('Helvetica')
+       .text(`Valor de la transacción: $${vehicle.precioVenta.toLocaleString('es-CO')}`, 55, yPos + 5)
+       .text(`Forma de pago: ${vehicle.datosVenta.transaccion.formaPago}`, 55, yPos + 15)
+       .text(`Plazo para traspaso: ${vehicle.datosVenta.transaccion.diasTraspaso || 30} días`, 55, yPos + 25);
+    
+    yPos += 50;
+
+    // FIRMAS
+    if (yPos > 650) {
+      doc.addPage();
+      yPos = 80;
+    }
+
+    doc.moveDown(2);
+    doc.fontSize(8).font('Helvetica-Bold').text('FIRMA DEL PROPIETARIO', 100, yPos, { width: 200 });
+    doc.fontSize(8).font('Helvetica-Bold').text('FIRMA DEL COMPRADOR', 350, yPos, { width: 200 });
+    
+    yPos += 15;
+    doc.moveTo(80, yPos).lineTo(230, yPos).stroke();
+    doc.moveTo(330, yPos).lineTo(480, yPos).stroke();
+    
+    yPos += 5;
+    doc.fontSize(7).font('Helvetica')
+       .text(`C.C. ${vehicle.datosVenta.vendedor.identificacion}`, 80, yPos, { width: 150, align: 'center' })
+       .text(`C.C. ${vehicle.datosVenta.comprador.identificacion}`, 330, yPos, { width: 150, align: 'center' });
+
+    doc.end();
+
+  } catch (error: any) {
+    console.error('Error al generar formulario de traspaso:', error);
+    res.status(500).json({ 
+      message: 'Error al generar formulario de traspaso', 
+      error: error.message 
+    });
+  }
+};
+
+// Consulta pública del estado de trámite por placa (sin autenticación)
+export const consultarEstadoTramite = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { placa } = req.params;
+
+    if (!placa) {
+      res.status(400).json({ message: 'La placa es requerida' });
+      return;
+    }
+
+    // Buscar vehículo por placa (solo vendidos)
+    const vehicle = await Vehicle.findOne({ 
+      placa: placa.toUpperCase(),
+      estado: 'vendido'
+    }).select('marca modelo año placa color estado estadoTramite fechaVenta datosVenta');
+
+    if (!vehicle) {
+      res.status(404).json({ 
+        message: 'No se encontró un vehículo vendido con esta placa',
+        found: false
+      });
+      return;
+    }
+
+    // Preparar respuesta con información limitada (seguridad)
+    const response = {
+      found: true,
+      vehiculo: {
+        marca: vehicle.marca,
+        modelo: vehicle.modelo,
+        año: vehicle.año,
+        placa: vehicle.placa,
+        color: vehicle.color,
+        fechaVenta: vehicle.fechaVenta,
+        estadoTramite: vehicle.estadoTramite || 'firma_documentos',
+        comprador: {
+          nombre: vehicle.datosVenta?.comprador?.nombre || 'No especificado'
+        }
+      }
+    };
+
+    res.json(response);
+  } catch (error: any) {
+    console.error('Error al consultar estado de trámite:', error);
+    res.status(500).json({ 
+      message: 'Error al consultar estado de trámite', 
+      error: error.message 
+    });
+  }
+};

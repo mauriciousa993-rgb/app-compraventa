@@ -15,7 +15,9 @@ import {
   exportExpensesTemplate,
   saveSaleData,
   generateContract,
+  generateTransferForm,
   getVehiclePhoto,
+  consultarEstadoTramite,
 } from '../controllers/vehicle.controller';
 import { getMarketplaceVehicles } from '../controllers/marketplace.controller';
 import { exportBusinessTemplate } from '../controllers/reportTemplates.controller';
@@ -27,6 +29,7 @@ const router = Router();
 // Ruta pública para marketplace (sin autenticación)
 router.get('/marketplace', getMarketplaceVehicles);
 router.get('/photo/:filename', getVehiclePhoto);
+router.get('/consulta/:placa', consultarEstadoTramite);
 
 // Todas las rutas requieren autenticación
 router.use(authenticate);
@@ -53,5 +56,6 @@ router.post('/:id/photos', authorize('admin', 'vendedor'), uploadMultiple, uploa
 router.post('/:id/sale-data', authorize('admin', 'vendedor'), saveSaleData);
 router.put('/:id/sale-data', authorize('admin', 'vendedor'), saveSaleData); // Reutiliza la misma función
 router.get('/:id/contract', authorize('admin', 'vendedor'), generateContract);
+router.get('/:id/transfer-form', authorize('admin', 'vendedor'), generateTransferForm);
 
 export default router;

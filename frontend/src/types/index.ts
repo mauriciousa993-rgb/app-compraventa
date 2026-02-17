@@ -140,6 +140,7 @@ export interface Vehicle {
   inversionistas: Inversionista[];
   tieneInversionistas: boolean;
   estado: 'en_proceso' | 'listo_venta' | 'en_negociacion' | 'vendido' | 'retirado';
+  estadoTramite?: 'firma_documentos' | 'radicacion' | 'recepcion_tarjeta' | 'entrega_cliente' | 'completado';
   documentacion: {
     prenda: {
       tiene: boolean;

@@ -98,6 +98,7 @@ export interface IVehicleDocument extends Document {
   inversionistas: IInversionista[];
   tieneInversionistas: boolean;
   estado: 'en_proceso' | 'listo_venta' | 'en_negociacion' | 'vendido' | 'retirado';
+  estadoTramite?: 'firma_documentos' | 'radicacion' | 'recepcion_tarjeta' | 'entrega_cliente' | 'completado';
   documentacion: {
     prenda: {
       tiene: boolean;
@@ -275,6 +276,11 @@ const vehicleSchema = new Schema<IVehicleDocument>(
       type: String,
       enum: ['en_proceso', 'listo_venta', 'en_negociacion', 'vendido', 'retirado'],
       default: 'en_proceso',
+    },
+    estadoTramite: {
+      type: String,
+      enum: ['firma_documentos', 'radicacion', 'recepcion_tarjeta', 'entrega_cliente', 'completado'],
+      required: false,
     },
     documentacion: {
       prenda: {
