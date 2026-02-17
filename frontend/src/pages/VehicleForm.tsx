@@ -551,7 +551,7 @@ const VehicleForm: React.FC = () => {
             setError(`Vehículo ${isEditMode ? 'actualizado' : 'creado'} correctamente, pero hubo un error al subir la foto: ${photoErr.message || 'Error desconocido'}`);
             setSuccess(true);
             setTimeout(() => {
-              navigate('/vehicles');
+              navigate('/dashboard');
             }, 3000);
             return;
           }
@@ -561,7 +561,7 @@ const VehicleForm: React.FC = () => {
 
       setSuccess(true);
       setTimeout(() => {
-        navigate('/vehicles');
+        navigate('/dashboard');
       }, 1500);
     } catch (err: any) {
       console.error('Error al guardar vehículo:', err);
