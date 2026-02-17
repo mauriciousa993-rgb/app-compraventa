@@ -18,6 +18,7 @@ import {
   getVehiclePhoto,
 } from '../controllers/vehicle.controller';
 import { getMarketplaceVehicles } from '../controllers/marketplace.controller';
+import { exportBusinessTemplate } from '../controllers/reportTemplates.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { uploadMultiple } from '../middleware/upload.middleware';
 
@@ -36,6 +37,7 @@ router.get('/', getAllVehicles);
 router.get('/statistics', getStatistics);
 router.get('/reports/monthly', getMonthlyReports);
 router.get('/reports/monthly/export', exportMonthlyReport);
+router.get('/reports/templates/:templateType', exportBusinessTemplate);
 router.get('/expiring-documents', getVehiclesWithExpiringDocuments);
 router.get('/export', exportToExcel);
 router.get('/:id', getVehicleById);
