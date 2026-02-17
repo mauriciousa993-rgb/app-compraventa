@@ -524,6 +524,7 @@ const VehicleForm: React.FC = () => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
+    let vehicleUpdated = false;
 
     try {
       let vehicleId = id;
@@ -531,15 +532,31 @@ const VehicleForm: React.FC = () => {
       if (isEditMode && id) {
         // Modo edición: usar PUT
         await api.put(`/vehicles/${id}`, formData);
+        vehicleUpdated = true;
       } else {
         // Modo creación: usar POST
         const response = await api.post('/vehicles', formData);
         vehicleId = response.data.vehicle._id;
+        vehicleUpdated = true;
       }
 
       // Si hay una foto seleccionada, subirla
       if (selectedFile && vehicleId) {
-        await vehiclesAPI.uploadPhotos(vehicleId, 'exteriores', [selectedFile]);
+        try {
+          await vehiclesAPI.uploadPhotos(vehicleId, 'exteriores', [selectedFile]);
+        } catch (photoErr: any) {
+          console.error('Error al subir foto:', photoErr);
+          // Si la foto falla pero el vehículo se actualizó, mostrar advertencia
+          if (vehicleUpdated) {
+            setError(`Vehículo ${isEditMode ? 'actualizado' : 'creado'} correctamente, pero hubo un error al subir la foto: ${photoErr.message || 'Error desconocido'}`);
+            setSuccess(true);
+            setTimeout(() => {
+              navigate('/vehicles');
+            }, 3000);
+            return;
+          }
+          throw photoErr;
+        }
       }
 
       setSuccess(true);
