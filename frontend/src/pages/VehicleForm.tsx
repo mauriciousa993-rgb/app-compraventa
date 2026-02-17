@@ -522,30 +522,39 @@ const VehicleForm: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('🚀 Iniciando submit...', { isEditMode, id });
     setError('');
+    setSuccess(false);
     setIsLoading(true);
     let vehicleUpdated = false;
 
     try {
       let vehicleId = id;
+      console.log('📤 Enviando datos:', formData);
 
       if (isEditMode && id) {
         // Modo edición: usar PUT
-        await api.put(`/vehicles/${id}`, formData);
+        console.log('📝 Modo edición - PUT /vehicles/' + id);
+        const response = await api.put(`/vehicles/${id}`, formData);
+        console.log('✅ Respuesta edición:', response.data);
         vehicleUpdated = true;
       } else {
         // Modo creación: usar POST
+        console.log('📝 Modo creación - POST /vehicles');
         const response = await api.post('/vehicles', formData);
+        console.log('✅ Respuesta creación:', response.data);
         vehicleId = response.data.vehicle._id;
         vehicleUpdated = true;
       }
 
       // Si hay una foto seleccionada, subirla
       if (selectedFile && vehicleId) {
+        console.log('📸 Subiendo foto...');
         try {
           await vehiclesAPI.uploadPhotos(vehicleId, 'exteriores', [selectedFile]);
+          console.log('✅ Foto subida exitosamente');
         } catch (photoErr: any) {
-          console.error('Error al subir foto:', photoErr);
+          console.error('❌ Error al subir foto:', photoErr);
           // Si la foto falla pero el vehículo se actualizó, mostrar advertencia
           if (vehicleUpdated) {
             setError(`Vehículo ${isEditMode ? 'actualizado' : 'creado'} correctamente, pero hubo un error al subir la foto: ${photoErr.message || 'Error desconocido'}`);
@@ -559,16 +568,21 @@ const VehicleForm: React.FC = () => {
         }
       }
 
+      console.log('🎉 Éxito! Redirigiendo...');
       setSuccess(true);
       setTimeout(() => {
         navigate('/dashboard');
       }, 1500);
     } catch (err: any) {
-      console.error('Error al guardar vehículo:', err);
+      console.error('❌ Error completo:', err);
+      console.error('❌ Error response:', err.response);
+      console.error('❌ Error request:', err.request);
+      console.error('❌ Error message:', err.message);
       
       // Manejar errores específicos del backend
       if (err.response?.data) {
         const { message, errors, field } = err.response.data;
+        console.log('📄 Error data del backend:', { message, errors, field });
         
         // Si hay errores de validación específicos
         if (errors && Array.isArray(errors)) {
@@ -591,6 +605,7 @@ const VehicleForm: React.FC = () => {
         setError(`Error al ${isEditMode ? 'actualizar' : 'crear'} vehículo: ${err.message}`);
       }
     } finally {
+      console.log('🏁 Finalizando submit, isLoading:', false);
       setIsLoading(false);
     }
   };
