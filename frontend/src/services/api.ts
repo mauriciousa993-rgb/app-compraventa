@@ -151,8 +151,25 @@ export const vehiclesAPI = {
   },
 
   update: async (id: string, data: any) => {
-    const response = await api.put<{ message: string; vehicle: Vehicle }>(`/vehicles/${id}`, data);
-    return response.data;
+    try {
+      const response = await api.put<{ message: string; vehicle: Vehicle }>(`/vehicles/${id}`, data);
+      return response.data;
+    } catch (error: any) {
+      // Re-lanzar el error con información detallada para que el componente pueda manejarlo
+      if (error.response) {
+        // El servidor respondió con un código de error
+        console.error('Error de respuesta del servidor:', error.response.data);
+        throw error;
+      } else if (error.request) {
+        // La petición fue hecha pero no se recibió respuesta
+        console.error('Error de conexión:', error.request);
+        throw new Error('No se pudo conectar con el servidor. Verifica tu conexión a internet.');
+      } else {
+        // Algo pasó al configurar la petición
+        console.error('Error:', error.message);
+        throw error;
+      }
+    }
   },
 
   delete: async (id: string) => {

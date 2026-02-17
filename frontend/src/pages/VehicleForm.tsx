@@ -547,7 +547,32 @@ const VehicleForm: React.FC = () => {
         navigate('/vehicles');
       }, 1500);
     } catch (err: any) {
-      setError(err.response?.data?.message || `Error al ${isEditMode ? 'actualizar' : 'crear'} vehículo`);
+      console.error('Error al guardar vehículo:', err);
+      
+      // Manejar errores específicos del backend
+      if (err.response?.data) {
+        const { message, errors, field } = err.response.data;
+        
+        // Si hay errores de validación específicos
+        if (errors && Array.isArray(errors)) {
+          setError(`Error de validación:\n${errors.join('\n')}`);
+        } 
+        // Si es un error de campo duplicado (placa o VIN)
+        else if (field) {
+          setError(`Error: ${message}. Por favor verifica el campo ${field}.`);
+        }
+        // Mensaje genérico del backend
+        else if (message) {
+          setError(message);
+        } else {
+          setError(`Error al ${isEditMode ? 'actualizar' : 'crear'} vehículo. Por favor intenta de nuevo.`);
+        }
+      } else if (err.request) {
+        // Error de conexión
+        setError('Error de conexión con el servidor. Por favor verifica tu conexión a internet.');
+      } else {
+        setError(`Error al ${isEditMode ? 'actualizar' : 'crear'} vehículo: ${err.message}`);
+      }
     } finally {
       setIsLoading(false);
     }
