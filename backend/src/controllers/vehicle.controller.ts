@@ -5,7 +5,6 @@ import ExcelJS from 'exceljs';
 import path from 'path';
 import fs from 'fs';
 import PDFDocument from 'pdfkit';
-import { PDFDocument as PDFLibDocument } from 'pdf-lib';
 import { ensureUploadsDir, getPhotoFileName, getUploadsDir } from '../utils/uploads';
 
 const calculateVehicleTotalExpenses = (vehicle: any): number => {
@@ -1685,9 +1684,7 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
   }
 };
 
-// Generar formulario de traspaso en PDF usando plantillas oficiales
-// Página 1: Plantilla Excel con datos llenados
-// Página 2: Segunda página del PDF original (sin datos)
+// Generar formulario de traspaso en PDF (Formato Oficial Ministerio de Transporte)
 export const generateTransferForm = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
@@ -1699,12 +1696,13 @@ export const generateTransferForm = async (req: AuthRequest, res: Response): Pro
       return;
     }
 
+    // Validar que existan datos de venta
     if (!vehicle.datosVenta || 
         !vehicle.datosVenta.comprador?.nombre || 
         !vehicle.datosVenta.comprador?.identificacion ||
         !vehicle.datosVenta.vendedor?.nombre) {
       res.status(400).json({ 
-        message: 'El vehículo no tiene datos de venta completos.' 
+        message: 'El vehículo no tiene datos de venta completos. Por favor, completa los datos de venta antes de generar el formulario.' 
       });
       return;
     }
@@ -1713,283 +1711,149 @@ export const generateTransferForm = async (req: AuthRequest, res: Response): Pro
       ? new Date(vehicle.datosVenta.transaccion.fechaCelebracion)
       : new Date();
 
-    // Rutas de plantillas
-    const templateDir = path.join(__dirname, '../../templates');
-    const excelTemplatePath = path.join(templateDir, 'FORMULARIO-TRAMITES-DE-TRANSITO-DILIGENCIABLE-EXCEL.xls');
-    const pdfTemplatePath = path.join(templateDir, 'Formulario traspaso de vehiculos.pdf');
-
-    // Verificar que existan las plantillas
-    if (!fs.existsSync(excelTemplatePath)) {
-      res.status(500).json({ message: 'Plantilla Excel no encontrada' });
-      return;
-    }
-    if (!fs.existsSync(pdfTemplatePath)) {
-      res.status(500).json({ message: 'Plantilla PDF no encontrada' });
-      return;
-    }
-
-    // === PASO 1: Crear primera página desde Excel con datos ===
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(excelTemplatePath);
-    const worksheet = workbook.getWorksheet(1);
-
-    if (!worksheet) {
-      res.status(500).json({ message: 'No se pudo leer la hoja de Excel' });
-      return;
-    }
-
-    // Función helper para establecer valor en celda
-    const setCellValue = (cellAddress: string, value: string | number) => {
-      const cell = worksheet.getCell(cellAddress);
-      cell.value = value;
-    };
-
-    // Datos del vendedor (separar nombres y apellidos)
-    const vendedorNombreCompleto = vehicle.datosVenta.vendedor.nombre.trim();
-    const vendedorPartes = vendedorNombreCompleto.split(' ');
-    let vendedorApellidos = '';
-    let vendedorNombres = '';
-    if (vendedorPartes.length >= 2) {
-      vendedorApellidos = vendedorPartes.slice(0, 2).join(' ');
-      vendedorNombres = vendedorPartes.slice(2).join(' ');
-    } else {
-      vendedorNombres = vendedorNombreCompleto;
-    }
-
-    // Datos del comprador (separar nombres y apellidos)
-    const compradorNombreCompleto = vehicle.datosVenta.comprador.nombre.trim();
-    const compradorPartes = compradorNombreCompleto.split(' ');
-    let compradorApellidos = '';
-    let compradorNombres = '';
-    if (compradorPartes.length >= 2) {
-      compradorApellidos = compradorPartes.slice(0, 2).join(' ');
-      compradorNombres = compradorPartes.slice(2).join(' ');
-    } else {
-      compradorNombres = compradorNombreCompleto;
-    }
-
-    // Mapeo de campos del formulario RUNT (ajustar según la estructura del Excel)
-    // Estos son campos típicos del formulario de traspaso - ajustar las celdas según el Excel real
-    setCellValue('B5', vehicle.datosVenta.vehiculoAdicional.sitioMatricula || 'N/A'); // Organismo de tránsito
-    setCellValue('F5', vehicle.datosVenta.transaccion.lugarCelebracion || 'N/A'); // Ciudad
-    setCellValue('I5', fechaCelebracion.toLocaleDateString('es-CO')); // Fecha
-    
-    setCellValue('B7', vehicle.placa); // Placa
-    setCellValue('F7', 'TRASPASO'); // Trámite solicitado
-    
-    setCellValue('B9', 'AUTOMÓVIL'); // Clase de vehículo
-    setCellValue('B11', vehicle.marca); // Marca
-    setCellValue('F11', vehicle.datosVenta.vehiculoAdicional.linea || vehicle.modelo); // Línea
-    setCellValue('J11', 'GASOLINA'); // Combustible
-    
-    setCellValue('B13', vehicle.color); // Color
-    setCellValue('D13', vehicle.año.toString()); // Modelo
-    setCellValue('G13', 'N/A'); // Cilindrada
-    
-    setCellValue('B15', vehicle.datosVenta.vehiculoAdicional.capacidad || '5'); // Capacidad
-    setCellValue('F15', vehicle.datosVenta.vehiculoAdicional.tipoCarroceria || 'SEDAN'); // Carrocería
-    
-    setCellValue('B17', vehicle.datosVenta.vehiculoAdicional.numeroMotor || 'N/A'); // No. Motor
-    setCellValue('B19', vehicle.vin.substring(0, 17)); // No. Chasis
-    setCellValue('B21', vehicle.vin); // No. VIN
-    
-    setCellValue('B23', vehicle.datosVenta.vehiculoAdicional.tipoServicio || 'PARTICULAR'); // Tipo servicio
-    
-    // Datos del propietario (vendedor)
-    setCellValue('B27', vendedorApellidos); // Apellidos
-    setCellValue('F27', vendedorNombres); // Nombres
-    setCellValue('B29', vehicle.datosVenta.vendedor.direccion); // Dirección
-    setCellValue('F29', vehicle.datosVenta.transaccion.lugarCelebracion || 'N/A'); // Ciudad
-    setCellValue('I29', vehicle.datosVenta.vendedor.telefono); // Teléfono
-    setCellValue('D31', vehicle.datosVenta.vendedor.identificacion); // Documento
-    
-    // Datos del comprador
-    setCellValue('B35', compradorApellidos); // Apellidos
-    setCellValue('F35', compradorNombres); // Nombres
-    setCellValue('B37', vehicle.datosVenta.comprador.direccion); // Dirección
-    setCellValue('F37', vehicle.datosVenta.transaccion.lugarCelebracion || 'N/A'); // Ciudad
-    setCellValue('I37', vehicle.datosVenta.comprador.telefono); // Teléfono
-    setCellValue('D39', vehicle.datosVenta.comprador.identificacion); // Documento
-    
-    // Observaciones
-    setCellValue('B43', `Valor: $${vehicle.precioVenta.toLocaleString('es-CO')} - Pago: ${vehicle.datosVenta.transaccion.formaPago} - Plazo: ${vehicle.datosVenta.transaccion.diasTraspaso || 30} días`);
-
-    // Guardar Excel temporal
-    const tempExcelPath = path.join(ensureUploadsDir(), `temp-formulario-${Date.now()}.xlsx`);
-    await workbook.xlsx.writeFile(tempExcelPath);
-
-    // Convertir Excel a PDF usando PDFKit (crear página 1)
-    const page1Doc = new PDFDocument({ size: 'LETTER' });
-    const page1Buffer: Buffer[] = [];
-    
-    page1Doc.on('data', (chunk) => page1Buffer.push(chunk));
-    
-    // Dibujar formulario estilo RUNT basado en los datos del Excel
-    page1Doc.fontSize(8).font('Helvetica').text('MINISTERIO DE TRANSPORTE', 50, 30, { align: 'center' });
-    page1Doc.fontSize(10).font('Helvetica-Bold').text('FORMULARIO DE SOLICITUD DE TRÁMITES DEL REGISTRO NACIONAL AUTOMOTOR', 50, 45, { align: 'center' });
-    page1Doc.fontSize(7).font('Helvetica-Oblique').text('Libertad y Orden', 50, 60, { align: 'center' });
-    
-    // Línea separadora
-    page1Doc.moveTo(50, 75).lineTo(562, 75).stroke();
-    
-    let y = 85;
-    const drawField = (label: string, value: string, x: number, width: number) => {
-      page1Doc.rect(x, y, width, 20).stroke();
-      page1Doc.fontSize(6).font('Helvetica-Bold').text(label, x + 2, y + 2);
-      page1Doc.fontSize(8).font('Helvetica').text(value || 'N/A', x + 2, y + 10);
-    };
-    
-    // Fila 1: Organismo, Ciudad, Fecha
-    drawField('1. ORGANISMO DE TRÁNSITO', vehicle.datosVenta.vehiculoAdicional.sitioMatricula || 'N/A', 50, 180);
-    drawField('CIUDAD', vehicle.datosVenta.transaccion.lugarCelebracion || 'N/A', 240, 140);
-    drawField('FECHA', fechaCelebracion.toLocaleDateString('es-CO'), 390, 172);
-    y += 25;
-    
-    // Fila 2: Placa y Trámite
-    drawField('2. PLACA', vehicle.placa, 50, 120);
-    page1Doc.fontSize(6).font('Helvetica-Bold').text('3. TRÁMITE', 180, y + 2);
-    page1Doc.fontSize(8).font('Helvetica').text('[X] TRASPASO', 180, y + 10);
-    y += 25;
-    
-    // Fila 3: Clase
-    page1Doc.fontSize(6).font('Helvetica-Bold').text('4. CLASE DE VEHÍCULO', 50, y + 2);
-    page1Doc.fontSize(8).font('Helvetica').text('[X] AUTOMÓVIL', 50, y + 10);
-    y += 25;
-    
-    // Fila 4: Marca, Línea, Combustible
-    drawField('5. MARCA', vehicle.marca, 50, 120);
-    drawField('6. LÍNEA', vehicle.datosVenta.vehiculoAdicional.linea || vehicle.modelo, 180, 140);
-    page1Doc.fontSize(6).font('Helvetica-Bold').text('7. COMBUSTIBLE', 330, y + 2);
-    page1Doc.fontSize(8).font('Helvetica').text('[X] GASOLINA', 330, y + 10);
-    y += 25;
-    
-    // Fila 5: Color, Modelo, Cilindrada
-    drawField('8. COLOR', vehicle.color, 50, 100);
-    drawField('9. MODELO', vehicle.año.toString(), 160, 80);
-    drawField('10. CILINDRADA', 'N/A', 250, 100);
-    y += 25;
-    
-    // Fila 6: Capacidad, Carrocería
-    drawField('11. CAPACIDAD', vehicle.datosVenta.vehiculoAdicional.capacidad || '5', 50, 120);
-    drawField('15. CARROCERÍA', vehicle.datosVenta.vehiculoAdicional.tipoCarroceria || 'SEDAN', 180, 140);
-    y += 30;
-    
-    // Identificación del vehículo
-    page1Doc.fontSize(7).font('Helvetica-Bold').text('16. IDENTIFICACIÓN INTERNA DEL VEHÍCULO', 50, y);
-    y += 12;
-    drawField('No. MOTOR', vehicle.datosVenta.vehiculoAdicional.numeroMotor || 'N/A', 50, 250);
-    y += 25;
-    drawField('No. CHASIS', vehicle.vin.substring(0, 17), 50, 250);
-    y += 25;
-    drawField('No. VIN', vehicle.vin, 50, 250);
-    y += 30;
-    
-    // Tipo de servicio
-    page1Doc.fontSize(7).font('Helvetica-Bold').text('18. TIPO DE SERVICIO', 50, y);
-    page1Doc.fontSize(8).font('Helvetica').text(`[X] ${vehicle.datosVenta.vehiculoAdicional.tipoServicio || 'PARTICULAR'}`, 50, y + 12);
-    y += 30;
-    
-    // Datos del propietario
-    page1Doc.fontSize(8).font('Helvetica-Bold').text('21. DATOS DEL PROPIETARIO', 50, y);
-    y += 15;
-    drawField('APELLIDOS', vendedorApellidos, 50, 150);
-    drawField('NOMBRES', vendedorNombres, 210, 150);
-    y += 25;
-    drawField('DIRECCIÓN', vehicle.datosVenta.vendedor.direccion, 50, 200);
-    drawField('CIUDAD', vehicle.datosVenta.transaccion.lugarCelebracion || 'N/A', 260, 100);
-    drawField('TELÉFONO', vehicle.datosVenta.vendedor.telefono, 370, 142);
-    y += 25;
-    page1Doc.fontSize(7).font('Helvetica').text('[X] C.C.', 50, y + 5);
-    drawField('No. DOCUMENTO', vehicle.datosVenta.vendedor.identificacion, 100, 200);
-    y += 30;
-    
-    // Datos del comprador
-    page1Doc.fontSize(8).font('Helvetica-Bold').text('22. DATOS DEL COMPRADOR (TRASPASO)', 50, y);
-    y += 15;
-    drawField('APELLIDOS', compradorApellidos, 50, 150);
-    drawField('NOMBRES', compradorNombres, 210, 150);
-    y += 25;
-    drawField('DIRECCIÓN', vehicle.datosVenta.comprador.direccion, 50, 200);
-    drawField('CIUDAD', vehicle.datosVenta.transaccion.lugarCelebracion || 'N/A', 260, 100);
-    drawField('TELÉFONO', vehicle.datosVenta.comprador.telefono, 370, 142);
-    y += 25;
-    page1Doc.fontSize(7).font('Helvetica').text('[X] C.C.', 50, y + 5);
-    drawField('No. DOCUMENTO', vehicle.datosVenta.comprador.identificacion, 100, 200);
-    y += 30;
-    
-    // Observaciones
-    page1Doc.fontSize(8).font('Helvetica-Bold').text('23. OBSERVACIONES', 50, y);
-    y += 15;
-    page1Doc.rect(50, y, 512, 50).stroke();
-    page1Doc.fontSize(7).font('Helvetica')
-      .text(`Valor transacción: $${vehicle.precioVenta.toLocaleString('es-CO')}`, 55, y + 5)
-      .text(`Forma de pago: ${vehicle.datosVenta.transaccion.formaPago}`, 55, y + 20)
-      .text(`Plazo traspaso: ${vehicle.datosVenta.transaccion.diasTraspaso || 30} días`, 55, y + 35);
-    
-    y += 60;
-    
-    // Firmas
-    if (y > 650) {
-      page1Doc.addPage();
-      y = 50;
-    }
-    
-    page1Doc.fontSize(8).font('Helvetica-Bold').text('FIRMA DEL PROPIETARIO', 100, y, { width: 150, align: 'center' });
-    page1Doc.fontSize(8).font('Helvetica-Bold').text('FIRMA DEL COMPRADOR', 350, y, { width: 150, align: 'center' });
-    y += 25;
-    page1Doc.moveTo(80, y).lineTo(230, y).stroke();
-    page1Doc.moveTo(330, y).lineTo(480, y).stroke();
-    y += 5;
-    page1Doc.fontSize(7).font('Helvetica')
-      .text(`C.C. ${vehicle.datosVenta.vendedor.identificacion}`, 80, y, { width: 150, align: 'center' })
-      .text(`C.C. ${vehicle.datosVenta.comprador.identificacion}`, 330, y, { width: 150, align: 'center' });
-
-    page1Doc.end();
-
-    // Esperar a que se genere el buffer de la página 1
-    await new Promise<void>((resolve) => {
-      page1Doc.on('end', () => resolve());
+    // Crear documento PDF
+    const doc = new PDFDocument({ 
+      size: 'LETTER',
+      margins: { top: 50, bottom: 50, left: 60, right: 60 }
     });
 
-    const page1PdfBuffer = Buffer.concat(page1Buffer);
-
-    // === PASO 2: Extraer segunda página del PDF original ===
-    const pdfTemplateBytes = fs.readFileSync(pdfTemplatePath);
-    const pdfTemplateDoc = await PDFLibDocument.load(pdfTemplateBytes);
-    
-    // Crear nuevo PDF con solo la segunda página (índice 1)
-    const newPdfDoc = await PDFLibDocument.create();
-    
-    // Copiar primera página generada (desde el buffer de PDFKit)
-    const page1Doc2 = await PDFLibDocument.load(page1PdfBuffer);
-    const [page1] = await newPdfDoc.copyPages(page1Doc2, [0]);
-    newPdfDoc.addPage(page1);
-    
-    // Copiar segunda página de la plantilla (si existe)
-    if (pdfTemplateDoc.getPageCount() >= 2) {
-      const [page2] = await newPdfDoc.copyPages(pdfTemplateDoc, [1]);
-      newPdfDoc.addPage(page2);
-    } else if (pdfTemplateDoc.getPageCount() === 1) {
-      // Si solo tiene una página, copiar esa
-      const [page2] = await newPdfDoc.copyPages(pdfTemplateDoc, [0]);
-      newPdfDoc.addPage(page2);
-    }
-
-    // Guardar PDF final
-    const pdfBytes = await newPdfDoc.save();
-
-    // Limpiar archivo temporal
-    try {
-      fs.unlinkSync(tempExcelPath);
-    } catch (e) {
-      // Ignorar error al eliminar temporal
-    }
-
-    // Enviar respuesta
+    // Configurar respuesta
     const fileName = `formulario-traspaso-${vehicle.placa}-${Date.now()}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    res.send(Buffer.from(pdfBytes));
+
+    // Pipe el PDF directamente a la respuesta
+    doc.pipe(res);
+
+    // === PÁGINA 1: FORMULARIO DE TRÁMITE ===
+    
+    // Encabezado
+    doc.fontSize(10).font('Helvetica-Bold')
+       .text('MINISTERIO DE TRANSPORTE', { align: 'center' });
+    doc.fontSize(12).font('Helvetica-Bold')
+       .text('FORMULARIO DE SOLICITUD DE TRÁMITES', { align: 'center' });
+    doc.fontSize(10).font('Helvetica')
+       .text('Registro Nacional Automotor - RUNT', { align: 'center' });
+    doc.moveDown();
+
+    // Sección 1: Datos del trámite
+    doc.fontSize(10).font('Helvetica-Bold').text('1. DATOS DEL TRÁMITE');
+    doc.moveDown(0.5);
+    
+    doc.fontSize(9).font('Helvetica')
+       .text(`Organismo de Tránsito: ${vehicle.datosVenta.vehiculoAdicional.sitioMatricula || '_________________'}`)
+       .text(`Ciudad: ${vehicle.datosVenta.transaccion.lugarCelebracion || '_________________'}`)
+       .text(`Fecha: ${fechaCelebracion.toLocaleDateString('es-CO')}`)
+       .text(`Tipo de Trámite: TRASPASO DE PROPIEDAD`);
+    doc.moveDown();
+
+    // Sección 2: Datos del vehículo
+    doc.fontSize(10).font('Helvetica-Bold').text('2. DATOS DEL VEHÍCULO');
+    doc.moveDown(0.5);
+    
+    doc.fontSize(9).font('Helvetica')
+       .text(`Placa: ${vehicle.placa}                    Clase: AUTOMÓVIL`)
+       .text(`Marca: ${vehicle.marca}                    Línea: ${vehicle.datosVenta.vehiculoAdicional.linea || vehicle.modelo}`)
+       .text(`Modelo (Año): ${vehicle.año}               Color: ${vehicle.color}`)
+       .text(`Tipo de Carrocería: ${vehicle.datosVenta.vehiculoAdicional.tipoCarroceria || 'N/A'}`)
+       .text(`Capacidad: ${vehicle.datosVenta.vehiculoAdicional.capacidad || '5'} pasajeros`)
+       .text(`Número de Motor: ${vehicle.datosVenta.vehiculoAdicional.numeroMotor || 'N/A'}`)
+       .text(`Número de Chasis/VIN: ${vehicle.vin || 'N/A'}`)
+       .text(`Tipo de Servicio: ${vehicle.datosVenta.vehiculoAdicional.tipoServicio || 'PARTICULAR'}`);
+    doc.moveDown();
+
+    // Sección 3: Datos del propietario (vendedor)
+    doc.fontSize(10).font('Helvetica-Bold').text('3. DATOS DEL PROPIETARIO ACTUAL (VENDEDOR)');
+    doc.moveDown(0.5);
+    
+    doc.fontSize(9).font('Helvetica')
+       .text(`Nombre completo: ${vehicle.datosVenta.vendedor.nombre}`)
+       .text(`Documento de identidad: C.C. ${vehicle.datosVenta.vendedor.identificacion}`)
+       .text(`Dirección: ${vehicle.datosVenta.vendedor.direccion}`)
+       .text(`Teléfono: ${vehicle.datosVenta.vendedor.telefono}`);
+    doc.moveDown();
+
+    // Sección 4: Datos del comprador
+    doc.fontSize(10).font('Helvetica-Bold').text('4. DATOS DEL COMPRADOR (NUEVO PROPIETARIO)');
+    doc.moveDown(0.5);
+    
+    doc.fontSize(9).font('Helvetica')
+       .text(`Nombre completo: ${vehicle.datosVenta.comprador.nombre}`)
+       .text(`Documento de identidad: C.C. ${vehicle.datosVenta.comprador.identificacion}`)
+       .text(`Dirección: ${vehicle.datosVenta.comprador.direccion}`)
+       .text(`Teléfono: ${vehicle.datosVenta.comprador.telefono}`);
+    doc.moveDown();
+
+    // Sección 5: Información de la transacción
+    doc.fontSize(10).font('Helvetica-Bold').text('5. INFORMACIÓN DE LA TRANSACCIÓN');
+    doc.moveDown(0.5);
+    
+    doc.fontSize(9).font('Helvetica')
+       .text(`Valor de la transacción: $${vehicle.precioVenta.toLocaleString('es-CO')}`)
+       .text(`Forma de pago: ${vehicle.datosVenta.transaccion.formaPago}`)
+       .text(`Plazo para traspaso: ${vehicle.datosVenta.transaccion.diasTraspaso || 30} días`);
+    doc.moveDown(2);
+
+    // Firmas
+    const yPos = doc.y;
+    doc.fontSize(9).font('Helvetica-Bold')
+       .text('FIRMA DEL VENDEDOR', 100, yPos, { width: 150, align: 'center' })
+       .text('FIRMA DEL COMPRADOR', 350, yPos, { width: 150, align: 'center' });
+    
+    doc.moveTo(80, yPos + 25).lineTo(230, yPos + 25).stroke();
+    doc.moveTo(330, yPos + 25).lineTo(480, yPos + 25).stroke();
+    
+    doc.fontSize(8).font('Helvetica')
+       .text(`C.C. ${vehicle.datosVenta.vendedor.identificacion}`, 80, yPos + 30, { width: 150, align: 'center' })
+       .text(`C.C. ${vehicle.datosVenta.comprador.identificacion}`, 330, yPos + 30, { width: 150, align: 'center' });
+
+    // === PÁGINA 2: DOCUMENTOS REQUERIDOS ===
+    doc.addPage();
+    
+    doc.fontSize(12).font('Helvetica-Bold')
+       .text('DOCUMENTOS REQUERIDOS PARA EL TRÁMITE', { align: 'center' });
+    doc.moveDown();
+
+    doc.fontSize(10).font('Helvetica-Bold').text('CHECKLIST DE DOCUMENTOS:');
+    doc.moveDown();
+
+    const documentos = [
+      '□ Tarjeta de propiedad del vehículo (original)',
+      '□ Certificado de tradición y libertad (vigente)',
+      '□ SOAT vigente',
+      '□ Revisión técnico-mecánica vigente',
+      '□ Certificado de emisiones (si aplica)',
+      '□ Fotocopia de la cédula del vendedor (ampliada al 150%)',
+      '□ Fotocopia de la cédula del comprador (ampliada al 150%)',
+      '□ Poder especial si el trámite lo realiza un tercero',
+      '□ Formulario de traspaso debidamente diligenciado',
+      '□ Recibo de pago de los derechos de trámite'
+    ];
+
+    documentos.forEach((docItem) => {
+      doc.fontSize(10).font('Helvetica').text(docItem);
+      doc.moveDown(0.3);
+    });
+
+    doc.moveDown(2);
+
+    doc.fontSize(10).font('Helvetica-Bold').text('NOTAS IMPORTANTES:');
+    doc.moveDown();
+
+    doc.fontSize(9).font('Helvetica')
+       .text('1. Todos los documentos deben estar vigentes al momento de realizar el trámite.', { align: 'justify' })
+       .text('2. El vendedor debe presentar la tarjeta de propiedad original.', { align: 'justify' })
+       .text('3. Las fotocopias de cédulas deben estar ampliadas al 150% y ser legibles.', { align: 'justify' })
+       .text('4. El traspaso debe realizarse dentro del plazo establecido en el contrato.', { align: 'justify' })
+       .text('5. Para más información, visite www.runt.gov.co', { align: 'justify' });
+
+    doc.moveDown(3);
+
+    doc.fontSize(8).font('Helvetica-Oblique')
+       .text('Este formulario es un documento oficial para trámites ante el Registro Nacional Automotor.', { align: 'center' });
+
+    // Finalizar el documento
+    doc.end();
 
   } catch (error: any) {
     console.error('Error al generar formulario de traspaso:', error);
