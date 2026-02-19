@@ -803,15 +803,72 @@ export const exportVehicleReport = async (
           const detallesGastos = inv.gastos.map(g => `${g.categoria}: $${g.monto.toLocaleString('es-CO')}${g.descripcion ? ` (${g.descripcion})` : ''}`).join(', ');
           worksheet.getCell(`B${currentRow}`).value = detallesGastos;
           worksheet.getCell(`B${currentRow}`).font = { italic: true, size: 9 };
+          worksheet.getCell(`B${currentRow}`).alignment = { wrapText: true };
           currentRow++;
         }
 
+        // Participación
+        worksheet.getCell(`A${currentRow}`).value = '';
+        worksheet.getCell(`B${currentRow}`).value = porcentaje;
+        worksheet.getCell(`B${currentRow}`).numFmt = '0.00"%"';
+        worksheet.getCell(`B${currentRow}`).font = { color: { argb: 'FF0070C0' } };
         currentRow++;
+
+        // Utilidad Neta (sin incluir gastos)
+        worksheet.getCell(`A${currentRow}`).value = '';
+        worksheet.getCell(`B${currentRow}`).value = utilidadNetaInv;
+        worksheet.getCell(`B${currentRow}`).numFmt = '"$"#,##0';
+        worksheet.getCell(`B${currentRow}`).font = { bold: true, color: { argb: utilidadNetaInv >= 0 ? 'FF00B050' : 'FFFF0000' } };
+        currentRow++;
+
+        // Total a Recibir (Utilidad Neta + Retorno de Gastos)
+        worksheet.getCell(`A${currentRow}`).value = '';
+        worksheet.getCell(`B${currentRow}`).value = totalARecibir;
+        worksheet.getCell(`B${currentRow}`).numFmt = '"$"#,##0';
+        worksheet.getCell(`B${currentRow}`).font = { bold: true, size: 11, color: { argb: 'FF7030A0' } };
+        currentRow++;
+
+        if (index < vehicle.inversionistas.length - 1) {
+          currentRow++; // Espacio entre inversionistas
+        }
       });
+
+      currentRow++;
+
+      // Resumen de inversiones
+      worksheet.mergeCells(`A${currentRow}:B${currentRow}`);
+      const resumenCell = worksheet.getCell(`A${currentRow}`);
+      resumenCell.value = 'RESUMEN DE INVERSIONES';
+      resumenCell.font = { bold: true, size: 11 };
+      resumenCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFD9D9D9' },
+      };
+      currentRow++;
+
+      addDataRow('Total Invertido', `$${totalInversion.toLocaleString('es-CO')}`);
+      addDataRow('Total Gastos Inversionistas', `$${totalGastosInv.toLocaleString('es-CO')}`);
+      addDataRow('Número de Socios', vehicle.inversionistas.length);
+      addDataRow('Utilidad Bruta', `$${utilidadBruta.toLocaleString('es-CO')}`);
+      addDataRow('Utilidad Neta a Distribuir', `$${utilidadNeta.toLocaleString('es-CO')}`);
+      
+      worksheet.getCell(`B${currentRow - 1}`).font = { bold: true, color: { argb: utilidadNeta >= 0 ? 'FF00B050' : 'FFFF0000' } };
+      currentRow++;
+    }
+
+    // Observaciones
+    if (vehicle.observaciones) {
+      addSection('OBSERVACIONES');
+      worksheet.mergeCells(`A${currentRow}:B${currentRow + 2}`);
+      const obsCell = worksheet.getCell(`A${currentRow}`);
+      obsCell.value = vehicle.observaciones;
+      obsCell.alignment = { wrapText: true, vertical: 'top' };
+      currentRow += 3;
     }
 
     // Generar archivo
-    const fileName = `reporte-vehiculo-${vehicle.placa}-${Date.now()}.xlsx`;
+    const fileName = `vehiculo-${vehicle.placa}-${Date.now()}.xlsx`;
     const filePath = path.join(ensureUploadsDir(), fileName);
 
     await workbook.xlsx.writeFile(filePath);
@@ -823,7 +880,807 @@ export const exportVehicleReport = async (
       fs.unlinkSync(filePath);
     });
   } catch (error: any) {
-    res.status(500).json({ message: 'Error al exportar reporte', error: error.message });
+    res.status(500).json({ message: 'Error al exportar reporte del vehículo', error: error.message });
+  }
+};
+
+// Exportar reporte mensual de ventas a Excel
+export const exportMonthlyReport = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { year, month } = req.query;
+    const selectedYear = year ? parseInt(year as string) : new Date().getFullYear();
+
+    const startDate = new Date(selectedYear, 0, 1);
+    const endDate = new Date(selectedYear, 11, 31, 23, 59, 59);
+
+    const vehiculosVendidos = await Vehicle.find({
+      estado: 'vendido',
+      fechaVenta: {
+        $gte: startDate,
+        $lte: endDate,
+      },
+    }).sort({ fechaVenta: 1 });
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet(`Ventas ${selectedYear}`);
+
+    // Título
+    worksheet.mergeCells('A1:I1');
+    const titleCell = worksheet.getCell('A1');
+    titleCell.value = `REPORTE DE VENTAS - AÑO ${selectedYear}`;
+    titleCell.font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+    titleCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4472C4' },
+    };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    worksheet.getRow(1).height = 30;
+
+    // Encabezados
+    worksheet.columns = [
+      { header: 'Fecha Venta', key: 'fechaVenta', width: 15 },
+      { header: 'Mes', key: 'mes', width: 12 },
+      { header: 'Placa', key: 'placa', width: 12 },
+      { header: 'Marca', key: 'marca', width: 15 },
+      { header: 'Modelo', key: 'modelo', width: 15 },
+      { header: 'Año', key: 'año', width: 10 },
+      { header: 'Precio Compra', key: 'precioCompra', width: 15 },
+      { header: 'Gastos Totales', key: 'gastos', width: 15 },
+      { header: 'Costo Total', key: 'costoTotal', width: 15 },
+      { header: 'Precio Venta', key: 'precioVenta', width: 15 },
+      { header: 'Utilidad', key: 'utilidad', width: 15 },
+      { header: 'Margen %', key: 'margen', width: 12 },
+    ];
+
+    const headerRow = worksheet.getRow(3);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF5B9BD5' },
+    };
+
+    const meses = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+
+    let totalVentas = 0;
+    let totalGastos = 0;
+    let totalUtilidad = 0;
+
+    // Agregar datos
+    vehiculosVendidos.forEach((vehiculo) => {
+      if (!vehiculo.fechaVenta) return;
+
+      const fecha = new Date(vehiculo.fechaVenta);
+      const mesNombre = meses[fecha.getMonth()];
+      const costoTotal = vehiculo.precioCompra + vehiculo.gastos.total;
+      const utilidad = vehiculo.precioVenta - costoTotal;
+      const margen = costoTotal > 0 ? ((utilidad / costoTotal) * 100).toFixed(2) : '0';
+
+      totalVentas += vehiculo.precioVenta;
+      totalGastos += costoTotal;
+      totalUtilidad += utilidad;
+
+      worksheet.addRow({
+        fechaVenta: fecha.toLocaleDateString('es-CO'),
+        mes: mesNombre,
+        placa: vehiculo.placa,
+        marca: vehiculo.marca,
+        modelo: vehiculo.modelo,
+        año: vehiculo.año,
+        precioCompra: vehiculo.precioCompra,
+        gastos: vehiculo.gastos.total,
+        costoTotal: costoTotal,
+        precioVenta: vehiculo.precioVenta,
+        utilidad: utilidad,
+        margen: `${margen}%`,
+      });
+    });
+
+    // Formato de moneda
+    worksheet.getColumn('precioCompra').numFmt = '"$"#,##0';
+    worksheet.getColumn('gastos').numFmt = '"$"#,##0';
+    worksheet.getColumn('costoTotal').numFmt = '"$"#,##0';
+    worksheet.getColumn('precioVenta').numFmt = '"$"#,##0';
+    worksheet.getColumn('utilidad').numFmt = '"$"#,##0';
+
+    // Fila de totales
+    const lastRow = worksheet.lastRow!.number + 2;
+    worksheet.mergeCells(`A${lastRow}:F${lastRow}`);
+    const totalLabelCell = worksheet.getCell(`A${lastRow}`);
+    totalLabelCell.value = 'TOTALES';
+    totalLabelCell.font = { bold: true, size: 12 };
+    totalLabelCell.alignment = { horizontal: 'right' };
+
+    worksheet.getCell(`G${lastRow}`).value = totalGastos;
+    worksheet.getCell(`G${lastRow}`).numFmt = '"$"#,##0';
+    worksheet.getCell(`G${lastRow}`).font = { bold: true };
+
+    worksheet.getCell(`I${lastRow}`).value = totalVentas;
+    worksheet.getCell(`I${lastRow}`).numFmt = '"$"#,##0';
+    worksheet.getCell(`I${lastRow}`).font = { bold: true };
+
+    worksheet.getCell(`J${lastRow}`).value = totalUtilidad;
+    worksheet.getCell(`J${lastRow}`).numFmt = '"$"#,##0';
+    worksheet.getCell(`J${lastRow}`).font = { bold: true, color: { argb: totalUtilidad >= 0 ? 'FF00B050' : 'FFFF0000' } };
+
+    // Generar archivo
+    const fileName = `reporte-ventas-${selectedYear}-${Date.now()}.xlsx`;
+    const filePath = path.join(ensureUploadsDir(), fileName);
+
+    await workbook.xlsx.writeFile(filePath);
+
+    res.download(filePath, fileName, (err) => {
+      if (err) {
+        console.error('Error al descargar archivo:', err);
+      }
+      fs.unlinkSync(filePath);
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error al exportar reporte mensual', error: error.message });
+  }
+};
+
+// Exportar plantilla de gastos detallados
+export const exportExpensesTemplate = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const vehicle = await Vehicle.findById(id).populate('registradoPor', 'nombre email');
+
+    if (!vehicle) {
+      res.status(404).json({ message: 'Vehículo no encontrado' });
+      return;
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Control de Gastos');
+
+    // Configurar ancho de columnas
+    worksheet.columns = [
+      { width: 40 }, // Descripción
+      { width: 20 }, // Encargado
+      { width: 15 }, // Fecha
+    ];
+
+    // Encabezado principal
+    worksheet.mergeCells('A1:C1');
+    const headerCell = worksheet.getCell('A1');
+    headerCell.value = `CONTROL DE GASTOS - ${vehicle.marca} ${vehicle.modelo} (${vehicle.placa})`;
+    headerCell.font = { size: 14, bold: true };
+    headerCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    headerCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4472C4' },
+    };
+    headerCell.font = { size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+    worksheet.getRow(1).height = 25;
+
+    let currentRow = 3;
+
+    // Función para crear sección con datos
+    const createSection = (title: string, color: string, gastos: any[]) => {
+      // Título de sección
+      worksheet.mergeCells(`A${currentRow}:C${currentRow}`);
+      const titleCell = worksheet.getCell(`A${currentRow}`);
+      titleCell.value = title;
+      titleCell.font = { size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
+      titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      titleCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: color },
+      };
+      worksheet.getRow(currentRow).height = 20;
+      currentRow++;
+
+      // Encabezados de columnas
+      worksheet.getCell(`A${currentRow}`).value = 'DESCRIPCION';
+      worksheet.getCell(`B${currentRow}`).value = 'ENCARGADO';
+      worksheet.getCell(`C${currentRow}`).value = 'FECHA';
+      
+      ['A', 'B', 'C'].forEach(col => {
+        const cell = worksheet.getCell(`${col}${currentRow}`);
+        cell.font = { bold: true };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE7E6E6' },
+        };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      });
+      currentRow++;
+
+      // Agregar datos reales o filas vacías
+      const minRows = 6;
+      const rowsToAdd = Math.max(minRows, gastos.length);
+      
+      for (let i = 0; i < rowsToAdd; i++) {
+        const gasto = gastos[i];
+        
+        if (gasto) {
+          // Llenar con datos reales
+          worksheet.getCell(`A${currentRow}`).value = gasto.descripcion || '';
+          worksheet.getCell(`B${currentRow}`).value = gasto.encargado || '';
+          worksheet.getCell(`C${currentRow}`).value = gasto.fecha 
+            ? new Date(gasto.fecha).toLocaleDateString('es-CO')
+            : '';
+        }
+        
+        // Aplicar bordes
+        ['A', 'B', 'C'].forEach(col => {
+          const cell = worksheet.getCell(`${col}${currentRow}`);
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' },
+          };
+        });
+        currentRow++;
+      }
+
+      currentRow++; // Espacio entre secciones
+    };
+
+    // Crear todas las secciones con datos reales
+    createSection('LAMINA Y PINTURA', 'FF92D050', vehicle.gastosDetallados?.pintura || []);
+    createSection('MECANICA', 'FFFFC000', vehicle.gastosDetallados?.mecanica || []);
+    createSection('ALISTAMIENTO', 'FF00B050', vehicle.gastosDetallados?.alistamiento || []);
+    createSection('TAPICERIA', 'FFFF6B9D', vehicle.gastosDetallados?.tapiceria || []);
+    createSection('TRANSPORTE', 'FF00B0F0', vehicle.gastosDetallados?.transporte || []);
+    createSection('TRASPASO', 'FF7030A0', vehicle.gastosDetallados?.traspaso || []);
+    createSection('VARIOS', 'FFC0C0C0', vehicle.gastosDetallados?.varios || []);
+
+    // Generar archivo
+    const fileName = `gastos-${vehicle.placa}-${Date.now()}.xlsx`;
+    const filePath = path.join(ensureUploadsDir(), fileName);
+
+    await workbook.xlsx.writeFile(filePath);
+
+    res.download(filePath, fileName, (err) => {
+      if (err) {
+        console.error('Error al descargar archivo:', err);
+      }
+      fs.unlinkSync(filePath);
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error al exportar plantilla de gastos', error: error.message });
+  }
+};
+
+// Obtener reportes mensuales de ventas y gastos
+export const getMonthlyReports = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { year } = req.query;
+    const selectedYear = year ? parseInt(year as string) : new Date().getFullYear();
+
+    // Obtener vehículos vendidos en el año seleccionado
+    const startDate = new Date(selectedYear, 0, 1);
+    const endDate = new Date(selectedYear, 11, 31, 23, 59, 59);
+
+    const vehiculosVendidos = await Vehicle.find({
+      estado: 'vendido',
+      fechaVenta: {
+        $gte: startDate,
+        $lte: endDate,
+      },
+    }).sort({ fechaVenta: 1 });
+
+    // Agrupar por mes
+    const meses = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+
+    const reportesPorMes: any = {};
+
+    vehiculosVendidos.forEach((vehiculo) => {
+      if (!vehiculo.fechaVenta) return;
+
+      const fecha = new Date(vehiculo.fechaVenta);
+      const mesIndex = fecha.getMonth();
+      const mesNombre = meses[mesIndex];
+
+      if (!reportesPorMes[mesNombre]) {
+        reportesPorMes[mesNombre] = {
+          mes: mesNombre,
+          año: selectedYear,
+          totalVentas: 0,
+          totalGastos: 0,
+          utilidad: 0,
+          cantidadVehiculos: 0,
+          vehiculos: [],
+        };
+      }
+
+      const costoTotal = vehiculo.precioCompra + vehiculo.gastos.total;
+      const utilidad = vehiculo.precioVenta - costoTotal;
+
+      reportesPorMes[mesNombre].totalVentas += vehiculo.precioVenta;
+      reportesPorMes[mesNombre].totalGastos += costoTotal;
+      reportesPorMes[mesNombre].utilidad += utilidad;
+      reportesPorMes[mesNombre].cantidadVehiculos += 1;
+      reportesPorMes[mesNombre].vehiculos.push({
+        marca: vehiculo.marca,
+        modelo: vehiculo.modelo,
+        año: vehiculo.año,
+        placa: vehiculo.placa,
+        precioVenta: vehiculo.precioVenta,
+        precioCompra: vehiculo.precioCompra,
+        gastosTotal: vehiculo.gastos.total,
+        utilidad: utilidad,
+        fechaVenta: vehiculo.fechaVenta,
+      });
+    });
+
+    // Convertir a array y ordenar por mes
+    const reportes = meses
+      .map((mes) => reportesPorMes[mes])
+      .filter((reporte) => reporte !== undefined);
+
+    res.json(reportes);
+  } catch (error: any) {
+    res.status(500).json({
+      message: 'Error al generar reportes mensuales',
+      error: error.message,
+    });
+  }
+};
+
+// Guardar datos de venta
+export const saveSaleData = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const datosVenta = req.body;
+
+    const vehicle = await Vehicle.findById(id);
+
+    if (!vehicle) {
+      res.status(404).json({ message: 'Vehículo no encontrado' });
+      return;
+    }
+
+    const normalizeNumber = (value: unknown, fallback: number): number => {
+      if (value === undefined || value === null) return fallback;
+      const numeric = typeof value === 'string' ? Number(value) : value;
+      return Number.isFinite(numeric as number) ? (numeric as number) : fallback;
+    };
+
+    const normalizeDate = (value: unknown, fallback: Date = new Date()): Date => {
+      if (!value) return fallback;
+      // Handle string dates from frontend (e.g., "2024-01-15")
+      if (typeof value === 'string') {
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? fallback : date;
+      }
+      // Handle Date objects
+      if (value instanceof Date) {
+        return Number.isNaN(value.getTime()) ? fallback : value;
+      }
+      return fallback;
+    };
+
+    const sanitizeText = (value: unknown): string => {
+      if (value === undefined || value === null) return '';
+      return typeof value === 'string' ? value.trim() : String(value);
+    };
+
+    // Limpiar estadoTramite inválido si quedó como string vacío
+    if ((vehicle as any).estadoTramite === '') {
+      (vehicle as any).estadoTramite = undefined;
+    }
+
+    // Obtener datos de venta existentes para merge (si estamos actualizando)
+    const existingDatosVenta = (vehicle.datosVenta || {}) as IDatosVenta;
+
+    // Función helper para merge profundo de objetos
+    const mergeObject = (newData: any, existingData: any, defaults: any) => {
+      const result = { ...defaults };
+      if (existingData) {
+        Object.keys(existingData).forEach(key => {
+          if (existingData[key] !== undefined && existingData[key] !== null && existingData[key] !== '') {
+            result[key] = existingData[key];
+          }
+        });
+      }
+      if (newData) {
+        Object.keys(newData).forEach(key => {
+          if (newData[key] !== undefined && newData[key] !== null && newData[key] !== '') {
+            result[key] = newData[key];
+          }
+        });
+      }
+      return result;
+    };
+
+    // Merge de vendedor
+    const vendedorDefaults = {
+      nombre: '',
+      identificacion: '',
+      direccion: '',
+      telefono: '',
+    };
+
+    // Merge de comprador
+    const compradorDefaults = {
+      nombre: '',
+      identificacion: '',
+      direccion: '',
+      telefono: '',
+      email: '',
+    };
+
+    // Merge de vehiculoAdicional
+    const vehiculoAdicionalDefaults = {
+      tipoCarroceria: '',
+      capacidad: '',
+      numeroPuertas: 4,
+      numeroMotor: '',
+      linea: '',
+      actaManifiesto: '',
+      sitioMatricula: '',
+      tipoServicio: 'PARTICULAR',
+    };
+
+    // Merge de transaccion
+    const transaccionDefaults = {
+      lugarCelebracion: '',
+      fechaCelebracion: new Date(),
+      precioLetras: '',
+      formaPago: '',
+      vendedorAnterior: '',
+      cedulaVendedorAnterior: '',
+      diasTraspaso: 30,
+      fechaEntrega: new Date(),
+      horaEntrega: '',
+      domicilioContractual: '',
+      clausulasAdicionales: '',
+    };
+
+    // Helper to safely get string value
+    const safeString = (value: unknown): string => {
+      if (value === undefined || value === null) return '';
+      return String(value).trim();
+    };
+
+    const sanitizedDatosVenta = {
+      vendedor: mergeObject(
+        datosVenta?.vendedor,
+        existingDatosVenta?.vendedor,
+        vendedorDefaults
+      ),
+      comprador: mergeObject(
+        datosVenta?.comprador,
+        existingDatosVenta?.comprador,
+        compradorDefaults
+      ),
+      vehiculoAdicional: {
+        ...mergeObject(
+          datosVenta?.vehiculoAdicional,
+          existingDatosVenta?.vehiculoAdicional,
+          vehiculoAdicionalDefaults
+        ),
+        numeroPuertas: normalizeNumber(
+          datosVenta?.vehiculoAdicional?.numeroPuertas,
+          existingDatosVenta?.vehiculoAdicional?.numeroPuertas || 4
+        ),
+      },
+      transaccion: {
+        ...mergeObject(
+          datosVenta?.transaccion,
+          existingDatosVenta?.transaccion,
+          transaccionDefaults
+        ),
+        diasTraspaso: normalizeNumber(
+          datosVenta?.transaccion?.diasTraspaso,
+          existingDatosVenta?.transaccion?.diasTraspaso || 30
+        ),
+        fechaCelebracion: normalizeDate(
+          datosVenta?.transaccion?.fechaCelebracion,
+          existingDatosVenta?.transaccion?.fechaCelebracion || new Date()
+        ),
+        fechaEntrega: normalizeDate(
+          datosVenta?.transaccion?.fechaEntrega,
+          existingDatosVenta?.transaccion?.fechaEntrega || new Date()
+        ),
+      },
+    };
+
+    // Aplicar sanitize a todos los campos de texto
+    sanitizedDatosVenta.vendedor.nombre = sanitizeText(sanitizedDatosVenta.vendedor.nombre);
+    sanitizedDatosVenta.vendedor.identificacion = sanitizeText(sanitizedDatosVenta.vendedor.identificacion);
+    sanitizedDatosVenta.vendedor.direccion = sanitizeText(sanitizedDatosVenta.vendedor.direccion);
+    sanitizedDatosVenta.vendedor.telefono = sanitizeText(sanitizedDatosVenta.vendedor.telefono);
+
+    sanitizedDatosVenta.comprador.nombre = sanitizeText(sanitizedDatosVenta.comprador.nombre);
+    sanitizedDatosVenta.comprador.identificacion = sanitizeText(sanitizedDatosVenta.comprador.identificacion);
+    sanitizedDatosVenta.comprador.direccion = sanitizeText(sanitizedDatosVenta.comprador.direccion);
+    sanitizedDatosVenta.comprador.telefono = sanitizeText(sanitizedDatosVenta.comprador.telefono);
+    sanitizedDatosVenta.comprador.email = sanitizeText(sanitizedDatosVenta.comprador.email);
+
+    sanitizedDatosVenta.vehiculoAdicional.tipoCarroceria = sanitizeText(sanitizedDatosVenta.vehiculoAdicional.tipoCarroceria);
+    sanitizedDatosVenta.vehiculoAdicional.capacidad = sanitizeText(sanitizedDatosVenta.vehiculoAdicional.capacidad);
+    sanitizedDatosVenta.vehiculoAdicional.numeroMotor = sanitizeText(sanitizedDatosVenta.vehiculoAdicional.numeroMotor);
+    sanitizedDatosVenta.vehiculoAdicional.linea = sanitizeText(sanitizedDatosVenta.vehiculoAdicional.linea);
+    sanitizedDatosVenta.vehiculoAdicional.actaManifiesto = sanitizeText(sanitizedDatosVenta.vehiculoAdicional.actaManifiesto);
+    sanitizedDatosVenta.vehiculoAdicional.sitioMatricula = sanitizeText(sanitizedDatosVenta.vehiculoAdicional.sitioMatricula);
+    sanitizedDatosVenta.vehiculoAdicional.tipoServicio = sanitizeText(sanitizedDatosVenta.vehiculoAdicional.tipoServicio) || 'PARTICULAR';
+
+    sanitizedDatosVenta.transaccion.lugarCelebracion = sanitizeText(sanitizedDatosVenta.transaccion.lugarCelebracion);
+    sanitizedDatosVenta.transaccion.precioLetras = sanitizeText(sanitizedDatosVenta.transaccion.precioLetras);
+    sanitizedDatosVenta.transaccion.formaPago = sanitizeText(sanitizedDatosVenta.transaccion.formaPago);
+    sanitizedDatosVenta.transaccion.vendedorAnterior = sanitizeText(sanitizedDatosVenta.transaccion.vendedorAnterior);
+    sanitizedDatosVenta.transaccion.cedulaVendedorAnterior = sanitizeText(sanitizedDatosVenta.transaccion.cedulaVendedorAnterior);
+    sanitizedDatosVenta.transaccion.horaEntrega = sanitizeText(sanitizedDatosVenta.transaccion.horaEntrega);
+    sanitizedDatosVenta.transaccion.domicilioContractual = sanitizeText(sanitizedDatosVenta.transaccion.domicilioContractual);
+    sanitizedDatosVenta.transaccion.clausulasAdicionales = sanitizeText(sanitizedDatosVenta.transaccion.clausulasAdicionales);
+
+    // Actualizar datos de venta
+    vehicle.datosVenta = sanitizedDatosVenta as any;
+    vehicle.estado = 'vendido';
+    
+    // Solo establecer fechaVenta si no existe (nueva venta), no al actualizar
+    if (!vehicle.fechaVenta) {
+      vehicle.fechaVenta = new Date();
+    }
+
+    await vehicle.save();
+
+    res.json({
+      message: 'Datos de venta guardados exitosamente',
+      vehicle,
+    });
+  } catch (error: any) {
+    console.error('Error en saveSaleData:', error);
+    
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map((err: any) => ({
+        field: err.path,
+        message: err.message,
+        value: err.value,
+      }));
+      res.status(400).json({
+        message: 'Error de validación',
+        errors,
+        details: error.message,
+      });
+      return;
+    }
+
+    if (error.name === 'CastError') {
+      res.status(400).json({
+        message: 'Error de tipo de dato',
+        error: `El campo ${error.path} tiene un valor inválido: ${error.value}`,
+        details: error.message,
+      });
+      return;
+    }
+
+    res.status(500).json({
+      message: 'Error al guardar datos de venta',
+      error: error.message,
+    });
+  }
+};
+
+// Generar contrato de compraventa en PDF
+export const generateContract = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const vehicle = await Vehicle.findById(id);
+
+    if (!vehicle) {
+      res.status(404).json({ message: 'Vehículo no encontrado' });
+      return;
+    }
+
+    // Validar que existan datos de venta Y que tengan contenido real
+    if (!vehicle.datosVenta || 
+        !vehicle.datosVenta.comprador?.nombre || 
+        !vehicle.datosVenta.comprador?.identificacion ||
+        !vehicle.datosVenta.vendedor?.nombre ||
+        !vehicle.datosVenta.transaccion?.lugarCelebracion) {
+      res.status(400).json({ 
+        message: 'El vehículo no tiene datos de venta completos. Por favor, completa todos los campos requeridos antes de generar el contrato.' 
+      });
+      return;
+    }
+
+    // Preparar datos
+    const fechaCelebracion = vehicle.datosVenta.transaccion.fechaCelebracion 
+      ? new Date(vehicle.datosVenta.transaccion.fechaCelebracion)
+      : new Date();
+    
+    const fechaEntrega = vehicle.datosVenta.transaccion.fechaEntrega
+      ? new Date(vehicle.datosVenta.transaccion.fechaEntrega)
+      : new Date();
+
+    const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    const mesNombre = meses[fechaCelebracion.getMonth()];
+
+    // Crear documento PDF
+    const doc = new PDFDocument({ 
+      size: 'LETTER',
+      margins: { top: 50, bottom: 50, left: 60, right: 60 }
+    });
+
+    // Configurar respuesta
+    const fileName = `contrato-${vehicle.placa}-${Date.now()}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+    // Pipe el PDF directamente a la respuesta
+    doc.pipe(res);
+
+    // TÍTULO
+    doc.fontSize(14).font('Helvetica-Bold')
+       .text('CONTRATO DE COMPRAVENTA DE VEHICULO AUTOMOTOR', { align: 'center' });
+    doc.moveDown(2);
+
+    // LUGAR Y FECHA DE CELEBRACIÓN
+    doc.fontSize(11).font('Helvetica-Bold').text('LUGAR Y FECHA DE CELEBRACION DEL CONTRATO:');
+    doc.fontSize(10).font('Helvetica')
+       .text(`${vehicle.datosVenta.transaccion.lugarCelebracion}, ${fechaCelebracion.getDate()} de ${mesNombre} de ${fechaCelebracion.getFullYear()}`);
+    doc.moveDown();
+
+    // VENDEDOR
+    doc.fontSize(11).font('Helvetica-Bold').text('VENDEDOR(ES):');
+    doc.fontSize(10).font('Helvetica')
+       .text(`Nombre e Identificación: ${vehicle.datosVenta.vendedor.nombre} - ${vehicle.datosVenta.vendedor.identificacion}`)
+       .text(`Dirección: ${vehicle.datosVenta.vendedor.direccion}`)
+       .text(`Teléfono: ${vehicle.datosVenta.vendedor.telefono}`);
+    doc.moveDown();
+
+    // COMPRADOR
+    doc.fontSize(11).font('Helvetica-Bold').text('COMPRADOR(ES):');
+    doc.fontSize(10).font('Helvetica')
+       .text(`Nombre e Identificación: ${vehicle.datosVenta.comprador.nombre} - ${vehicle.datosVenta.comprador.identificacion}`)
+       .text(`Dirección: ${vehicle.datosVenta.comprador.direccion}`)
+       .text(`Teléfono: ${vehicle.datosVenta.comprador.telefono}`)
+       .text(`Correo electrónico: ${vehicle.datosVenta.comprador.email}`);
+    doc.moveDown();
+
+    // DOMICILIO CONTRACTUAL
+    doc.fontSize(11).font('Helvetica-Bold').text('DOMICILIO CONTRACTUAL:');
+    doc.fontSize(10).font('Helvetica')
+       .text(vehicle.datosVenta.transaccion.domicilioContractual);
+    doc.moveDown();
+
+    // INTRODUCCIÓN A LAS CLÁUSULAS
+    doc.fontSize(10).font('Helvetica')
+       .text('Las partes convienen celebrar el presente contrato de compraventa, que se regirá por las anteriores estipulaciones, las normas legales aplicables a la materia y en especial por las siguientes cláusulas:', { align: 'justify' });
+    doc.moveDown();
+
+    // CLÁUSULA PRIMERA
+    doc.fontSize(10).font('Helvetica-Bold').text('PRIMERA.-OBJETO DEL CONTRATO: ', { continued: true })
+       .font('Helvetica').text('mediante el presente contrato EL VENDEDOR transfiere a título de venta y EL COMPRADOR adquiere la propiedad del vehículo automotor que a continuación se identifica:', { align: 'justify' });
+    doc.moveDown(0.5);
+    
+    doc.fontSize(10).font('Helvetica')
+       .text(`CLASE: AUTOMÓVIL                    MARCA: ${vehicle.marca}                    MODELO: ${vehicle.año}`)
+       .text(`TIPO DE CARROCERIA: ${vehicle.datosVenta.vehiculoAdicional.tipoCarroceria || 'N/A'}        COLOR: ${vehicle.color}        CAPACIDAD: ${vehicle.datosVenta.vehiculoAdicional.capacidad || 'N/A'}`)
+       .text(`CHASIS No.: ${vehicle.vin}`)
+       .text(`MOTOR No.: ${vehicle.datosVenta.vehiculoAdicional.numeroMotor || 'N/A'}        LINEA: ${vehicle.datosVenta.vehiculoAdicional.linea || vehicle.modelo}        PUERTAS: ${vehicle.datosVenta.vehiculoAdicional.numeroPuertas || 4}`)
+       .text(`SITIO DE MATRICULA: ${vehicle.datosVenta.vehiculoAdicional.sitioMatricula || 'N/A'}        PLACA No.: ${vehicle.placa}        SERVICIO: ${vehicle.datosVenta.vehiculoAdicional.tipoServicio || 'PARTICULAR'}`);
+    doc.moveDown();
+
+    // CLÁUSULA SEGUNDA
+    doc.fontSize(10).font('Helvetica-Bold').text('SEGUNDA.- PRECIO: ', { continued: true })
+       .font('Helvetica').text(`como precio del automotor descrito las partes acuerdan la suma de ${vehicle.datosVenta.transaccion.precioLetras} ($${vehicle.precioVenta.toLocaleString('es-CO')}), suma que deberá ser pagada en su totalidad, libre de descuentos por concepto de costos bancarios tales como 4xmil, cambio de plaza, entre otros.`, { align: 'justify' });
+    doc.moveDown();
+
+    // CLÁUSULA TERCERA
+    doc.fontSize(10).font('Helvetica-Bold').text('TERCERA.- FORMA DE PAGO: ', { continued: true })
+       .font('Helvetica').text(`EL COMPRADOR se compromete a pagar el precio a que se refiere la cláusula anterior de la siguiente forma: ${vehicle.datosVenta.transaccion.formaPago}`, { align: 'justify' });
+    doc.moveDown();
+
+    // CLÁUSULA CUARTA
+    const vendedorAnterior = vehicle.datosVenta.transaccion.vendedorAnterior || '[NOMBRE DEL VENDEDOR ANTERIOR]';
+    const cedulaVendedorAnterior = vehicle.datosVenta.transaccion.cedulaVendedorAnterior || '[CÉDULA]';
+    
+    doc.fontSize(10).font('Helvetica-Bold').text('CUARTA.- ', { continued: true })
+       .font('Helvetica').text(`EL VENDEDOR manifiesta que adquirió el vehículo antes descrito por compra a ${vendedorAnterior} identificado con CC ${cedulaVendedorAnterior}. Y declara que está libre de toda clase de gravámenes, embargos, multas, comparendos, pactos de reserva de dominio y cualquier otra circunstancia que afecte el libre comercio del bien objeto del presente contrato.`, { align: 'justify' });
+    doc.moveDown();
+
+    // CLÁUSULA QUINTA
+    doc.fontSize(10).font('Helvetica-Bold').text('QUINTA.- ', { continued: true })
+       .font('Helvetica').text('EL COMPRADOR declara que conoce el estado jurídico y factico en que se encuentra el vehículo y así lo acepta. Y que por tratarse de un vehículo usado EL VENDEDOR no garantiza el estado de sus partes, condiciones técnicas, físicos o de funcionamiento, que lo afecten total o parcialmente, o por defectos de fabricación o vicios ocultos, habida cuenta que este fue elegido por EL COMPRADOR, quien a su elección ha realizado o no peritaje y revisión de antecedentes, y por lo tanto asume la responsabilidad por su elección, y como consecuencia renuncia a cualquier reclamación futura, exonerando a EL VENDEDOR de toda responsabilidad.', { align: 'justify' });
+    doc.moveDown();
+
+    // CLÁUSULA SEXTA
+    const diasTraspaso = vehicle.datosVenta.transaccion.diasTraspaso || 30;
+    doc.fontSize(10).font('Helvetica-Bold').text('SEXTA.- TRASPASO Y GASTOS: ', { continued: true })
+       .font('Helvetica').text(`Las partes se obligan a realizar las gestiones de traspaso ante las autoridades de tránsito dentro de los ${diasTraspaso} (${diasTraspaso === 30 ? 'treinta' : diasTraspaso}) días posteriores a la firma del presente contrato. El vehículo se entrega al día a la fecha de la firma del presente contrato, y por lo tanto valores tales como, los correspondientes a Impuestos se liquidarán proporcionalmente según le corresponda a cada una de las partes, entre otros. EL COMPRADOR declara que, en caso de requerir de la prestación de los servicios de un asesor de trámites ante las autoridades de tránsito, asumirá la totalidad del valor de los respectivos honorarios.`, { align: 'justify' });
+    doc.moveDown();
+
+    // CLÁUSULA SÉPTIMA
+    const horaEntrega = vehicle.datosVenta.transaccion.horaEntrega || '[HORA]';
+    doc.fontSize(10).font('Helvetica-Bold').text('SEPTIMA.- ENTREGA: ', { continued: true })
+       .font('Helvetica').text(`En la fecha ${fechaEntrega.toLocaleDateString('es-CO')} y hora ${horaEntrega} EL VENDEDOR hace entrega real y material del vehículo objeto del presente contrato a EL COMPRADOR, y éste declara conocer y aceptar el estado en que se encuentra, y recibirlo a entera satisfacción. Por lo tanto, a partir de este momento EL COMPRADOR asume los riesgos mecánicos y las responsabilidades jurídicas relativos al vehículo.`, { align: 'justify' });
+    doc.moveDown();
+
+    // CLÁUSULA OCTAVA
+    doc.fontSize(10).font('Helvetica-Bold').text('OCTAVA.- RESERVA DEL DOMINIO: ', { continued: true })
+       .font('Helvetica').text('EL VENDEDOR se reserva la propiedad del vehículo identificado en la cláusula primera del presente contrato, hasta el momento en que se pague la totalidad del precio estipulado, de conformidad con el Art. 952 del Código de Comercio, y por lo tanto, no se encuentra obligado a realizar la entrega física del mismo hasta tanto se realice la cancelación total. Se entiende por cancelación total el que la transferencia o el cheque se haya hecho efectiva/o.', { align: 'justify' });
+    doc.moveDown();
+
+    // CLÁUSULA NOVENA
+    doc.fontSize(10).font('Helvetica-Bold').text('NOVENA.- CLAUSULA PENAL: ', { continued: true })
+       .font('Helvetica').text('Las partes establecen como sanción pecuniaria a cargo de quien incumpla una cualquiera de las estipulaciones derivadas de este contrato, la suma correspondiente al diez por ciento (10%) del precio pactado en el presente contrato.', { align: 'justify' });
+    doc.moveDown();
+
+    // CLÁUSULAS ADICIONALES
+    if (vehicle.datosVenta.transaccion.clausulasAdicionales && vehicle.datosVenta.transaccion.clausulasAdicionales !== 'Ninguna') {
+      doc.fontSize(10).font('Helvetica-Bold').text('CLAUSULAS ADICIONALES:');
+      doc.fontSize(10).font('Helvetica')
+         .text(vehicle.datosVenta.transaccion.clausulasAdicionales, { align: 'justify' });
+      doc.moveDown();
+    }
+
+    // Verificar si necesitamos nueva página para firmas
+    if (doc.y > 600) {
+      doc.addPage();
+    }
+
+    // CONSTANCIA Y FIRMAS
+    doc.moveDown();
+    doc.fontSize(10).font('Helvetica')
+       .text(`En constancia de lo anterior, los contratantes suscriben el presente documento en la ciudad de ${vehicle.datosVenta.transaccion.lugarCelebracion}, el día ${fechaCelebracion.getDate()} (${fechaCelebracion.getDate()}), del mes de ${mesNombre}, del año ${fechaCelebracion.getFullYear()} (${fechaCelebracion.getFullYear()}).`, { align: 'justify' });
+    doc.moveDown(3);
+
+    // Líneas de firma
+    const signatureY = doc.y;
+    const pageWidth = doc.page.width - 120;
+    const signatureWidth = 220;
+    const leftX = 60;
+    const rightX = pageWidth - signatureWidth + 60;
+
+    // VENDEDOR
+    doc.fontSize(10).font('Helvetica-Bold')
+       .text('VENDEDOR', leftX, signatureY, { width: signatureWidth, align: 'center' });
+    doc.moveDown(2);
+    const vendedorLineY = doc.y;
+    doc.moveTo(leftX, vendedorLineY).lineTo(leftX + signatureWidth, vendedorLineY).stroke();
+    doc.fontSize(9).font('Helvetica')
+       .text(`C.C. No. ${vehicle.datosVenta.vendedor.identificacion}`, leftX, vendedorLineY + 5, { width: signatureWidth, align: 'center' });
+
+    // COMPRADOR
+    doc.fontSize(10).font('Helvetica-Bold')
+       .text('COMPRADOR', rightX, signatureY, { width: signatureWidth, align: 'center' });
+    doc.moveTo(rightX, vendedorLineY).lineTo(rightX + signatureWidth, vendedorLineY).stroke();
+    doc.fontSize(9).font('Helvetica')
+       .text(`C.C. No. ${vehicle.datosVenta.comprador.identificacion}`, rightX, vendedorLineY + 5, { width: signatureWidth, align: 'center' });
+
+    // Finalizar el documento
+    doc.end();
+
+  } catch (error: any) {
+    console.error('Error al generar contrato:', error);
+    res.status(500).json({ 
+      message: 'Error al generar contrato', 
+      error: error.message 
+    });
   }
 };
 
@@ -850,9 +1707,13 @@ export const generateTransferForm = async (req: AuthRequest, res: Response): Pro
       return;
     }
 
-    // Crear documento PDF
+    const fechaCelebracion = vehicle.datosVenta.transaccion.fechaCelebracion 
+      ? new Date(vehicle.datosVenta.transaccion.fechaCelebracion)
+      : new Date();
+
+    // Crear documento PDF en tamaño legal (8.5x14") para más espacio
     const doc = new PDFDocument({ 
-      size: 'LETTER',
+      size: 'LEGAL',
       margins: { top: 30, bottom: 30, left: 40, right: 40 }
     });
 
@@ -864,453 +1725,388 @@ export const generateTransferForm = async (req: AuthRequest, res: Response): Pro
     // Pipe el PDF directamente a la respuesta
     doc.pipe(res);
 
-    // Función helper para dibujar rectángulos
-    const drawBox = (x: number, y: number, width: number, height: number) => {
+    // Helper functions para dibujar cajas y checkboxes
+    const drawBox = (x: number, y: number, width: number, height: number, label: string, value: string) => {
       doc.rect(x, y, width, height).stroke();
+      if (label) {
+        doc.fontSize(6).font('Helvetica');
+        doc.text(label, x + 2, y + 2, { width: width - 4 });
+      }
+      if (value) {
+        doc.fontSize(8).font('Helvetica-Bold');
+        doc.text(value, x + 2, y + (label ? 10 : 8), { width: width - 4 });
+      }
     };
 
-    // Función helper para dibujar línea divisoria
-    const drawLine = (x1: number, y1: number, x2: number, y2: number) => {
-      doc.moveTo(x1, y1).lineTo(x2, y2).stroke();
+    const drawCheckbox = (x: number, y: number, label: string, checked: boolean = false) => {
+      doc.rect(x, y, 8, 8).stroke();
+      if (checked) {
+        doc.fontSize(6).font('Helvetica-Bold');
+        doc.text('X', x + 2, y + 1);
+      }
+      if (label) {
+        doc.fontSize(7).font('Helvetica');
+        doc.text(label, x + 12, y + 1);
+      }
     };
 
-    let y = 30;
-    const pageWidth = 612; // Letter width
-    const margin = 40;
-    const usableWidth = pageWidth - (margin * 2);
-
-    // ENCABEZADO PRINCIPAL
+    // === PÁGINA 1: FORMULARIO OFICIAL RUNT ===
+    
+    // Encabezado principal
     doc.fontSize(9).font('Helvetica-Bold');
-    doc.text('MINISTERIO DE TRANSPORTE', margin, y, { align: 'center', width: usableWidth });
-    y += 12;
-    doc.fontSize(10);
-    doc.text('FORMULARIO DE SOLICITUD DE TRAMITES DEL REGISTRO NACIONAL AUTOMOTOR', margin, y, { align: 'center', width: usableWidth });
-    y += 20;
-
-    // SECCIÓN 1: ORGANISMO DE TRÁNSITO Y PLACA
-    const col1Width = usableWidth * 0.65;
-    const col2Width = usableWidth * 0.35;
-
-    // Caja 1: Organismo de tránsito
-    drawBox(margin, y, col1Width, 50);
+    doc.text('MINISTERIO DE TRANSPORTE', 40, 30);
+    doc.text('FORMULARIO ÚNICO DE SOLICITUD DE TRÁMITES', 200, 30, { align: 'center' });
+    doc.text('RUNT', 520, 30, { align: 'right' });
+    
+    doc.moveTo(40, 42).lineTo(560, 42).stroke();
+    
+    // SECCIÓN 1: ORGANISMO DE TRÁNSITO
     doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('1. ORGANISMO DE TRÁNSITO', margin + 2, y + 2);
-    doc.fontSize(8).font('Helvetica');
-    doc.text(vehicle.datosVenta?.vehiculoAdicional?.sitioMatricula || '', margin + 2, y + 18);
-    drawLine(margin, y + 30, margin + col1Width, y + 30);
-    doc.fontSize(7);
-    doc.text('NOMBRE', margin + 2, y + 32);
-    doc.text('CIUDAD', margin + 150, y + 32);
-    doc.text('CODIGO', margin + 280, y + 32);
+    doc.text('1. ORGANISMO DE TRÁNSITO', 40, 50);
+    
+    drawBox(40, 58, 200, 20, 'Nombre', vehicle.datosVenta.vehiculoAdicional.sitioMatricula || '');
+    drawBox(245, 58, 150, 20, 'Ciudad', vehicle.datosVenta.transaccion.lugarCelebracion || '');
+    drawBox(400, 58, 80, 20, 'Código', '');
+    drawBox(485, 58, 75, 20, 'Fecha', fechaCelebracion.toLocaleDateString('es-CO'));
 
-    // Caja 2: Placa
-    drawBox(margin + col1Width, y, col2Width, 50);
+    // SECCIÓN 2: PLACA
     doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('2. PLACA', margin + col1Width + 2, y + 2);
-    doc.fontSize(14).font('Helvetica-Bold');
-    doc.text(vehicle.placa || '', margin + col1Width + 10, y + 20);
-    drawLine(margin + col1Width, y + 35, margin + usableWidth, y + 35);
-    doc.fontSize(7);
-    doc.text('LETRAS', margin + col1Width + 10, y + 37);
-    doc.text('NÚMEROS', margin + col1Width + col2Width/2 + 10, y + 37);
-
-    y += 55;
+    doc.text('2. PLACA', 40, 85);
+    
+    const placaLetras = vehicle.placa.match(/[A-Z]+/)?.[0] || '';
+    const placaNumeros = vehicle.placa.match(/[0-9]+/)?.[0] || '';
+    
+    drawBox(40, 93, 80, 20, 'Letras', placaLetras);
+    drawBox(125, 93, 80, 20, 'Números', placaNumeros);
 
     // SECCIÓN 3: TRÁMITE SOLICITADO
-    drawBox(margin, y, usableWidth, 90);
     doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('3. TRAMITE SOLICITADO', margin + 2, y + 2);
-
-    // Opciones de trámite en grid
-    const tramites = [
-      ['1', 'MATRICULA/REGISTRO'], ['2', 'TRASPASO'], ['3', 'TRANSLADO MATRICULA/REGISTRO'],
-      ['4', 'RADICADO MATRICULA/REGISTRO'], ['5', 'CAMBIO DE COLOR'], ['6', 'CAMBIO DE SERVICIO'],
-      ['7', 'REGRABAR MOTOR'], ['8', 'REGRABAR CHASIS'], ['9', 'TRANSFORMACION'],
-      ['10', 'DUPLICADO LICENCIA TRANSITO'], ['11', 'INSCRIPC. PRENDA'], ['12', 'LEVANTA. PRENDA'],
-      ['13', 'CANCELACION MATRICULA/REGISTRO'], ['14', 'CAMBIO DE PLACAS'], ['15', 'DUPLICADO DE PLACAS'],
-      ['16', 'REMATRICULA'], ['17', 'CAMBIO DE CARROCERIA'], ['18', 'OTROS']
-    ];
-
-    let tramiteX = margin + 5;
-    let tramiteY = y + 18;
-    tramites.forEach((tramite, index) => {
-      if (index === 6) { tramiteX = margin + 5; tramiteY += 15; }
-      if (index === 12) { tramiteX = margin + 5; tramiteY += 15; }
-      
-      doc.fontSize(7).font('Helvetica');
-      const isSelected = tramite[1].includes('TRASPASO') ? '☑' : '☐';
-      doc.text(`${isSelected} ${tramite[0]}. ${tramite[1]}`, tramiteX, tramiteY);
-      tramiteX += 140;
-    });
-
-    y += 95;
-
-    // SECCIÓN 4-7: Datos del vehículo en una fila
-    const secWidth = usableWidth / 4;
-
-    // 4. Marca
-    drawBox(margin, y, secWidth, 25);
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('4. MARCA', margin + 2, y + 2);
-    doc.fontSize(8).font('Helvetica');
-    doc.text(vehicle.marca || '', margin + 2, y + 12);
-
-    // 5. Línea
-    drawBox(margin + secWidth, y, secWidth, 25);
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('5. LINEA', margin + secWidth + 2, y + 2);
-    doc.fontSize(8).font('Helvetica');
-    doc.text(vehicle.datosVenta?.vehiculoAdicional?.linea || vehicle.modelo || '', margin + secWidth + 2, y + 12);
-
-    // 6. Combustible
-    drawBox(margin + secWidth * 2, y, secWidth, 25);
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('6. COMBUSTIBLE', margin + secWidth * 2 + 2, y + 2);
-    const combustibles = ['GASOLINA', 'DIESEL', 'GAS', 'MIXTO', 'ELECTRICO', 'HIDROGEN', 'ETANOL', 'BIODIESEL'];
-    doc.fontSize(6);
-    combustibles.forEach((comb, i) => {
-      const selected = comb === 'GASOLINA' ? '☑' : '☐';
-      doc.text(`${selected}${i+1}`, margin + secWidth * 2 + 5 + (i * 22), y + 12);
-    });
-
-    // 7. Colores
-    drawBox(margin + secWidth * 3, y, secWidth, 25);
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('7. COLORES', margin + secWidth * 3 + 2, y + 2);
-    doc.fontSize(8).font('Helvetica');
-    doc.text(vehicle.color || '', margin + secWidth * 3 + 2, y + 12);
-
-    y += 30;
-
-    // SECCIÓN 8-14: Más datos del vehículo
-    const sec8Width = usableWidth * 0.15;
-    const sec9Width = usableWidth * 0.15;
-    const sec10Width = usableWidth * 0.20;
-    const sec11Width = usableWidth * 0.25;
-    const sec12Width = usableWidth * 0.25;
-
-    // 8. Modelo
-    drawBox(margin, y, sec8Width, 25);
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('8. MODELO', margin + 2, y + 2);
-    doc.fontSize(8).font('Helvetica');
-    doc.text(vehicle.año?.toString() || '', margin + 2, y + 12);
-
-    // 9. Cilindrada
-    drawBox(margin + sec8Width, y, sec9Width, 25);
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('9. CILINDRADA', margin + sec8Width + 2, y + 2);
-
-    // 10. Capacidad
-    drawBox(margin + sec8Width + sec9Width, y, sec10Width, 25);
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('10. CAPACIDAD Kg/Psj', margin + sec8Width + sec9Width + 2, y + 2);
-    doc.fontSize(8);
-    doc.text(vehicle.datosVenta?.vehiculoAdicional?.capacidad || '5', margin + sec8Width + sec9Width + 2, y + 12);
-
-    // 11. Blindaje
-    drawBox(margin + sec8Width + sec9Width + sec10Width, y, sec11Width, 25);
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('11. BLINDAJE', margin + sec8Width + sec9Width + sec10Width + 2, y + 2);
-    doc.fontSize(7);
-    doc.text('SI        NO', margin + sec8Width + sec9Width + sec10Width + 2, y + 12);
-
-    // 12. Desmonte Blind
-    drawBox(margin + sec8Width + sec9Width + sec10Width + sec11Width, y, sec12Width, 25);
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('12. DESMONTE BLIND.', margin + sec8Width + sec9Width + sec10Width + sec11Width + 2, y + 2);
-    doc.fontSize(7);
-    doc.text('SI        NO', margin + sec8Width + sec9Width + sec10Width + sec11Width + 2, y + 12);
-
-    y += 30;
-
-    // 13. Potencia
-    drawBox(margin, y, usableWidth * 0.25, 25);
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('13. POTENCIA/HP', margin + 2, y + 2);
-
-    // Resoluciones
-    drawBox(margin + usableWidth * 0.25, y, usableWidth * 0.375, 25);
-    doc.fontSize(6);
-    doc.text('Resolución No (DD/MM/AÑO)', margin + usableWidth * 0.25 + 2, y + 2);
-
-    drawBox(margin + usableWidth * 0.625, y, usableWidth * 0.375, 25);
-    doc.fontSize(6);
-    doc.text('Resolución No (DD/MM/AÑO)', margin + usableWidth * 0.625 + 2, y + 2);
-
-    y += 30;
-
-    // SECCIÓN 14: Clase de vehículo
-    drawBox(margin, y, usableWidth * 0.60, 60);
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('14. CLASE DE VEHICULO', margin + 2, y + 2);
-
-    const clases = [
-      ['AUTOMOVIL', 'BUS', 'BUSETA', 'CAMIÓN'],
-      ['CAMIONETA', 'CAMPERO', 'MICROBUS', 'TRACTOCAMIÓN'],
-      ['MOTOCICLETA', 'MOTOCARRO', 'MOTOTRICICLO', 'CUATRIMOTO'],
-      ['VOLQUETA', 'OTRO']
-    ];
-
-    let claseY = y + 15;
-    clases.forEach((fila) => {
-      let claseX = margin + 5;
-      fila.forEach((clase) => {
-        const isSelected = clase === 'AUTOMOVIL' ? '☑' : '☐';
-        doc.fontSize(7).font('Helvetica');
-        doc.text(`${isSelected} ${clase}`, claseX, claseY);
-        claseX += 90;
-      });
-      claseY += 12;
-    });
-
-    // SECCIÓN 15: Carrocería
-    drawBox(margin + usableWidth * 0.60, y, usableWidth * 0.40, 30);
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('15. CARROCERIA', margin + usableWidth * 0.60 + 2, y + 2);
-    doc.fontSize(8).font('Helvetica');
-    doc.text(vehicle.datosVenta?.vehiculoAdicional?.tipoCarroceria || '', margin + usableWidth * 0.60 + 2, y + 15);
-
-    // SECCIÓN 16: Identificación interna
-    drawBox(margin + usableWidth * 0.60, y + 30, usableWidth * 0.40, 30);
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('16. IDENTIFICACION INTERNA DEL VEHICULO', margin + usableWidth * 0.60 + 2, y + 32);
-
-    y += 65;
-
-    // SECCIÓN 17: Importación o Remate
-    drawBox(margin, y, usableWidth * 0.60, 40);
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('17. IMPORTACION O REMATE', margin + 2, y + 2);
-    doc.fontSize(7);
-    doc.text('SI        NO', margin + 150, y + 3);
-
-    // Tabla de importación
-    const impHeaders = ['MANIF. O ACTA', 'DEC. DE IMPOR.', 'ACTA', 'ENTIDAD', 'LUGAR (CIUDAD)', 'CODIGO'];
-    const impWidth = (usableWidth * 0.60) / 6;
-    let impX = margin;
-    impHeaders.forEach((header, i) => {
-      drawBox(impX, y + 15, impWidth, 25);
-      doc.fontSize(6).font('Helvetica');
-      doc.text(header, impX + 2, y + 17, { width: impWidth - 4, align: 'center' });
-      impX += impWidth;
-    });
-
-    // SECCIÓN 18: Tipo de servicio
-    drawBox(margin + usableWidth * 0.60, y, usableWidth * 0.40, 40);
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('18. TIPO DE SERVICIO', margin + usableWidth * 0.60 + 2, y + 2);
-
-    const servicios = ['PARTICULAR', 'PUBLICO', 'DIPLOMATICO', 'OFICIAL', 'ESPECIAL', 'OTROS'];
-    let servX = margin + usableWidth * 0.60 + 5;
-    servicios.forEach((serv, i) => {
-      const isSelected = serv === 'PARTICULAR' ? '☑' : '☐';
-      doc.fontSize(6);
-      doc.text(`${isSelected} ${i+1}`, servX, y + 15);
-      doc.text(serv, servX, y + 22);
-      servX += 45;
-    });
-
-    y += 45;
-
-    // SECCIÓN 19: Números de motor, chasis, serie, VIN
-    const idWidth = usableWidth / 4;
-
-    // No. Motor
-    drawBox(margin, y, idWidth, 35);
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('No. DE MOTOR', margin + 2, y + 2);
-    doc.fontSize(8).font('Helvetica');
-    doc.text(vehicle.datosVenta?.vehiculoAdicional?.numeroMotor || '', margin + 2, y + 15);
-    drawLine(margin, y + 25, margin + idWidth, y + 25);
-    doc.fontSize(6);
-    doc.text('REGRABADO  SI     NO', margin + 2, y + 27);
-
-    // No. Chasis
-    drawBox(margin + idWidth, y, idWidth, 35);
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('No. DE CHASIS', margin + idWidth + 2, y + 2);
-    doc.fontSize(8);
-    doc.text(vehicle.vin || '', margin + idWidth + 2, y + 15);
-    drawLine(margin + idWidth, y + 25, margin + idWidth * 2, y + 25);
-    doc.fontSize(6);
-    doc.text('REGRABADO  SI     NO', margin + idWidth + 2, y + 27);
-
-    // No. Serie
-    drawBox(margin + idWidth * 2, y, idWidth, 35);
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('No. DE SERIE', margin + idWidth * 2 + 2, y + 2);
-    drawLine(margin + idWidth * 2, y + 25, margin + idWidth * 3, y + 25);
-    doc.fontSize(6);
-    doc.text('REGRABADO  SI     NO', margin + idWidth * 2 + 2, y + 27);
-
-    // No. VIN
-    drawBox(margin + idWidth * 3, y, idWidth, 35);
-    doc.fontSize(7).font('Helvetica-Bold');
-    doc.text('No. DE VIN VEHICULOS AUTOMOTORES', margin + idWidth * 3 + 2, y + 2);
-    doc.fontSize(8);
-    doc.text(vehicle.vin || '', margin + idWidth * 3 + 2, y + 15);
-
-    y += 40;
-
-    // SECCIÓN 20: Datos del propietario
-    drawBox(margin, y, usableWidth, 80);
-    doc.fontSize(8).font('Helvetica-Bold');
-    doc.text('20. DATOS DEL PROPIETARIO', margin + 2, y + 2);
-
-    // Nombres y apellidos
-    drawBox(margin, y + 15, usableWidth * 0.35, 20);
-    doc.fontSize(7);
-    doc.text('PRIMER APELLIDO', margin + 2, y + 17);
-    doc.fontSize(9).font('Helvetica-Bold');
-    const apellidos = vehicle.datosVenta?.vendedor?.nombre?.split(' ') || [''];
-    doc.text(apellidos[0] || '', margin + 2, y + 26);
-
-    drawBox(margin + usableWidth * 0.35, y + 15, usableWidth * 0.35, 20);
-    doc.fontSize(7).font('Helvetica');
-    doc.text('SEGUNDO APELLIDO', margin + usableWidth * 0.35 + 2, y + 17);
-    doc.fontSize(9).font('Helvetica-Bold');
-    doc.text(apellidos[1] || '', margin + usableWidth * 0.35 + 2, y + 26);
-
-    drawBox(margin + usableWidth * 0.70, y + 15, usableWidth * 0.30, 20);
-    doc.fontSize(7).font('Helvetica');
-    doc.text('NOMBRES', margin + usableWidth * 0.70 + 2, y + 17);
-    doc.fontSize(9).font('Helvetica-Bold');
-    const nombres = apellidos.slice(2).join(' ') || vehicle.datosVenta?.vendedor?.nombre || '';
-    doc.text(nombres, margin + usableWidth * 0.70 + 2, y + 26);
-
-    // Tipo de documento
-    const docTypes = ['C.C', 'NIT', 'N.N', 'PASAPORTE', 'C.EXTRANJ.', 'T.IDENTI.', 'NUIP', 'C. DIPLOMATICO'];
-    const docCodes = ['C', 'N', 'N.N', 'P', 'E', 'T', 'U', 'D'];
-    let docX = margin;
-    const docWidth = usableWidth / 8;
-
-    docTypes.forEach((type, i) => {
-      drawBox(docX, y + 35, docWidth, 25);
-      doc.fontSize(6).font('Helvetica');
-      doc.text(type, docX + 2, y + 37, { width: docWidth - 4, align: 'center' });
-      doc.fontSize(8).font('Helvetica-Bold');
-      const isSelected = type === 'C.C' ? 'X' : '';
-      doc.text(isSelected, docX + docWidth/2 - 3, y + 47);
-      doc.fontSize(6);
-      doc.text(docCodes[i], docX + 2, y + 55);
-      docX += docWidth;
-    });
-
-    // Número de documento
-    drawBox(margin, y + 60, usableWidth * 0.40, 20);
-    doc.fontSize(7).font('Helvetica');
-    doc.text('No. DOCUMENTO', margin + 2, y + 62);
-    doc.fontSize(9).font('Helvetica-Bold');
-    doc.text(vehicle.datosVenta?.vendedor?.identificacion || '', margin + 2, y + 71);
-
-    // Fecha
-    drawBox(margin + usableWidth * 0.40, y + 60, usableWidth * 0.20, 20);
-    doc.fontSize(7);
-    doc.text('FECHA', margin + usableWidth * 0.40 + 2, y + 62);
-    drawLine(margin + usableWidth * 0.40, y + 70, margin + usableWidth * 0.60, y + 70);
-    doc.fontSize(6);
-    doc.text('DIA    MES    AÑO', margin + usableWidth * 0.40 + 5, y + 72);
-
-    // Dirección, ciudad, teléfono
-    drawBox(margin + usableWidth * 0.60, y + 35, usableWidth * 0.40, 15);
-    doc.fontSize(7);
-    doc.text('DIRECCION', margin + usableWidth * 0.60 + 2, y + 37);
-
-    drawBox(margin + usableWidth * 0.60, y + 50, usableWidth * 0.20, 15);
-    doc.fontSize(7);
-    doc.text('CIUDAD', margin + usableWidth * 0.60 + 2, y + 52);
-
-    drawBox(margin + usableWidth * 0.80, y + 50, usableWidth * 0.20, 15);
-    doc.fontSize(7);
-    doc.text('TELEFONO', margin + usableWidth * 0.80 + 2, y + 52);
-
-    drawBox(margin + usableWidth * 0.60, y + 65, usableWidth * 0.40, 15);
-    doc.fontSize(7);
-    doc.text('FIRMA DEL PROPIETARIO', margin + usableWidth * 0.60 + 2, y + 67);
-
-    y += 85;
-
-    // SECCIÓN 21: Datos del comprador (similar estructura)
-    drawBox(margin, y, usableWidth, 80);
-    doc.fontSize(8).font('Helvetica-Bold');
-    doc.text('21. DATOS DEL COMPRADOR (NUEVO PROPIETARIO)', margin + 2, y + 2);
-
-    // Nombres y apellidos del comprador
-    const apellidosComp = vehicle.datosVenta?.comprador?.nombre?.split(' ') || [''];
+    doc.text('3. TRÁMITE SOLICITADO', 250, 85);
     
-    drawBox(margin, y + 15, usableWidth * 0.35, 20);
+    const tramites = [
+      { x: 250, y: 93, label: 'Matrícula inicial' },
+      { x: 330, y: 93, label: 'Renovación matrícula' },
+      { x: 430, y: 93, label: 'Traspaso', checked: true },
+      { x: 250, y: 105, label: 'Cambio servicio' },
+      { x: 330, y: 105, label: 'Regrabar motor' },
+      { x: 430, y: 105, label: 'Regrabar chasis' },
+      { x: 250, y: 117, label: 'Duplicado tarjeta' },
+      { x: 330, y: 117, label: 'Inscripción prenda' },
+      { x: 430, y: 117, label: 'Levantamiento prenda' },
+      { x: 250, y: 129, label: 'Traslado matrícula' },
+      { x: 330, y: 129, label: 'Cambio motor' },
+      { x: 430, y: 129, label: 'Cambio carrocería' },
+      { x: 250, y: 141, label: 'Cambio combustible' },
+      { x: 330, y: 141, label: 'Cambio color' },
+      { x: 430, y: 141, label: 'Regrabar serie' },
+      { x: 250, y: 153, label: 'Otros' },
+    ];
+    
+    tramites.forEach(t => drawCheckbox(t.x, t.y, t.label, t.checked || false));
+
+    // SECCIÓN 4: CLASE DE VEHÍCULO
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.text('4. CLASE DE VEHÍCULO', 40, 165);
+    
+    const clases = [
+      { x: 40, y: 173, label: 'Automóvil', checked: true },
+      { x: 120, y: 173, label: 'Camioneta' },
+      { x: 200, y: 173, label: 'Bus/Busetón' },
+      { x: 290, y: 173, label: 'Camión' },
+      { x: 370, y: 173, label: 'Tractocamión' },
+      { x: 460, y: 173, label: 'Volqueta' },
+      { x: 40, y: 185, label: 'Motocicleta' },
+      { x: 120, y: 185, label: 'Motocarro' },
+      { x: 200, y: 185, label: 'Cuatrimoto' },
+      { x: 290, y: 185, label: 'Trimoto' },
+      { x: 370, y: 185, label: 'Bicicleta' },
+      { x: 460, y: 185, label: 'Otros' },
+    ];
+    
+    clases.forEach(c => drawCheckbox(c.x, c.y, c.label, c.checked || false));
+
+    // SECCIÓN 5: MARCA
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.text('5. MARCA', 40, 200);
+    drawBox(40, 208, 150, 18, '', vehicle.marca);
+
+    // SECCIÓN 6: LÍNEA
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.text('6. LÍNEA', 200, 200);
+    drawBox(200, 208, 200, 18, '', vehicle.datosVenta.vehiculoAdicional.linea || vehicle.modelo);
+
+    // SECCIÓN 7: COMBUSTIBLE
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.text('7. COMBUSTIBLE', 410, 200);
+    
+    drawCheckbox(410, 208, 'Gasolina', true);
+    drawCheckbox(480, 208, 'Diesel');
+    drawCheckbox(410, 220, 'Gas');
+    drawCheckbox(480, 220, 'Eléctrico');
+    drawCheckbox(410, 232, 'Híbrido');
+    drawCheckbox(480, 232, 'Otros');
+
+    // SECCIÓN 8: COLOR
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.text('8. COLOR', 40, 250);
+    drawBox(40, 258, 150, 18, '', vehicle.color);
+
+    // SECCIÓN 9: MODELO (AÑO)
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.text('9. MODELO (AÑO)', 200, 250);
+    drawBox(200, 258, 80, 18, '', vehicle.año.toString());
+
+    // SECCIÓN 10: CILINDRADA (CC)
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.text('10. CILINDRADA (CC)', 290, 250);
+    drawBox(290, 258, 100, 18, '', '');
+
+    // SECCIÓN 11: CAPACIDAD (PASAJEROS)
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.text('11. CAPACIDAD', 400, 250);
+    drawBox(400, 258, 80, 18, 'Pasajeros', vehicle.datosVenta.vehiculoAdicional.capacidad || '5');
+
+    // SECCIÓN 12: BLINDAJE
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.text('12. BLINDAJE', 40, 285);
+    drawCheckbox(40, 293, 'Sí');
+    drawCheckbox(80, 293, 'No', true);
+    drawBox(120, 293, 100, 18, 'Nivel', '');
+
+    // SECCIÓN 13: DESMONTE BLINDAJE
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.text('13. DESMONTE BLINDAJE', 230, 285);
+    drawCheckbox(230, 293, 'Sí');
+    drawCheckbox(270, 293, 'No', true);
+
+    // SECCIÓN 14: POTENCIA (HP/KW)
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.text('14. POTENCIA', 330, 285);
+    drawBox(330, 293, 80, 18, 'HP', '');
+    drawBox(415, 293, 80, 18, 'KW', '');
+
+    // SECCIÓN 15: CARROCERÍA
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.text('15. TIPO CARROCERÍA', 40, 320);
+    
+    const carrocerias = [
+      { x: 40, y: 328, label: 'Furgón' },
+      { x: 100, y: 328, label: 'Estacas' },
+      { x: 160, y: 328, label: 'Tanque' },
+      { x: 220, y: 328, label: 'Planchón' },
+      { x: 290, y: 328, label: 'Cama baja' },
+      { x: 370, y: 328, label: 'Mixta' },
+      { x: 430, y: 328, label: 'Otra' },
+    ];
+    
+    carrocerias.forEach(c => drawCheckbox(c.x, c.y, c.label));
+    drawBox(40, 340, 200, 18, 'Especifique', vehicle.datosVenta.vehiculoAdicional.tipoCarroceria || '');
+
+    // SECCIÓN 16: IDENTIFICACIÓN INTERNA (MOTOR/CHASIS/VIN)
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.text('16. IDENTIFICACIÓN INTERNA', 40, 370);
+    
+    // Motor
+    doc.fontSize(6).font('Helvetica');
+    doc.text('MOTOR No.', 40, 378);
+    drawBox(40, 386, 180, 18, '', vehicle.datosVenta.vehiculoAdicional.numeroMotor || '');
+    drawCheckbox(225, 386, 'Regrabado');
+    drawCheckbox(280, 386, 'Original', true);
+    
+    // Chasis
+    doc.fontSize(6).font('Helvetica');
+    doc.text('CHASIS No.', 40, 408);
+    drawBox(40, 416, 180, 18, '', vehicle.vin || '');
+    drawCheckbox(225, 416, 'Regrabado');
+    drawCheckbox(280, 416, 'Original', true);
+    
+    // Serie/VIN
+    doc.fontSize(6).font('Helvetica');
+    doc.text('SERIE/VIN', 330, 378);
+    drawBox(330, 386, 180, 18, '', vehicle.vin || '');
+    drawCheckbox(515, 386, 'Regrabado');
+    drawCheckbox(515, 400, 'Original', true);
+
+    // SECCIÓN 17: IMPORTACIÓN/REMATE
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.text('17. IMPORTACIÓN/REMATE', 40, 445);
+    
+    drawCheckbox(40, 453, 'Importación definitiva');
+    drawCheckbox(150, 453, 'Remate');
+    drawCheckbox(210, 453, 'Abandono');
+    drawCheckbox(280, 453, 'Donación');
+    drawCheckbox(350, 453, 'Resolución');
+    drawCheckbox(430, 453, 'Otra');
+    
+    drawBox(40, 465, 150, 18, 'No. Acta/Manifiesto', vehicle.datosVenta.vehiculoAdicional.actaManifiesto || '');
+    drawBox(200, 465, 150, 18, 'Fecha', '');
+    drawBox(360, 465, 200, 18, 'Aduana/Entidad', '');
+
+    // SECCIÓN 18: TIPO DE SERVICIO
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.text('18. TIPO DE SERVICIO', 40, 495);
+    
+    drawCheckbox(40, 503, 'Particular', true);
+    drawCheckbox(110, 503, 'Público');
+    drawCheckbox(170, 503, 'Diplomático');
+    drawCheckbox(250, 503, 'Oficial');
+    drawCheckbox(320, 503, 'Especial');
+
+    // SECCIÓN 19: DATOS DEL PROPIETARIO (VENDEDOR)
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.text('19. DATOS DEL PROPIETARIO ACTUAL (VENDEDOR)', 40, 525);
+    
+    drawBox(40, 533, 200, 18, 'Apellidos', vehicle.datosVenta.vendedor.nombre.split(' ').slice(0, 2).join(' ') || '');
+    drawBox(245, 533, 200, 18, 'Nombres', vehicle.datosVenta.vendedor.nombre.split(' ').slice(2).join(' ') || '');
+    drawBox(450, 533, 110, 18, 'Documento', vehicle.datosVenta.vendedor.identificacion);
+    
+    drawBox(40, 555, 300, 18, 'Dirección', vehicle.datosVenta.vendedor.direccion);
+    drawBox(345, 555, 100, 18, 'Ciudad', vehicle.datosVenta.transaccion.lugarCelebracion || '');
+    drawBox(450, 555, 110, 18, 'Teléfono', vehicle.datosVenta.vendedor.telefono);
+
+    // Línea de firma vendedor
     doc.fontSize(7).font('Helvetica');
-    doc.text('PRIMER APELLIDO', margin + 2, y + 17);
-    doc.fontSize(9).font('Helvetica-Bold');
-    doc.text(apellidosComp[0] || '', margin + 2, y + 26);
+    doc.text('Firma del Propietario (Vendedor):', 40, 585);
+    doc.moveTo(40, 600).lineTo(280, 600).stroke();
+    doc.fontSize(6).font('Helvetica');
+    doc.text(`C.C. ${vehicle.datosVenta.vendedor.identificacion}`, 40, 605);
 
-    drawBox(margin + usableWidth * 0.35, y + 15, usableWidth * 0.35, 20);
-    doc.fontSize(7);
-    doc.text('SEGUNDO APELLIDO', margin + usableWidth * 0.35 + 2, y + 17);
-    doc.fontSize(9).font('Helvetica-Bold');
-    doc.text(apellidosComp[1] || '', margin + usableWidth * 0.35 + 2, y + 26);
+    // SECCIÓN 20: DATOS DEL COMPRADOR (NUEVO PROPIETARIO)
+    doc.fontSize(7).font('Helvetica-Bold');
+    doc.text('20. DATOS DEL COMPRADOR (NUEVO PROPIETARIO)', 40, 625);
+    
+    drawBox(40, 633, 200, 18, 'Apellidos', vehicle.datosVenta.comprador.nombre.split(' ').slice(0, 2).join(' ') || '');
+    drawBox(245, 633, 200, 18, 'Nombres', vehicle.datosVenta.comprador.nombre.split(' ').slice(2).join(' ') || '');
+    drawBox(450, 633, 110, 18, 'Documento', vehicle.datosVenta.comprador.identificacion);
+    
+    drawBox(40, 655, 300, 18, 'Dirección', vehicle.datosVenta.comprador.direccion);
+    drawBox(345, 655, 100, 18, 'Ciudad', vehicle.datosVenta.transaccion.lugarCelebracion || '');
+    drawBox(450, 655, 110, 18, 'Teléfono', vehicle.datosVenta.comprador.telefono);
 
-    drawBox(margin + usableWidth * 0.70, y + 15, usableWidth * 0.30, 20);
-    doc.fontSize(7);
-    doc.text('NOMBRES', margin + usableWidth * 0.70 + 2, y + 17);
-    doc.fontSize(9).font('Helvetica-Bold');
-    const nombresComp = apellidosComp.slice(2).join(' ') || vehicle.datosVenta?.comprador?.nombre || '';
-    doc.text(nombresComp, margin + usableWidth * 0.70 + 2, y + 26);
+    // Línea de firma comprador
+    doc.fontSize(7).font('Helvetica');
+    doc.text('Firma del Comprador:', 40, 685);
+    doc.moveTo(40, 700).lineTo(280, 700).stroke();
+    doc.fontSize(6).font('Helvetica');
+    doc.text(`C.C. ${vehicle.datosVenta.comprador.identificacion}`, 40, 705);
 
-    // Tipo de documento (misma estructura)
-    docX = margin;
-    docTypes.forEach((type, i) => {
-      drawBox(docX, y + 35, docWidth, 25);
-      doc.fontSize(6).font('Helvetica');
-      doc.text(type, docX + 2, y + 37, { width: docWidth - 4, align: 'center' });
-      doc.fontSize(8).font('Helvetica-Bold');
-      const isSelected = type === 'C.C' ? 'X' : '';
-      doc.text(isSelected, docX + docWidth/2 - 3, y + 47);
-      doc.fontSize(6);
-      doc.text(docCodes[i], docX + 2, y + 55);
-      docX += docWidth;
+    // Nota al pie
+    doc.fontSize(6).font('Helvetica-Oblique');
+    doc.text('Este formulario es un documento oficial para trámites ante el Registro Nacional Automotor - RUNT.', 40, 720, { align: 'center' });
+
+    // === PÁGINA 2: CHECKLIST DE DOCUMENTOS REQUERIDOS ===
+    doc.addPage();
+    
+    doc.fontSize(14).font('Helvetica-Bold');
+    doc.text('DOCUMENTOS REQUERIDOS PARA TRÁMITE DE TRASPASO', 40, 40, { align: 'center' });
+    
+    doc.moveTo(40, 55).lineTo(560, 55).stroke();
+    
+    doc.fontSize(10).font('Helvetica-Bold');
+    doc.text('CHECKLIST DE DOCUMENTOS:', 40, 70);
+    
+    const documentos = [
+      '□ Tarjeta de propiedad del vehículo (original)',
+      '□ Certificado de tradición y libertad (vigente)',
+      '□ SOAT vigente',
+      '□ Revisión técnico-mecánica vigente',
+      '□ Certificado de emisiones (si aplica)',
+      '□ Fotocopia de la cédula del vendedor (ampliada al 150%)',
+      '□ Fotocopia de la cédula del comprador (ampliada al 150%)',
+      '□ Poder especial si el trámite lo realiza un tercero',
+      '□ Formulario de traspaso debidamente diligenciado',
+      '□ Recibo de pago de los derechos de trámite',
+      '□ Certificado de gravámenes (si aplica)',
+      '□ Paz y salvo de impuestos vehiculares',
+      '□ Declaración juramentada de no poseer otro vehículo (si aplica para exenciones)'
+    ];
+
+    let yPos = 90;
+    documentos.forEach((docItem) => {
+      doc.fontSize(10).font('Helvetica');
+      doc.text(docItem, 40, yPos);
+      yPos += 20;
     });
 
-    // Número de documento del comprador
-    drawBox(margin, y + 60, usableWidth * 0.40, 20);
-    doc.fontSize(7).font('Helvetica');
-    doc.text('No. DOCUMENTO', margin + 2, y + 62);
-    doc.fontSize(9).font('Helvetica-Bold');
-    doc.text(vehicle.datosVenta?.comprador?.identificacion || '', margin + 2, y + 71);
+    doc.fontSize(10).font('Helvetica-Bold');
+    doc.text('NOTAS IMPORTANTES:', 40, yPos + 10);
+    
+    const notas = [
+      '1. Todos los documentos deben estar vigentes al momento de realizar el trámite.',
+      '2. El vendedor debe presentar la tarjeta de propiedad original.',
+      '3. Las fotocopias de cédulas deben estar ampliadas al 150% y ser legibles.',
+      '4. El traspaso debe realizarse dentro del plazo establecido en el contrato.',
+      '5. Para más información, visite www.runt.gov.co',
+      '6. El comprador debe verificar que el vehículo no tenga gravámenes ni limitaciones.',
+      '7. En caso de fallecimiento del propietario, se requiere certificado de defunción y sucesión.'
+    ];
 
-    // Fecha
-    drawBox(margin + usableWidth * 0.40, y + 60, usableWidth * 0.20, 20);
-    doc.fontSize(7);
-    doc.text('FECHA', margin + usableWidth * 0.40 + 2, y + 62);
-    drawLine(margin + usableWidth * 0.40, y + 70, margin + usableWidth * 0.60, y + 70);
-    doc.fontSize(6);
-    doc.text('DIA    MES    AÑO', margin + usableWidth * 0.40 + 5, y + 72);
+    yPos += 30;
+    notas.forEach((nota) => {
+      doc.fontSize(9).font('Helvetica');
+      doc.text(nota, 40, yPos, { align: 'justify', width: 520 });
+      yPos += 18;
+    });
 
-    // Dirección, ciudad, teléfono del comprador
-    drawBox(margin + usableWidth * 0.60, y + 35, usableWidth * 0.40, 15);
-    doc.fontSize(7);
-    doc.text('DIRECCION', margin + usableWidth * 0.60 + 2, y + 37);
-
-    drawBox(margin + usableWidth * 0.60, y + 50, usableWidth * 0.20, 15);
-    doc.fontSize(7);
-    doc.text('CIUDAD', margin + usableWidth * 0.60 + 2, y + 52);
-
-    drawBox(margin + usableWidth * 0.80, y + 50, usableWidth * 0.20, 15);
-    doc.fontSize(7);
-    doc.text('TELEFONO', margin + usableWidth * 0.80 + 2, y + 52);
-
-    drawBox(margin + usableWidth * 0.60, y + 65, usableWidth * 0.40, 15);
-    doc.fontSize(7);
-    doc.text('FIRMA DEL COMPRADOR', margin + usableWidth * 0.60 + 2, y + 67);
-
-    // Finalizar documento
+    // Finalizar el documento
     doc.end();
 
   } catch (error: any) {
     console.error('Error al generar formulario de traspaso:', error);
     res.status(500).json({ 
       message: 'Error al generar formulario de traspaso', 
+      error: error.message 
+    });
+  }
+};
+
+
+// Consulta pública del estado de trámite por placa (sin autenticación)
+export const consultarEstadoTramite = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { placa } = req.params;
+
+    if (!placa) {
+      res.status(400).json({ message: 'La placa es requerida' });
+      return;
+    }
+
+    // Buscar vehículo por placa (solo vendidos)
+    const vehicle = await Vehicle.findOne({ 
+      placa: placa.toUpperCase(),
+      estado: 'vendido'
+    }).select('marca modelo año placa color estado estadoTramite fechaVenta datosVenta');
+
+    if (!vehicle) {
+      res.status(404).json({ 
+        message: 'No se encontró un vehículo vendido con esta placa',
+        found: false
+      });
+      return;
+    }
+
+    // Preparar respuesta con información limitada (seguridad)
+    const response = {
+      found: true,
+      vehiculo: {
+        marca: vehicle.marca,
+        modelo: vehicle.modelo,
+        año: vehicle.año,
+        placa: vehicle.placa,
+        color: vehicle.color,
+        fechaVenta: vehicle.fechaVenta,
+        estadoTramite: vehicle.estadoTramite || 'firma_documentos',
+        comprador: {
+          nombre: vehicle.datosVenta?.comprador?.nombre || 'No especificado'
+        }
+      }
+    };
+
+    res.json(response);
+  } catch (error: any) {
+    console.error('Error al consultar estado de trámite:', error);
+    res.status(500).json({ 
+      message: 'Error al consultar estado de trámite', 
       error: error.message 
     });
   }
