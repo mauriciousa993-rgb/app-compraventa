@@ -1260,13 +1260,65 @@ export const saveSaleData = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
+    const normalizeNumber = (value: unknown, fallback: number): number => {
+      const numeric = typeof value === 'string' ? Number(value) : value;
+      return Number.isFinite(numeric as number) ? (numeric as number) : fallback;
+    };
+
+    const normalizeDate = (value: unknown): Date | undefined => {
+      if (!value) return undefined;
+      const date = new Date(value as string);
+      return Number.isNaN(date.getTime()) ? undefined : date;
+    };
+
+    const sanitizeText = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+
     // Limpiar estadoTramite inválido si quedó como string vacío
     if ((vehicle as any).estadoTramite === '') {
       (vehicle as any).estadoTramite = undefined;
     }
 
+    const sanitizedDatosVenta = {
+      vendedor: {
+        nombre: sanitizeText(datosVenta?.vendedor?.nombre),
+        identificacion: sanitizeText(datosVenta?.vendedor?.identificacion),
+        direccion: sanitizeText(datosVenta?.vendedor?.direccion),
+        telefono: sanitizeText(datosVenta?.vendedor?.telefono),
+      },
+      comprador: {
+        nombre: sanitizeText(datosVenta?.comprador?.nombre),
+        identificacion: sanitizeText(datosVenta?.comprador?.identificacion),
+        direccion: sanitizeText(datosVenta?.comprador?.direccion),
+        telefono: sanitizeText(datosVenta?.comprador?.telefono),
+        email: sanitizeText(datosVenta?.comprador?.email),
+      },
+      vehiculoAdicional: {
+        tipoCarroceria: sanitizeText(datosVenta?.vehiculoAdicional?.tipoCarroceria),
+        capacidad: sanitizeText(datosVenta?.vehiculoAdicional?.capacidad),
+        numeroPuertas: normalizeNumber(datosVenta?.vehiculoAdicional?.numeroPuertas, 4),
+        numeroMotor: sanitizeText(datosVenta?.vehiculoAdicional?.numeroMotor),
+        linea: sanitizeText(datosVenta?.vehiculoAdicional?.linea),
+        actaManifiesto: sanitizeText(datosVenta?.vehiculoAdicional?.actaManifiesto),
+        sitioMatricula: sanitizeText(datosVenta?.vehiculoAdicional?.sitioMatricula),
+        tipoServicio: sanitizeText(datosVenta?.vehiculoAdicional?.tipoServicio) || 'PARTICULAR',
+      },
+      transaccion: {
+        lugarCelebracion: sanitizeText(datosVenta?.transaccion?.lugarCelebracion),
+        fechaCelebracion: normalizeDate(datosVenta?.transaccion?.fechaCelebracion),
+        precioLetras: sanitizeText(datosVenta?.transaccion?.precioLetras),
+        formaPago: sanitizeText(datosVenta?.transaccion?.formaPago),
+        vendedorAnterior: sanitizeText(datosVenta?.transaccion?.vendedorAnterior),
+        cedulaVendedorAnterior: sanitizeText(datosVenta?.transaccion?.cedulaVendedorAnterior),
+        diasTraspaso: normalizeNumber(datosVenta?.transaccion?.diasTraspaso, 30),
+        fechaEntrega: normalizeDate(datosVenta?.transaccion?.fechaEntrega),
+        horaEntrega: sanitizeText(datosVenta?.transaccion?.horaEntrega),
+        domicilioContractual: sanitizeText(datosVenta?.transaccion?.domicilioContractual),
+        clausulasAdicionales: sanitizeText(datosVenta?.transaccion?.clausulasAdicionales),
+      },
+    };
+
     // Actualizar datos de venta
-    vehicle.datosVenta = datosVenta;
+    vehicle.datosVenta = sanitizedDatosVenta as any;
     vehicle.estado = 'vendido';
     vehicle.fechaVenta = new Date();
 
@@ -1277,9 +1329,19 @@ export const saveSaleData = async (req: AuthRequest, res: Response): Promise<voi
       vehicle,
     });
   } catch (error: any) {
-    res.status(500).json({ 
-      message: 'Error al guardar datos de venta', 
-      error: error.message 
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map((err: any) => err.message);
+      res.status(400).json({
+        message: 'Error de validación',
+        errors,
+        details: error.message,
+      });
+      return;
+    }
+
+    res.status(500).json({
+      message: 'Error al guardar datos de venta',
+      error: error.message,
     });
   }
 };
