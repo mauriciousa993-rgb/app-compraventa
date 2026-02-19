@@ -60,7 +60,24 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+
+    const normalizedData: DatosVenta = {
+      ...formData,
+      vehiculoAdicional: {
+        ...formData.vehiculoAdicional,
+        numeroPuertas: Number.isFinite(formData.vehiculoAdicional.numeroPuertas)
+          ? formData.vehiculoAdicional.numeroPuertas
+          : 4,
+      },
+      transaccion: {
+        ...formData.transaccion,
+        diasTraspaso: Number.isFinite(formData.transaccion.diasTraspaso)
+          ? formData.transaccion.diasTraspaso
+          : 30,
+      },
+    };
+
+    onSubmit(normalizedData);
   };
 
   const updateVendedor = (field: string, value: string) => {
@@ -282,7 +299,10 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
                 <input
                   type="number"
                   value={formData.vehiculoAdicional.numeroPuertas}
-                  onChange={(e) => updateVehiculoAdicional('numeroPuertas', parseInt(e.target.value))}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    updateVehiculoAdicional('numeroPuertas', Number.isFinite(value) ? value : 4);
+                  }}
                   className="input"
                   min="2"
                   max="6"
@@ -446,7 +466,10 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
                   type="number"
                   required
                   value={formData.transaccion.diasTraspaso}
-                  onChange={(e) => updateTransaccion('diasTraspaso', parseInt(e.target.value))}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    updateTransaccion('diasTraspaso', Number.isFinite(value) ? value : 30);
+                  }}
                   className="input"
                   min="1"
                   max="90"
