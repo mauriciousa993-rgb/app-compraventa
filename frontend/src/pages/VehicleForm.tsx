@@ -530,18 +530,26 @@ const VehicleForm: React.FC = () => {
 
     try {
       let vehicleId = id;
-      console.log('📤 Enviando datos:', formData);
+      const payload = {
+        ...formData,
+        estadoTramite:
+          formData.estado === 'vendido' && formData.estadoTramite
+            ? formData.estadoTramite
+            : undefined,
+      };
+
+      console.log('📤 Enviando datos:', payload);
 
       if (isEditMode && id) {
         // Modo edición: usar PUT
         console.log('📝 Modo edición - PUT /vehicles/' + id);
-        const response = await api.put(`/vehicles/${id}`, formData);
+        const response = await api.put(`/vehicles/${id}`, payload);
         console.log('✅ Respuesta edición:', response.data);
         vehicleUpdated = true;
       } else {
         // Modo creación: usar POST
         console.log('📝 Modo creación - POST /vehicles');
-        const response = await api.post('/vehicles', formData);
+        const response = await api.post('/vehicles', payload);
         console.log('✅ Respuesta creación:', response.data);
         vehicleId = response.data.vehicle._id;
         vehicleUpdated = true;

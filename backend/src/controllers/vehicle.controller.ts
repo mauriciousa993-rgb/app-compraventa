@@ -1260,6 +1260,11 @@ export const saveSaleData = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
+    // Limpiar estadoTramite inválido si quedó como string vacío
+    if ((vehicle as any).estadoTramite === '') {
+      (vehicle as any).estadoTramite = undefined;
+    }
+
     // Actualizar datos de venta
     vehicle.datosVenta = datosVenta;
     vehicle.estado = 'vendido';

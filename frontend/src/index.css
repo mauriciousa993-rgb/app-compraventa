@@ -59,6 +59,11 @@ body {
     @apply bg-primary-600 hover:bg-primary-500 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 border border-primary-400;
   }
 
+  .input {
+    @apply w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-black bg-white;
+    border-color: #d1d5db;
+  }
+
   .input-field {
     @apply w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-ink-100;
     background-color: var(--surface-soft);
