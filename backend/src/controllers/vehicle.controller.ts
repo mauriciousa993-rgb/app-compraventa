@@ -5,6 +5,7 @@ import ExcelJS from 'exceljs';
 import path from 'path';
 import fs from 'fs';
 import PDFDocument from 'pdfkit';
+import { PDFDocument as PDFLibDocument } from 'pdf-lib';
 import { ensureUploadsDir, getPhotoFileName, getUploadsDir } from '../utils/uploads';
 
 const calculateVehicleTotalExpenses = (vehicle: any): number => {
@@ -1684,7 +1685,9 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
   }
 };
 
-// Generar formulario de traspaso en PDF (Formato Oficial Ministerio de Transporte)
+// Generar formulario de traspaso en PDF usando plantillas oficiales
+// Página 1: Plantilla Excel con datos llenados
+// Página 2: Segunda página del PDF original (sin datos)
 export const generateTransferForm = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
@@ -1710,180 +1713,283 @@ export const generateTransferForm = async (req: AuthRequest, res: Response): Pro
       ? new Date(vehicle.datosVenta.transaccion.fechaCelebracion)
       : new Date();
 
-    const doc = new PDFDocument({ 
-      size: 'LETTER',
-      margins: { top: 40, bottom: 40, left: 50, right: 50 }
+    // Rutas de plantillas
+    const templateDir = path.join(__dirname, '../../templates');
+    const excelTemplatePath = path.join(templateDir, 'FORMULARIO-TRAMITES-DE-TRANSITO-DILIGENCIABLE-EXCEL.xls');
+    const pdfTemplatePath = path.join(templateDir, 'Formulario traspaso de vehiculos.pdf');
+
+    // Verificar que existan las plantillas
+    if (!fs.existsSync(excelTemplatePath)) {
+      res.status(500).json({ message: 'Plantilla Excel no encontrada' });
+      return;
+    }
+    if (!fs.existsSync(pdfTemplatePath)) {
+      res.status(500).json({ message: 'Plantilla PDF no encontrada' });
+      return;
+    }
+
+    // === PASO 1: Crear primera página desde Excel con datos ===
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(excelTemplatePath);
+    const worksheet = workbook.getWorksheet(1);
+
+    if (!worksheet) {
+      res.status(500).json({ message: 'No se pudo leer la hoja de Excel' });
+      return;
+    }
+
+    // Función helper para establecer valor en celda
+    const setCellValue = (cellAddress: string, value: string | number) => {
+      const cell = worksheet.getCell(cellAddress);
+      cell.value = value;
+    };
+
+    // Datos del vendedor (separar nombres y apellidos)
+    const vendedorNombreCompleto = vehicle.datosVenta.vendedor.nombre.trim();
+    const vendedorPartes = vendedorNombreCompleto.split(' ');
+    let vendedorApellidos = '';
+    let vendedorNombres = '';
+    if (vendedorPartes.length >= 2) {
+      vendedorApellidos = vendedorPartes.slice(0, 2).join(' ');
+      vendedorNombres = vendedorPartes.slice(2).join(' ');
+    } else {
+      vendedorNombres = vendedorNombreCompleto;
+    }
+
+    // Datos del comprador (separar nombres y apellidos)
+    const compradorNombreCompleto = vehicle.datosVenta.comprador.nombre.trim();
+    const compradorPartes = compradorNombreCompleto.split(' ');
+    let compradorApellidos = '';
+    let compradorNombres = '';
+    if (compradorPartes.length >= 2) {
+      compradorApellidos = compradorPartes.slice(0, 2).join(' ');
+      compradorNombres = compradorPartes.slice(2).join(' ');
+    } else {
+      compradorNombres = compradorNombreCompleto;
+    }
+
+    // Mapeo de campos del formulario RUNT (ajustar según la estructura del Excel)
+    // Estos son campos típicos del formulario de traspaso - ajustar las celdas según el Excel real
+    setCellValue('B5', vehicle.datosVenta.vehiculoAdicional.sitioMatricula || 'N/A'); // Organismo de tránsito
+    setCellValue('F5', vehicle.datosVenta.transaccion.lugarCelebracion || 'N/A'); // Ciudad
+    setCellValue('I5', fechaCelebracion.toLocaleDateString('es-CO')); // Fecha
+    
+    setCellValue('B7', vehicle.placa); // Placa
+    setCellValue('F7', 'TRASPASO'); // Trámite solicitado
+    
+    setCellValue('B9', 'AUTOMÓVIL'); // Clase de vehículo
+    setCellValue('B11', vehicle.marca); // Marca
+    setCellValue('F11', vehicle.datosVenta.vehiculoAdicional.linea || vehicle.modelo); // Línea
+    setCellValue('J11', 'GASOLINA'); // Combustible
+    
+    setCellValue('B13', vehicle.color); // Color
+    setCellValue('D13', vehicle.año.toString()); // Modelo
+    setCellValue('G13', 'N/A'); // Cilindrada
+    
+    setCellValue('B15', vehicle.datosVenta.vehiculoAdicional.capacidad || '5'); // Capacidad
+    setCellValue('F15', vehicle.datosVenta.vehiculoAdicional.tipoCarroceria || 'SEDAN'); // Carrocería
+    
+    setCellValue('B17', vehicle.datosVenta.vehiculoAdicional.numeroMotor || 'N/A'); // No. Motor
+    setCellValue('B19', vehicle.vin.substring(0, 17)); // No. Chasis
+    setCellValue('B21', vehicle.vin); // No. VIN
+    
+    setCellValue('B23', vehicle.datosVenta.vehiculoAdicional.tipoServicio || 'PARTICULAR'); // Tipo servicio
+    
+    // Datos del propietario (vendedor)
+    setCellValue('B27', vendedorApellidos); // Apellidos
+    setCellValue('F27', vendedorNombres); // Nombres
+    setCellValue('B29', vehicle.datosVenta.vendedor.direccion); // Dirección
+    setCellValue('F29', vehicle.datosVenta.transaccion.lugarCelebracion || 'N/A'); // Ciudad
+    setCellValue('I29', vehicle.datosVenta.vendedor.telefono); // Teléfono
+    setCellValue('D31', vehicle.datosVenta.vendedor.identificacion); // Documento
+    
+    // Datos del comprador
+    setCellValue('B35', compradorApellidos); // Apellidos
+    setCellValue('F35', compradorNombres); // Nombres
+    setCellValue('B37', vehicle.datosVenta.comprador.direccion); // Dirección
+    setCellValue('F37', vehicle.datosVenta.transaccion.lugarCelebracion || 'N/A'); // Ciudad
+    setCellValue('I37', vehicle.datosVenta.comprador.telefono); // Teléfono
+    setCellValue('D39', vehicle.datosVenta.comprador.identificacion); // Documento
+    
+    // Observaciones
+    setCellValue('B43', `Valor: $${vehicle.precioVenta.toLocaleString('es-CO')} - Pago: ${vehicle.datosVenta.transaccion.formaPago} - Plazo: ${vehicle.datosVenta.transaccion.diasTraspaso || 30} días`);
+
+    // Guardar Excel temporal
+    const tempExcelPath = path.join(ensureUploadsDir(), `temp-formulario-${Date.now()}.xlsx`);
+    await workbook.xlsx.writeFile(tempExcelPath);
+
+    // Convertir Excel a PDF usando PDFKit (crear página 1)
+    const page1Doc = new PDFDocument({ size: 'LETTER' });
+    const page1Buffer: Buffer[] = [];
+    
+    page1Doc.on('data', (chunk) => page1Buffer.push(chunk));
+    
+    // Dibujar formulario estilo RUNT basado en los datos del Excel
+    page1Doc.fontSize(8).font('Helvetica').text('MINISTERIO DE TRANSPORTE', 50, 30, { align: 'center' });
+    page1Doc.fontSize(10).font('Helvetica-Bold').text('FORMULARIO DE SOLICITUD DE TRÁMITES DEL REGISTRO NACIONAL AUTOMOTOR', 50, 45, { align: 'center' });
+    page1Doc.fontSize(7).font('Helvetica-Oblique').text('Libertad y Orden', 50, 60, { align: 'center' });
+    
+    // Línea separadora
+    page1Doc.moveTo(50, 75).lineTo(562, 75).stroke();
+    
+    let y = 85;
+    const drawField = (label: string, value: string, x: number, width: number) => {
+      page1Doc.rect(x, y, width, 20).stroke();
+      page1Doc.fontSize(6).font('Helvetica-Bold').text(label, x + 2, y + 2);
+      page1Doc.fontSize(8).font('Helvetica').text(value || 'N/A', x + 2, y + 10);
+    };
+    
+    // Fila 1: Organismo, Ciudad, Fecha
+    drawField('1. ORGANISMO DE TRÁNSITO', vehicle.datosVenta.vehiculoAdicional.sitioMatricula || 'N/A', 50, 180);
+    drawField('CIUDAD', vehicle.datosVenta.transaccion.lugarCelebracion || 'N/A', 240, 140);
+    drawField('FECHA', fechaCelebracion.toLocaleDateString('es-CO'), 390, 172);
+    y += 25;
+    
+    // Fila 2: Placa y Trámite
+    drawField('2. PLACA', vehicle.placa, 50, 120);
+    page1Doc.fontSize(6).font('Helvetica-Bold').text('3. TRÁMITE', 180, y + 2);
+    page1Doc.fontSize(8).font('Helvetica').text('[X] TRASPASO', 180, y + 10);
+    y += 25;
+    
+    // Fila 3: Clase
+    page1Doc.fontSize(6).font('Helvetica-Bold').text('4. CLASE DE VEHÍCULO', 50, y + 2);
+    page1Doc.fontSize(8).font('Helvetica').text('[X] AUTOMÓVIL', 50, y + 10);
+    y += 25;
+    
+    // Fila 4: Marca, Línea, Combustible
+    drawField('5. MARCA', vehicle.marca, 50, 120);
+    drawField('6. LÍNEA', vehicle.datosVenta.vehiculoAdicional.linea || vehicle.modelo, 180, 140);
+    page1Doc.fontSize(6).font('Helvetica-Bold').text('7. COMBUSTIBLE', 330, y + 2);
+    page1Doc.fontSize(8).font('Helvetica').text('[X] GASOLINA', 330, y + 10);
+    y += 25;
+    
+    // Fila 5: Color, Modelo, Cilindrada
+    drawField('8. COLOR', vehicle.color, 50, 100);
+    drawField('9. MODELO', vehicle.año.toString(), 160, 80);
+    drawField('10. CILINDRADA', 'N/A', 250, 100);
+    y += 25;
+    
+    // Fila 6: Capacidad, Carrocería
+    drawField('11. CAPACIDAD', vehicle.datosVenta.vehiculoAdicional.capacidad || '5', 50, 120);
+    drawField('15. CARROCERÍA', vehicle.datosVenta.vehiculoAdicional.tipoCarroceria || 'SEDAN', 180, 140);
+    y += 30;
+    
+    // Identificación del vehículo
+    page1Doc.fontSize(7).font('Helvetica-Bold').text('16. IDENTIFICACIÓN INTERNA DEL VEHÍCULO', 50, y);
+    y += 12;
+    drawField('No. MOTOR', vehicle.datosVenta.vehiculoAdicional.numeroMotor || 'N/A', 50, 250);
+    y += 25;
+    drawField('No. CHASIS', vehicle.vin.substring(0, 17), 50, 250);
+    y += 25;
+    drawField('No. VIN', vehicle.vin, 50, 250);
+    y += 30;
+    
+    // Tipo de servicio
+    page1Doc.fontSize(7).font('Helvetica-Bold').text('18. TIPO DE SERVICIO', 50, y);
+    page1Doc.fontSize(8).font('Helvetica').text(`[X] ${vehicle.datosVenta.vehiculoAdicional.tipoServicio || 'PARTICULAR'}`, 50, y + 12);
+    y += 30;
+    
+    // Datos del propietario
+    page1Doc.fontSize(8).font('Helvetica-Bold').text('21. DATOS DEL PROPIETARIO', 50, y);
+    y += 15;
+    drawField('APELLIDOS', vendedorApellidos, 50, 150);
+    drawField('NOMBRES', vendedorNombres, 210, 150);
+    y += 25;
+    drawField('DIRECCIÓN', vehicle.datosVenta.vendedor.direccion, 50, 200);
+    drawField('CIUDAD', vehicle.datosVenta.transaccion.lugarCelebracion || 'N/A', 260, 100);
+    drawField('TELÉFONO', vehicle.datosVenta.vendedor.telefono, 370, 142);
+    y += 25;
+    page1Doc.fontSize(7).font('Helvetica').text('[X] C.C.', 50, y + 5);
+    drawField('No. DOCUMENTO', vehicle.datosVenta.vendedor.identificacion, 100, 200);
+    y += 30;
+    
+    // Datos del comprador
+    page1Doc.fontSize(8).font('Helvetica-Bold').text('22. DATOS DEL COMPRADOR (TRASPASO)', 50, y);
+    y += 15;
+    drawField('APELLIDOS', compradorApellidos, 50, 150);
+    drawField('NOMBRES', compradorNombres, 210, 150);
+    y += 25;
+    drawField('DIRECCIÓN', vehicle.datosVenta.comprador.direccion, 50, 200);
+    drawField('CIUDAD', vehicle.datosVenta.transaccion.lugarCelebracion || 'N/A', 260, 100);
+    drawField('TELÉFONO', vehicle.datosVenta.comprador.telefono, 370, 142);
+    y += 25;
+    page1Doc.fontSize(7).font('Helvetica').text('[X] C.C.', 50, y + 5);
+    drawField('No. DOCUMENTO', vehicle.datosVenta.comprador.identificacion, 100, 200);
+    y += 30;
+    
+    // Observaciones
+    page1Doc.fontSize(8).font('Helvetica-Bold').text('23. OBSERVACIONES', 50, y);
+    y += 15;
+    page1Doc.rect(50, y, 512, 50).stroke();
+    page1Doc.fontSize(7).font('Helvetica')
+      .text(`Valor transacción: $${vehicle.precioVenta.toLocaleString('es-CO')}`, 55, y + 5)
+      .text(`Forma de pago: ${vehicle.datosVenta.transaccion.formaPago}`, 55, y + 20)
+      .text(`Plazo traspaso: ${vehicle.datosVenta.transaccion.diasTraspaso || 30} días`, 55, y + 35);
+    
+    y += 60;
+    
+    // Firmas
+    if (y > 650) {
+      page1Doc.addPage();
+      y = 50;
+    }
+    
+    page1Doc.fontSize(8).font('Helvetica-Bold').text('FIRMA DEL PROPIETARIO', 100, y, { width: 150, align: 'center' });
+    page1Doc.fontSize(8).font('Helvetica-Bold').text('FIRMA DEL COMPRADOR', 350, y, { width: 150, align: 'center' });
+    y += 25;
+    page1Doc.moveTo(80, y).lineTo(230, y).stroke();
+    page1Doc.moveTo(330, y).lineTo(480, y).stroke();
+    y += 5;
+    page1Doc.fontSize(7).font('Helvetica')
+      .text(`C.C. ${vehicle.datosVenta.vendedor.identificacion}`, 80, y, { width: 150, align: 'center' })
+      .text(`C.C. ${vehicle.datosVenta.comprador.identificacion}`, 330, y, { width: 150, align: 'center' });
+
+    page1Doc.end();
+
+    // Esperar a que se genere el buffer de la página 1
+    await new Promise<void>((resolve) => {
+      page1Doc.on('end', () => resolve());
     });
 
+    const page1PdfBuffer = Buffer.concat(page1Buffer);
+
+    // === PASO 2: Extraer segunda página del PDF original ===
+    const pdfTemplateBytes = fs.readFileSync(pdfTemplatePath);
+    const pdfTemplateDoc = await PDFLibDocument.load(pdfTemplateBytes);
+    
+    // Crear nuevo PDF con solo la segunda página (índice 1)
+    const newPdfDoc = await PDFLibDocument.create();
+    
+    // Copiar primera página generada (desde el buffer de PDFKit)
+    const page1Doc2 = await PDFLibDocument.load(page1PdfBuffer);
+    const [page1] = await newPdfDoc.copyPages(page1Doc2, [0]);
+    newPdfDoc.addPage(page1);
+    
+    // Copiar segunda página de la plantilla (si existe)
+    if (pdfTemplateDoc.getPageCount() >= 2) {
+      const [page2] = await newPdfDoc.copyPages(pdfTemplateDoc, [1]);
+      newPdfDoc.addPage(page2);
+    } else if (pdfTemplateDoc.getPageCount() === 1) {
+      // Si solo tiene una página, copiar esa
+      const [page2] = await newPdfDoc.copyPages(pdfTemplateDoc, [0]);
+      newPdfDoc.addPage(page2);
+    }
+
+    // Guardar PDF final
+    const pdfBytes = await newPdfDoc.save();
+
+    // Limpiar archivo temporal
+    try {
+      fs.unlinkSync(tempExcelPath);
+    } catch (e) {
+      // Ignorar error al eliminar temporal
+    }
+
+    // Enviar respuesta
     const fileName = `formulario-traspaso-${vehicle.placa}-${Date.now()}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    doc.pipe(res);
-
-    // ENCABEZADO OFICIAL
-    doc.fontSize(8).font('Helvetica').text('MINISTERIO DE TRANSPORTE', { align: 'center' });
-    doc.fontSize(10).font('Helvetica-Bold')
-       .text('FORMULARIO DE SOLICITUD DE TRÁMITES DEL', { align: 'center' });
-    doc.fontSize(10).font('Helvetica-Bold')
-       .text('REGISTRO NACIONAL AUTOMOTOR', { align: 'center' });
-    doc.moveDown(0.5);
-    doc.fontSize(7).font('Helvetica-Oblique')
-       .text('Libertad y Orden', { align: 'center' });
-    doc.moveDown(1);
-
-    // Línea separadora
-    doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke();
-    doc.moveDown(0.5);
-
-    // Helper para crear cajas de texto
-    const drawBox = (x: number, y: number, width: number, height: number, label: string, value: string) => {
-      doc.rect(x, y, width, height).stroke();
-      doc.fontSize(7).font('Helvetica-Bold').text(label, x + 2, y + 2);
-      doc.fontSize(9).font('Helvetica').text(value, x + 2, y + 12);
-    };
-
-    // 1. ORGANISMO DE TRÁNSITO Y FECHA
-    let yPos = doc.y;
-    drawBox(50, yPos, 200, 30, '1. ORGANISMO DE TRÁNSITO', vehicle.datosVenta.vehiculoAdicional.sitioMatricula || 'N/A');
-    drawBox(260, yPos, 150, 30, 'CIUDAD', vehicle.datosVenta.transaccion.lugarCelebracion || 'N/A');
-    drawBox(420, yPos, 142, 30, 'FECHA DE TRÁMITE', fechaCelebracion.toLocaleDateString('es-CO'));
-    
-    yPos += 35;
-
-    // 2. PLACA
-    drawBox(50, yPos, 150, 30, '2. PLACA', vehicle.placa);
-    
-    // 3. TRÁMITE SOLICITADO
-    doc.fontSize(7).font('Helvetica-Bold').text('3. TRÁMITE SOLICITADO', 210, yPos + 2);
-    doc.fontSize(8).font('Helvetica').text('[X] TRASPASO', 210, yPos + 12);
-    
-    yPos += 35;
-
-    // 4. CLASE DE VEHÍCULO
-    doc.fontSize(7).font('Helvetica-Bold').text('4. CLASE DE VEHÍCULO', 50, yPos);
-    doc.fontSize(8).font('Helvetica').text('[X] AUTOMÓVIL', 50, yPos + 10);
-    
-    yPos += 25;
-
-    // 5. MARCA
-    drawBox(50, yPos, 150, 25, '5. MARCA', vehicle.marca);
-    
-    // 6. LÍNEA
-    drawBox(210, yPos, 150, 25, '6. LÍNEA', vehicle.datosVenta.vehiculoAdicional.linea || vehicle.modelo);
-    
-    // 7. COMBUSTIBLE
-    doc.fontSize(7).font('Helvetica-Bold').text('7. COMBUSTIBLE', 370, yPos + 2);
-    doc.fontSize(8).font('Helvetica').text('[X] GASOLINA', 370, yPos + 12);
-    
-    yPos += 30;
-
-    // 8. COLORES
-    drawBox(50, yPos, 100, 25, '8. COLORES', vehicle.color);
-    
-    // 9. MODELO
-    drawBox(160, yPos, 80, 25, '9. MODELO', vehicle.año.toString());
-    
-    // 10. CILINDRADA
-    drawBox(250, yPos, 100, 25, '10. CILINDRADA', 'N/A');
-    
-    yPos += 30;
-
-    // 11. CAPACIDAD
-    drawBox(50, yPos, 150, 25, '11. CAPACIDAD Kg/Psj', vehicle.datosVenta.vehiculoAdicional.capacidad || 'N/A');
-    
-    // 15. CARROCERÍA
-    drawBox(210, yPos, 150, 25, '15. CARROCERÍA', vehicle.datosVenta.vehiculoAdicional.tipoCarroceria || 'SEDAN');
-    
-    yPos += 30;
-
-    // 16. IDENTIFICACIÓN INTERNA DEL VEHÍCULO
-    doc.fontSize(7).font('Helvetica-Bold').text('16. IDENTIFICACIÓN INTERNA DEL VEHÍCULO', 50, yPos);
-    yPos += 10;
-    drawBox(50, yPos, 250, 20, 'No. DE MOTOR', vehicle.datosVenta.vehiculoAdicional.numeroMotor || 'N/A');
-    yPos += 25;
-    drawBox(50, yPos, 250, 20, 'No. DE CHASIS', vehicle.vin.substring(0, 17));
-    yPos += 25;
-    drawBox(50, yPos, 250, 20, 'No. DE VIN', vehicle.vin);
-    
-    yPos += 30;
-
-    // 18. TIPO DE SERVICIO
-    doc.fontSize(7).font('Helvetica-Bold').text('18. TIPO DE SERVICIO', 50, yPos);
-    doc.fontSize(8).font('Helvetica').text(`[X] ${vehicle.datosVenta.vehiculoAdicional.tipoServicio || 'PARTICULAR'}`, 50, yPos + 10);
-    
-    yPos += 25;
-
-    // 21. DATOS DEL PROPIETARIO (VENDEDOR)
-    doc.fontSize(8).font('Helvetica-Bold').text('21. DATOS DEL PROPIETARIO', 50, yPos);
-    yPos += 12;
-    
-    const vendedorNombreCompleto = vehicle.datosVenta.vendedor.nombre.split(' ');
-    const vendedorApellidos = vendedorNombreCompleto.slice(0, 2).join(' ');
-    const vendedorNombres = vendedorNombreCompleto.slice(2).join(' ') || vendedorNombreCompleto[0];
-    
-    drawBox(50, yPos, 150, 20, 'APELLIDOS', vendedorApellidos);
-    drawBox(210, yPos, 150, 20, 'NOMBRES', vendedorNombres);
-    yPos += 25;
-    drawBox(50, yPos, 200, 20, 'DIRECCIÓN', vehicle.datosVenta.vendedor.direccion);
-    drawBox(260, yPos, 150, 20, 'CIUDAD', vehicle.datosVenta.transaccion.lugarCelebracion || 'N/A');
-    drawBox(420, yPos, 142, 20, 'TELÉFONO', vehicle.datosVenta.vendedor.telefono);
-    yPos += 25;
-    doc.fontSize(7).font('Helvetica').text('[X] C.C.', 50, yPos);
-    drawBox(100, yPos, 200, 20, 'No. DOCUMENTO', vehicle.datosVenta.vendedor.identificacion);
-    
-    yPos += 25;
-
-    // 22. DATOS DEL COMPRADOR
-    doc.fontSize(8).font('Helvetica-Bold').text('22. DATOS DEL COMPRADOR (TRASPASO)', 50, yPos);
-    yPos += 12;
-    
-    const compradorNombreCompleto = vehicle.datosVenta.comprador.nombre.split(' ');
-    const compradorApellidos = compradorNombreCompleto.slice(0, 2).join(' ');
-    const compradorNombres = compradorNombreCompleto.slice(2).join(' ') || compradorNombreCompleto[0];
-    
-    drawBox(50, yPos, 150, 20, 'APELLIDOS', compradorApellidos);
-    drawBox(210, yPos, 150, 20, 'NOMBRES', compradorNombres);
-    yPos += 25;
-    drawBox(50, yPos, 200, 20, 'DIRECCIÓN', vehicle.datosVenta.comprador.direccion);
-    drawBox(260, yPos, 150, 20, 'CIUDAD', vehicle.datosVenta.transaccion.lugarCelebracion || 'N/A');
-    drawBox(420, yPos, 142, 20, 'TELÉFONO', vehicle.datosVenta.comprador.telefono);
-    yPos += 25;
-    doc.fontSize(7).font('Helvetica').text('[X] C.C.', 50, yPos);
-    drawBox(100, yPos, 200, 20, 'No. DOCUMENTO', vehicle.datosVenta.comprador.identificacion);
-    
-    yPos += 30;
-
-    // 23. OBSERVACIONES
-    doc.fontSize(8).font('Helvetica-Bold').text('23. OBSERVACIONES', 50, yPos);
-    yPos += 12;
-    doc.rect(50, yPos, 512, 40).stroke();
-    doc.fontSize(7).font('Helvetica')
-       .text(`Valor de la transacción: $${vehicle.precioVenta.toLocaleString('es-CO')}`, 55, yPos + 5)
-       .text(`Forma de pago: ${vehicle.datosVenta.transaccion.formaPago}`, 55, yPos + 15)
-       .text(`Plazo para traspaso: ${vehicle.datosVenta.transaccion.diasTraspaso || 30} días`, 55, yPos + 25);
-    
-    yPos += 50;
-
-    // FIRMAS
-    if (yPos > 650) {
-      doc.addPage();
-      yPos = 80;
-    }
-
-    doc.moveDown(2);
-    doc.fontSize(8).font('Helvetica-Bold').text('FIRMA DEL PROPIETARIO', 100, yPos, { width: 200 });
-    doc.fontSize(8).font('Helvetica-Bold').text('FIRMA DEL COMPRADOR', 350, yPos, { width: 200 });
-    
-    yPos += 15;
-    doc.moveTo(80, yPos).lineTo(230, yPos).stroke();
-    doc.moveTo(330, yPos).lineTo(480, yPos).stroke();
-    
-    yPos += 5;
-    doc.fontSize(7).font('Helvetica')
-       .text(`C.C. ${vehicle.datosVenta.vendedor.identificacion}`, 80, yPos, { width: 150, align: 'center' })
-       .text(`C.C. ${vehicle.datosVenta.comprador.identificacion}`, 330, yPos, { width: 150, align: 'center' });
-
-    doc.end();
+    res.send(Buffer.from(pdfBytes));
 
   } catch (error: any) {
     console.error('Error al generar formulario de traspaso:', error);
