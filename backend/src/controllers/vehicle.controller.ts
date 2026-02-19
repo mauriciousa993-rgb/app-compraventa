@@ -1268,8 +1268,16 @@ export const saveSaleData = async (req: AuthRequest, res: Response): Promise<voi
 
     const normalizeDate = (value: unknown, fallback: Date = new Date()): Date => {
       if (!value) return fallback;
-      const date = new Date(value as string);
-      return Number.isNaN(date.getTime()) ? fallback : date;
+      // Handle string dates from frontend (e.g., "2024-01-15")
+      if (typeof value === 'string') {
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? fallback : date;
+      }
+      // Handle Date objects
+      if (value instanceof Date) {
+        return Number.isNaN(value.getTime()) ? fallback : value;
+      }
+      return fallback;
     };
 
     const sanitizeText = (value: unknown): string => {
@@ -1347,6 +1355,12 @@ export const saveSaleData = async (req: AuthRequest, res: Response): Promise<voi
       horaEntrega: '',
       domicilioContractual: '',
       clausulasAdicionales: '',
+    };
+
+    // Helper to safely get string value
+    const safeString = (value: unknown): string => {
+      if (value === undefined || value === null) return '';
+      return String(value).trim();
     };
 
     const sanitizedDatosVenta = {
