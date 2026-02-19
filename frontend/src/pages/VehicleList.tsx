@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿﻿import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search, Car, Edit, Trash2, FileDown, X, ChevronDown, ChevronUp, FileText, DollarSign, Edit2 } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
@@ -145,11 +145,24 @@ const VehicleList: React.FC = () => {
       setSaleModalOpen(false);
       setSelectedVehicle(null);
       loadVehicles();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error al guardar datos de venta:', error);
-      alert('Error al guardar los datos de venta');
+      
+      // Mostrar mensaje de error más específico si está disponible
+      let errorMessage = 'Error al guardar los datos de venta';
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.errors) {
+        errorMessage = `Error de validación:\n${error.response.data.errors.join('\n')}`;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      alert(errorMessage);
     }
   };
+
 
   const handleEditSaleData = (vehicle: Vehicle) => {
     setSelectedVehicle(vehicle);

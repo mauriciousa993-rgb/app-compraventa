@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import Vehicle from '../models/Vehicle';
+import Vehicle, { IDatosVenta } from '../models/Vehicle';
 import { AuthRequest } from '../types';
 import ExcelJS from 'exceljs';
 import path from 'path';
@@ -1278,49 +1278,56 @@ export const saveSaleData = async (req: AuthRequest, res: Response): Promise<voi
       (vehicle as any).estadoTramite = undefined;
     }
 
+    // Obtener datos de venta existentes para merge (si estamos actualizando)
+    const existingDatosVenta = (vehicle.datosVenta || {}) as IDatosVenta;
+
     const sanitizedDatosVenta = {
       vendedor: {
-        nombre: sanitizeText(datosVenta?.vendedor?.nombre),
-        identificacion: sanitizeText(datosVenta?.vendedor?.identificacion),
-        direccion: sanitizeText(datosVenta?.vendedor?.direccion),
-        telefono: sanitizeText(datosVenta?.vendedor?.telefono),
+        nombre: sanitizeText(datosVenta?.vendedor?.nombre) || existingDatosVenta.vendedor?.nombre || '',
+        identificacion: sanitizeText(datosVenta?.vendedor?.identificacion) || existingDatosVenta.vendedor?.identificacion || '',
+        direccion: sanitizeText(datosVenta?.vendedor?.direccion) || existingDatosVenta.vendedor?.direccion || '',
+        telefono: sanitizeText(datosVenta?.vendedor?.telefono) || existingDatosVenta.vendedor?.telefono || '',
       },
       comprador: {
-        nombre: sanitizeText(datosVenta?.comprador?.nombre),
-        identificacion: sanitizeText(datosVenta?.comprador?.identificacion),
-        direccion: sanitizeText(datosVenta?.comprador?.direccion),
-        telefono: sanitizeText(datosVenta?.comprador?.telefono),
-        email: sanitizeText(datosVenta?.comprador?.email),
+        nombre: sanitizeText(datosVenta?.comprador?.nombre) || existingDatosVenta.comprador?.nombre || '',
+        identificacion: sanitizeText(datosVenta?.comprador?.identificacion) || existingDatosVenta.comprador?.identificacion || '',
+        direccion: sanitizeText(datosVenta?.comprador?.direccion) || existingDatosVenta.comprador?.direccion || '',
+        telefono: sanitizeText(datosVenta?.comprador?.telefono) || existingDatosVenta.comprador?.telefono || '',
+        email: sanitizeText(datosVenta?.comprador?.email) || existingDatosVenta.comprador?.email || '',
       },
       vehiculoAdicional: {
-        tipoCarroceria: sanitizeText(datosVenta?.vehiculoAdicional?.tipoCarroceria),
-        capacidad: sanitizeText(datosVenta?.vehiculoAdicional?.capacidad),
-        numeroPuertas: normalizeNumber(datosVenta?.vehiculoAdicional?.numeroPuertas, 4),
-        numeroMotor: sanitizeText(datosVenta?.vehiculoAdicional?.numeroMotor),
-        linea: sanitizeText(datosVenta?.vehiculoAdicional?.linea),
-        actaManifiesto: sanitizeText(datosVenta?.vehiculoAdicional?.actaManifiesto),
-        sitioMatricula: sanitizeText(datosVenta?.vehiculoAdicional?.sitioMatricula),
-        tipoServicio: sanitizeText(datosVenta?.vehiculoAdicional?.tipoServicio) || 'PARTICULAR',
+        tipoCarroceria: sanitizeText(datosVenta?.vehiculoAdicional?.tipoCarroceria) || existingDatosVenta.vehiculoAdicional?.tipoCarroceria || '',
+        capacidad: sanitizeText(datosVenta?.vehiculoAdicional?.capacidad) || existingDatosVenta.vehiculoAdicional?.capacidad || '',
+        numeroPuertas: normalizeNumber(datosVenta?.vehiculoAdicional?.numeroPuertas, existingDatosVenta.vehiculoAdicional?.numeroPuertas || 4),
+        numeroMotor: sanitizeText(datosVenta?.vehiculoAdicional?.numeroMotor) || existingDatosVenta.vehiculoAdicional?.numeroMotor || '',
+        linea: sanitizeText(datosVenta?.vehiculoAdicional?.linea) || existingDatosVenta.vehiculoAdicional?.linea || '',
+        actaManifiesto: sanitizeText(datosVenta?.vehiculoAdicional?.actaManifiesto) || existingDatosVenta.vehiculoAdicional?.actaManifiesto || '',
+        sitioMatricula: sanitizeText(datosVenta?.vehiculoAdicional?.sitioMatricula) || existingDatosVenta.vehiculoAdicional?.sitioMatricula || '',
+        tipoServicio: sanitizeText(datosVenta?.vehiculoAdicional?.tipoServicio) || existingDatosVenta.vehiculoAdicional?.tipoServicio || 'PARTICULAR',
       },
       transaccion: {
-        lugarCelebracion: sanitizeText(datosVenta?.transaccion?.lugarCelebracion),
-        fechaCelebracion: normalizeDate(datosVenta?.transaccion?.fechaCelebracion),
-        precioLetras: sanitizeText(datosVenta?.transaccion?.precioLetras),
-        formaPago: sanitizeText(datosVenta?.transaccion?.formaPago),
-        vendedorAnterior: sanitizeText(datosVenta?.transaccion?.vendedorAnterior),
-        cedulaVendedorAnterior: sanitizeText(datosVenta?.transaccion?.cedulaVendedorAnterior),
-        diasTraspaso: normalizeNumber(datosVenta?.transaccion?.diasTraspaso, 30),
-        fechaEntrega: normalizeDate(datosVenta?.transaccion?.fechaEntrega),
-        horaEntrega: sanitizeText(datosVenta?.transaccion?.horaEntrega),
-        domicilioContractual: sanitizeText(datosVenta?.transaccion?.domicilioContractual),
-        clausulasAdicionales: sanitizeText(datosVenta?.transaccion?.clausulasAdicionales),
+        lugarCelebracion: sanitizeText(datosVenta?.transaccion?.lugarCelebracion) || existingDatosVenta.transaccion?.lugarCelebracion || '',
+        fechaCelebracion: normalizeDate(datosVenta?.transaccion?.fechaCelebracion) || existingDatosVenta.transaccion?.fechaCelebracion || new Date(),
+        precioLetras: sanitizeText(datosVenta?.transaccion?.precioLetras) || existingDatosVenta.transaccion?.precioLetras || '',
+        formaPago: sanitizeText(datosVenta?.transaccion?.formaPago) || existingDatosVenta.transaccion?.formaPago || '',
+        vendedorAnterior: sanitizeText(datosVenta?.transaccion?.vendedorAnterior) || existingDatosVenta.transaccion?.vendedorAnterior || '',
+        cedulaVendedorAnterior: sanitizeText(datosVenta?.transaccion?.cedulaVendedorAnterior) || existingDatosVenta.transaccion?.cedulaVendedorAnterior || '',
+        diasTraspaso: normalizeNumber(datosVenta?.transaccion?.diasTraspaso, existingDatosVenta.transaccion?.diasTraspaso || 30),
+        fechaEntrega: normalizeDate(datosVenta?.transaccion?.fechaEntrega) || existingDatosVenta.transaccion?.fechaEntrega || new Date(),
+        horaEntrega: sanitizeText(datosVenta?.transaccion?.horaEntrega) || existingDatosVenta.transaccion?.horaEntrega || '',
+        domicilioContractual: sanitizeText(datosVenta?.transaccion?.domicilioContractual) || existingDatosVenta.transaccion?.domicilioContractual || '',
+        clausulasAdicionales: sanitizeText(datosVenta?.transaccion?.clausulasAdicionales) || existingDatosVenta.transaccion?.clausulasAdicionales || '',
       },
     };
 
     // Actualizar datos de venta
     vehicle.datosVenta = sanitizedDatosVenta as any;
     vehicle.estado = 'vendido';
-    vehicle.fechaVenta = new Date();
+    
+    // Solo establecer fechaVenta si no existe (nueva venta), no al actualizar
+    if (!vehicle.fechaVenta) {
+      vehicle.fechaVenta = new Date();
+    }
 
     await vehicle.save();
 
