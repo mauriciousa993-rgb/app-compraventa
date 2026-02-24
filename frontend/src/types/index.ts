@@ -198,11 +198,21 @@ export interface Statistics {
   vehiculosListos: number;
   vehiculosPendientes: number;
   vehiculosVendidos: number;
+  // Valores del sistema (totales)
   valorInventario: number;
+  valorInventarioTotal?: number;
   totalGastos: number;
+  totalGastosSistema?: number;
   gananciasEstimadas: number;
+  gananciasEstimadasTotal?: number;
   gananciasReales: number;
+  gananciasRealesTotal?: number;
   vehiculosEnStock: number;
+  // Valores del inversionista
+  miInversion?: number;
+  misGastos?: number;
+  miUtilidadEstimada?: number;
+  miUtilidadReal?: number;
 }
 
 export interface VehicleFormData {
