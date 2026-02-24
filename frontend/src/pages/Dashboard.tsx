@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout/Layout';
 import { vehiclesAPI } from '../services/api';
 import { Statistics } from '../types';
+import { useAuth } from '../context/AuthContext';
 import {
   Car,
   CheckCircle,
@@ -11,12 +12,17 @@ import {
   TrendingUp,
   AlertTriangle,
   Package,
+  Users,
 } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [stats, setStats] = useState<Statistics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const isAdmin = user?.rol === 'admin';
+  const isInversionista = user?.rol === 'inversionista';
 
   useEffect(() => {
     loadStatistics();
@@ -96,7 +102,7 @@ const Dashboard: React.FC = () => {
       estado: 'vendido',
     },
     {
-      title: 'Valor Inventario',
+      title: isAdmin ? 'Valor Inventario' : 'Mi Inversión en Inventario',
       value: `$${(stats?.valorInventario || 0).toLocaleString('es-CO')}`,
       icon: Package,
       iconColor: 'text-[#83b3e5]',
@@ -104,7 +110,7 @@ const Dashboard: React.FC = () => {
       valueColor: 'text-white',
       clickable: false,
     },
-    {
+    ...(isAdmin ? [{
       title: 'Total de Gastos',
       value: `$${(stats?.totalGastos || 0).toLocaleString('es-CO')}`,
       icon: AlertTriangle,
@@ -112,9 +118,9 @@ const Dashboard: React.FC = () => {
       iconBg: 'bg-[#2c1b14]',
       valueColor: 'text-white',
       clickable: false,
-    },
+    }] : []),
     {
-      title: 'Ganancias Estimadas',
+      title: isAdmin ? 'Ganancias Estimadas' : 'Mi Utilidad Estimada',
       value: `$${(stats?.gananciasEstimadas || 0).toLocaleString('es-CO')}`,
       icon: DollarSign,
       iconColor: 'text-[#7be0aa]',
@@ -122,6 +128,15 @@ const Dashboard: React.FC = () => {
       valueColor: 'text-white',
       clickable: false,
     },
+    ...(isInversionista ? [{
+      title: 'Mi Participación',
+      value: user?.nombre || 'Inversionista',
+      icon: Users,
+      iconColor: 'text-[#f4c26b]',
+      iconBg: 'bg-[#2b2116]',
+      valueColor: 'text-white',
+      clickable: false,
+    }] : []),
   ];
 
   return (
@@ -218,22 +233,36 @@ const Dashboard: React.FC = () => {
           </div>
 
           <div className="card">
-            <h2 className="text-xl font-bold text-white mb-4">Resumen Financiero</h2>
+            <h2 className="text-xl font-bold text-white mb-4">
+              {isAdmin ? 'Resumen Financiero' : 'Mi Resumen de Inversión'}
+            </h2>
             <div className="space-y-4">
               <div className="flex items-center justify-between p-3 rounded-lg border border-[#31353d] bg-[#1a1d23]">
                 <span className="text-ink-200">Vehiculos en Stock</span>
                 <span className="font-bold text-white">{stats?.vehiculosEnStock || 0}</span>
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg border border-[#27354a] bg-[#121f2d]">
-                <span className="text-ink-200">Valor Total Inventario</span>
+                <span className="text-ink-200">
+                  {isAdmin ? 'Valor Total Inventario' : 'Mi Inversión Total'}
+                </span>
                 <span className="font-bold text-[#83b3e5]">${(stats?.valorInventario || 0).toLocaleString('es-CO')}</span>
               </div>
+              {isAdmin && (
+                <div className="flex items-center justify-between p-3 rounded-lg border border-[#2c1b14] bg-[#1a1512]">
+                  <span className="text-ink-200">Total de Gastos</span>
+                  <span className="font-bold text-[#ff8b4a]">${(stats?.totalGastos || 0).toLocaleString('es-CO')}</span>
+                </div>
+              )}
               <div className="flex items-center justify-between p-3 rounded-lg border border-[#214333] bg-[#10261d]">
-                <span className="text-ink-200">Ganancias Estimadas</span>
+                <span className="text-ink-200">
+                  {isAdmin ? 'Ganancias Estimadas' : 'Mi Utilidad Estimada'}
+                </span>
                 <span className="font-bold text-[#7be0aa]">${(stats?.gananciasEstimadas || 0).toLocaleString('es-CO')}</span>
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg border border-primary-800 bg-[#2b1215]">
-                <span className="text-ink-200">Ganancias Reales</span>
+                <span className="text-ink-200">
+                  {isAdmin ? 'Ganancias Reales' : 'Mi Utilidad Real'}
+                </span>
                 <span className="font-bold text-signal">${(stats?.gananciasReales || 0).toLocaleString('es-CO')}</span>
               </div>
             </div>

@@ -8,23 +8,21 @@ export interface IGastoInversionista {
 }
 
 export interface IInversionista {
-  usuario: mongoose.Types.ObjectId; // Referencia al usuario inversionista
+  usuario: mongoose.Types.ObjectId;
   nombre: string;
   montoInversion: number;
-  gastos: IGastoInversionista[]; // Array de gastos del inversionista
+  gastos: IGastoInversionista[];
   porcentajeParticipacion: number;
   utilidadCorrespondiente: number;
 }
 
 export interface IDatosVenta {
-  // Datos del vendedor
   vendedor: {
     nombre: string;
     identificacion: string;
     direccion: string;
     telefono: string;
   };
-  // Datos del comprador
   comprador: {
     nombre: string;
     identificacion: string;
@@ -32,7 +30,6 @@ export interface IDatosVenta {
     telefono: string;
     email: string;
   };
-  // Datos adicionales del vehículo
   vehiculoAdicional: {
     tipoCarroceria: string;
     capacidad: string;
@@ -43,7 +40,6 @@ export interface IDatosVenta {
     sitioMatricula: string;
     tipoServicio: string;
   };
-  // Datos de la transacción
   transaccion: {
     lugarCelebracion: string;
     fechaCelebracion: Date;
@@ -76,6 +72,9 @@ export interface IVehicleDocument extends Document {
   kilometraje: number;
   precioCompra: number;
   precioVenta: number;
+  fechaIngreso: Date;
+  fechaListoVenta?: Date;
+  fechaVenta?: Date;
   gastos: {
     pintura: number;
     mecanica: number;
@@ -98,354 +97,242 @@ export interface IVehicleDocument extends Document {
   inversionistas: IInversionista[];
   tieneInversionistas: boolean;
   estado: 'en_proceso' | 'listo_venta' | 'en_negociacion' | 'vendido' | 'retirado';
-  estadoTramite?: 'firma_documentos' | 'radicacion' | 'recepcion_tarjeta' | 'entrega_cliente' | 'completado';
-  documentacion: {
-    prenda: {
-      tiene: boolean;
-      detalles?: string;
-      verificado: boolean;
-    };
-    soat: {
-      tiene: boolean;
-      fechaVencimiento?: Date;
-      foto?: string;
-      verificado: boolean;
-    };
-    tecnomecanica: {
-      tiene: boolean;
-      fechaVencimiento?: Date;
-      foto?: string;
-      verificado: boolean;
-    };
-    tarjetaPropiedad: {
-      tiene: boolean;
-      foto?: string;
-      verificado: boolean;
-    };
-  };
-  checklist: {
-    revisionMecanica: boolean;
-    limpiezaDetailing: boolean;
-    fotografiasCompletas: boolean;
-    documentosCompletos: boolean;
-    precioEstablecido: boolean;
-  };
+  estadoTramite?: 'firma_documentos' | 'radicacion' | 'revision_documentos' | 'aprobado' | 'rechazado';
+  datosVenta?: IDatosVenta;
   fotos: {
     exteriores: string[];
     interiores: string[];
     detalles: string[];
     documentos: string[];
   };
-  observaciones: string;
-  pendientes: string[];
-  fechaIngreso: Date;
-  fechaVenta?: Date;
-  datosVenta?: IDatosVenta;
+  documentacion: {
+    soat: {
+      tiene: boolean;
+      fechaVencimiento?: Date;
+      detalles?: string;
+      verificado: boolean;
+    };
+    tecnomecanica: {
+      tiene: boolean;
+      fechaVencimiento?: Date;
+      detalles?: string;
+      verificado: boolean;
+    };
+    tarjetaPropiedad: {
+      tiene: boolean;
+      detalles?: string;
+      verificado: boolean;
+    };
+    prenda: {
+      tiene: boolean;
+      detalles?: string;
+    };
+  };
+  checklist: {
+    pintura: boolean;
+    mecanica: boolean;
+    alistamiento: boolean;
+    tapiceria: boolean;
+    limpieza: boolean;
+    papeles: boolean;
+  };
+  observaciones?: string;
   registradoPor: mongoose.Types.ObjectId;
 }
 
-const vehicleSchema = new Schema<IVehicleDocument>(
-  {
-    marca: {
-      type: String,
-      required: [true, 'La marca es requerida'],
-      trim: true,
+const gastoDetalleSchema = new Schema<IGastoDetalle>({
+  descripcion: { type: String, default: '' },
+  encargado: { type: String, default: '' },
+  fecha: { type: Date, default: Date.now },
+  monto: { type: Number, default: 0 },
+});
+
+const gastoInversionistaSchema = new Schema<IGastoInversionista>({
+  categoria: {
+    type: String,
+    enum: ['pintura', 'mecanica', 'traspaso', 'alistamiento', 'tapiceria', 'transporte', 'varios'],
+    required: true,
+  },
+  monto: { type: Number, required: true },
+  descripcion: { type: String, default: '' },
+  fecha: { type: Date, default: Date.now },
+});
+
+const inversionistaSchema = new Schema<IInversionista>({
+  usuario: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  nombre: { type: String, required: true },
+  montoInversion: { type: Number, required: true },
+  gastos: [gastoInversionistaSchema],
+  porcentajeParticipacion: { type: Number, default: 0 },
+  utilidadCorrespondiente: { type: Number, default: 0 },
+});
+
+const vehicleSchema = new Schema<IVehicleDocument>({
+  marca: { type: String, required: true },
+  modelo: { type: String, required: true },
+  año: { type: Number, required: true },
+  placa: { type: String, required: true, unique: true },
+  vin: { type: String, required: true, unique: true },
+  color: { type: String, required: true },
+  kilometraje: { type: Number, required: true },
+  precioCompra: { type: Number, required: true },
+  precioVenta: { type: Number, required: true },
+  fechaIngreso: { type: Date, default: Date.now },
+  fechaListoVenta: { type: Date },
+  fechaVenta: { type: Date },
+  gastos: {
+    pintura: { type: Number, default: 0 },
+    mecanica: { type: Number, default: 0 },
+    traspaso: { type: Number, default: 0 },
+    alistamiento: { type: Number, default: 0 },
+    tapiceria: { type: Number, default: 0 },
+    transporte: { type: Number, default: 0 },
+    varios: { type: Number, default: 0 },
+    total: { type: Number, default: 0 },
+  },
+  gastosDetallados: {
+    pintura: [gastoDetalleSchema],
+    mecanica: [gastoDetalleSchema],
+    traspaso: [gastoDetalleSchema],
+    alistamiento: [gastoDetalleSchema],
+    tapiceria: [gastoDetalleSchema],
+    transporte: [gastoDetalleSchema],
+    varios: [gastoDetalleSchema],
+  },
+  inversionistas: [inversionistaSchema],
+  tieneInversionistas: { type: Boolean, default: false },
+  estado: {
+    type: String,
+    enum: ['en_proceso', 'listo_venta', 'en_negociacion', 'vendido', 'retirado'],
+    default: 'en_proceso',
+  },
+  estadoTramite: {
+    type: String,
+    enum: ['firma_documentos', 'radicacion', 'revision_documentos', 'aprobado', 'rechazado'],
+  },
+  datosVenta: {
+    vendedor: {
+      nombre: { type: String, default: '' },
+      identificacion: { type: String, default: '' },
+      direccion: { type: String, default: '' },
+      telefono: { type: String, default: '' },
     },
-    modelo: {
-      type: String,
-      required: [true, 'El modelo es requerido'],
-      trim: true,
+    comprador: {
+      nombre: { type: String, default: '' },
+      identificacion: { type: String, default: '' },
+      direccion: { type: String, default: '' },
+      telefono: { type: String, default: '' },
+      email: { type: String, default: '' },
     },
-    año: {
-      type: Number,
-      required: [true, 'El año es requerido'],
-      min: [1900, 'El año debe ser mayor a 1900'],
-      max: [new Date().getFullYear() + 1, 'El año no puede ser futuro'],
+    vehiculoAdicional: {
+      tipoCarroceria: { type: String, default: '' },
+      capacidad: { type: String, default: '' },
+      numeroPuertas: { type: Number, default: 4 },
+      numeroMotor: { type: String, default: '' },
+      linea: { type: String, default: '' },
+      actaManifiesto: { type: String, default: '' },
+      sitioMatricula: { type: String, default: '' },
+      tipoServicio: { type: String, default: 'PARTICULAR' },
     },
-    placa: {
-      type: String,
-      required: [true, 'La placa es requerida'],
-      unique: true,
-      uppercase: true,
-      trim: true,
-    },
-    vin: {
-      type: String,
-      required: false,
-      sparse: true, // Permite múltiples documentos con vin vacío
-      uppercase: true,
-      trim: true,
-    },
-    color: {
-      type: String,
-      required: false,
-      trim: true,
-      default: '',
-    },
-    kilometraje: {
-      type: Number,
-      required: [true, 'El kilometraje es requerido'],
-      min: [0, 'El kilometraje no puede ser negativo'],
-    },
-    precioCompra: {
-      type: Number,
-      required: [true, 'El precio de compra es requerido'],
-      min: [0, 'El precio de compra no puede ser negativo'],
-    },
-    precioVenta: {
-      type: Number,
-      required: [true, 'El precio de venta es requerido'],
-      min: [0, 'El precio de venta no puede ser negativo'],
-    },
-    gastos: {
-      pintura: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
-      mecanica: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
-      traspaso: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
-      alistamiento: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
-      tapiceria: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
-      transporte: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
-      varios: { type: Number, default: 0, min: [0, 'Los gastos no pueden ser negativos'] },
-      total: { type: Number, default: 0 },
-    },
-    gastosDetallados: {
-      pintura: [{
-        descripcion: { type: String, default: '', trim: true },
-        encargado: { type: String, default: '', trim: true },
-        fecha: { type: Date },
-        monto: { type: Number, default: 0, min: [0, 'El monto no puede ser negativo'] }
-      }],
-      mecanica: [{
-        descripcion: { type: String, default: '', trim: true },
-        encargado: { type: String, default: '', trim: true },
-        fecha: { type: Date },
-        monto: { type: Number, default: 0, min: [0, 'El monto no puede ser negativo'] }
-      }],
-      traspaso: [{
-        descripcion: { type: String, default: '', trim: true },
-        encargado: { type: String, default: '', trim: true },
-        fecha: { type: Date },
-        monto: { type: Number, default: 0, min: [0, 'El monto no puede ser negativo'] }
-      }],
-      alistamiento: [{
-        descripcion: { type: String, default: '', trim: true },
-        encargado: { type: String, default: '', trim: true },
-        fecha: { type: Date },
-        monto: { type: Number, default: 0, min: [0, 'El monto no puede ser negativo'] }
-      }],
-      tapiceria: [{
-        descripcion: { type: String, default: '', trim: true },
-        encargado: { type: String, default: '', trim: true },
-        fecha: { type: Date },
-        monto: { type: Number, default: 0, min: [0, 'El monto no puede ser negativo'] }
-      }],
-      transporte: [{
-        descripcion: { type: String, default: '', trim: true },
-        encargado: { type: String, default: '', trim: true },
-        fecha: { type: Date },
-        monto: { type: Number, default: 0, min: [0, 'El monto no puede ser negativo'] }
-      }],
-      varios: [{
-        descripcion: { type: String, default: '', trim: true },
-        encargado: { type: String, default: '', trim: true },
-        fecha: { type: Date },
-        monto: { type: Number, default: 0, min: [0, 'El monto no puede ser negativo'] }
-      }]
-    },
-    inversionistas: [{
-      usuario: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-      nombre: { type: String, required: true, trim: true },
-      montoInversion: { type: Number, required: true, min: [0, 'El monto de inversión no puede ser negativo'] },
-      gastos: [{
-        categoria: { 
-          type: String, 
-          required: true,
-          enum: ['pintura', 'mecanica', 'traspaso', 'alistamiento', 'tapiceria', 'transporte', 'varios']
-        },
-        monto: { type: Number, required: true, min: [0, 'El monto no puede ser negativo'] },
-        descripcion: { type: String, default: '', trim: true },
-        fecha: { type: Date, default: Date.now }
-      }],
-      porcentajeParticipacion: { type: Number, default: 0, min: [0, 'El porcentaje no puede ser negativo'], max: [100, 'El porcentaje no puede ser mayor a 100'] },
-      utilidadCorrespondiente: { type: Number, default: 0 }
-    }],
-    tieneInversionistas: {
-      type: Boolean,
-      default: false,
-    },
-    estado: {
-      type: String,
-      enum: ['en_proceso', 'listo_venta', 'en_negociacion', 'vendido', 'retirado'],
-      default: 'en_proceso',
-    },
-    estadoTramite: {
-      type: String,
-      enum: ['firma_documentos', 'radicacion', 'recepcion_tarjeta', 'entrega_cliente', 'completado'],
-      required: false,
-    },
-    documentacion: {
-      prenda: {
-        tiene: { type: Boolean, default: false },
-        detalles: { type: String, default: '' },
-        verificado: { type: Boolean, default: false },
-      },
-      soat: {
-        tiene: { type: Boolean, default: false },
-        fechaVencimiento: { type: Date },
-        foto: { type: String, default: '' },
-        verificado: { type: Boolean, default: false },
-      },
-      tecnomecanica: {
-        tiene: { type: Boolean, default: false },
-        fechaVencimiento: { type: Date },
-        foto: { type: String, default: '' },
-        verificado: { type: Boolean, default: false },
-      },
-      tarjetaPropiedad: {
-        tiene: { type: Boolean, default: false },
-        foto: { type: String, default: '' },
-        verificado: { type: Boolean, default: false },
-      },
-    },
-    checklist: {
-      revisionMecanica: { type: Boolean, default: false },
-      limpiezaDetailing: { type: Boolean, default: false },
-      fotografiasCompletas: { type: Boolean, default: false },
-      documentosCompletos: { type: Boolean, default: false },
-      precioEstablecido: { type: Boolean, default: false },
-    },
-    fotos: {
-      exteriores: [{ type: String }],
-      interiores: [{ type: String }],
-      detalles: [{ type: String }],
-      documentos: [{ type: String }],
-    },
-    observaciones: {
-      type: String,
-      default: '',
-    },
-    pendientes: [{ type: String }],
-    fechaIngreso: {
-      type: Date,
-      default: Date.now,
-    },
-    fechaVenta: {
-      type: Date,
-    },
-    datosVenta: {
-      type: {
-        vendedor: {
-          nombre: { type: String, default: '', trim: true },
-          identificacion: { type: String, default: '', trim: true },
-          direccion: { type: String, default: '', trim: true },
-          telefono: { type: String, default: '', trim: true },
-        },
-        comprador: {
-          nombre: { type: String, default: '', trim: true },
-          identificacion: { type: String, default: '', trim: true },
-          direccion: { type: String, default: '', trim: true },
-          telefono: { type: String, default: '', trim: true },
-          email: { type: String, default: '', trim: true },
-        },
-        vehiculoAdicional: {
-          tipoCarroceria: { type: String, default: '', trim: true },
-          capacidad: { type: String, default: '', trim: true },
-          numeroPuertas: { type: Number, default: 4, min: 0 },
-          numeroMotor: { type: String, default: '', trim: true },
-          linea: { type: String, default: '', trim: true },
-          actaManifiesto: { type: String, default: '', trim: true },
-          sitioMatricula: { type: String, default: '', trim: true },
-          tipoServicio: { type: String, default: 'PARTICULAR', trim: true },
-        },
-        transaccion: {
-          lugarCelebracion: { type: String, default: '', trim: true },
-          fechaCelebracion: { type: Date, default: Date.now },
-          precioLetras: { type: String, default: '', trim: true },
-          formaPago: { type: String, default: '', trim: true },
-          vendedorAnterior: { type: String, default: '', trim: true },
-          cedulaVendedorAnterior: { type: String, default: '', trim: true },
-          diasTraspaso: { type: Number, default: 30, min: 1, max: 365 },
-          fechaEntrega: { type: Date, default: Date.now },
-          horaEntrega: { type: String, default: '', trim: true },
-          domicilioContractual: { type: String, default: '', trim: true },
-          clausulasAdicionales: { type: String, default: '', trim: true },
-        },
-      },
-      default: undefined,
-    },
-    registradoPor: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      required: true,
+    transaccion: {
+      lugarCelebracion: { type: String, default: '' },
+      fechaCelebracion: { type: Date, default: Date.now },
+      precioLetras: { type: String, default: '' },
+      formaPago: { type: String, default: '' },
+      vendedorAnterior: { type: String, default: '' },
+      cedulaVendedorAnterior: { type: String, default: '' },
+      diasTraspaso: { type: Number, default: 30 },
+      fechaEntrega: { type: Date, default: Date.now },
+      horaEntrega: { type: String, default: '' },
+      domicilioContractual: { type: String, default: '' },
+      clausulasAdicionales: { type: String, default: '' },
     },
   },
-  {
-    timestamps: true,
-  }
-);
+  fotos: {
+    exteriores: [{ type: String }],
+    interiores: [{ type: String }],
+    detalles: [{ type: String }],
+    documentos: [{ type: String }],
+  },
+  documentacion: {
+    soat: {
+      tiene: { type: Boolean, default: false },
+      fechaVencimiento: { type: Date },
+      detalles: { type: String, default: '' },
+      verificado: { type: Boolean, default: false },
+    },
+    tecnomecanica: {
+      tiene: { type: Boolean, default: false },
+      fechaVencimiento: { type: Date },
+      detalles: { type: String, default: '' },
+      verificado: { type: Boolean, default: false },
+    },
+    tarjetaPropiedad: {
+      tiene: { type: Boolean, default: false },
+      detalles: { type: String, default: '' },
+      verificado: { type: Boolean, default: false },
+    },
+    prenda: {
+      tiene: { type: Boolean, default: false },
+      detalles: { type: String, default: '' },
+    },
+  },
+  checklist: {
+    pintura: { type: Boolean, default: false },
+    mecanica: { type: Boolean, default: false },
+    alistamiento: { type: Boolean, default: false },
+    tapiceria: { type: Boolean, default: false },
+    limpieza: { type: Boolean, default: false },
+    papeles: { type: Boolean, default: false },
+  },
+  observaciones: { type: String, default: '' },
+  registradoPor: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+});
 
-// Índices para búsquedas rápidas
-vehicleSchema.index({ placa: 1 });
-vehicleSchema.index({ vin: 1 }, { sparse: true }); // Índice sparse para permitir valores vacíos
-vehicleSchema.index({ estado: 1 });
-vehicleSchema.index({ marca: 1, modelo: 1 });
-
-// Middleware para calcular total de gastos y distribución de inversionistas antes de guardar
+// Pre-save hook para calcular totales
 vehicleSchema.pre('save', function (next) {
-  // Calcular totales de gastos detallados
-  if (this.gastosDetallados) {
-    this.gastos.pintura = this.gastosDetallados.pintura?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0;
-    this.gastos.mecanica = this.gastosDetallados.mecanica?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0;
-    this.gastos.traspaso = this.gastosDetallados.traspaso?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0;
-    this.gastos.alistamiento = this.gastosDetallados.alistamiento?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0;
-    this.gastos.tapiceria = this.gastosDetallados.tapiceria?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0;
-    this.gastos.transporte = this.gastosDetallados.transporte?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0;
-    this.gastos.varios = this.gastosDetallados.varios?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0;
-  }
-  
-  // Calcular gastos generales - SUMAR todos los campos de gastos (incluye gastos detallados + gastos directos)
-  const gastosGenerales = 
-    (this.gastos.pintura || 0) + 
-    (this.gastos.mecanica || 0) + 
-    (this.gastos.traspaso || 0) + 
-    (this.gastos.alistamiento || 0) + 
-    (this.gastos.tapiceria || 0) + 
-    (this.gastos.transporte || 0) + 
+  // Calcular gastos generales
+  const gastosGenerales =
+    (this.gastos.pintura || 0) +
+    (this.gastos.mecanica || 0) +
+    (this.gastos.traspaso || 0) +
+    (this.gastos.alistamiento || 0) +
+    (this.gastos.tapiceria || 0) +
+    (this.gastos.transporte || 0) +
     (this.gastos.varios || 0);
-  
-  // Calcular gastos de inversionistas (suma de todos sus gastos individuales)
-  const gastosInversionistas = this.inversionistas && this.inversionistas.length > 0
-    ? this.inversionistas.reduce((sum, inv) => {
-        const totalGastosInv = inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0;
-        return sum + totalGastosInv;
-      }, 0)
-    : 0;
-  
+
+  // Calcular gastos de inversionistas
+  const gastosInversionistas = (this.inversionistas || []).reduce((sum: number, inv: any) => {
+    const totalInv = (inv.gastos || []).reduce((acc: number, g: any) => acc + (g.monto || 0), 0);
+    return sum + totalInv;
+  }, 0);
+
   // Calcular total de gastos (generales + inversionistas)
   this.gastos.total = gastosGenerales + gastosInversionistas;
-  
+
   // Calcular distribución de inversionistas si existen
   if (this.inversionistas && this.inversionistas.length > 0) {
     const totalInversion = this.inversionistas.reduce((sum, inv) => sum + inv.montoInversion, 0);
-    
+
     // Utilidad bruta (sin considerar gastos de inversionistas)
     const utilidadBruta = this.precioVenta - this.precioCompra - gastosGenerales;
-    
+
     // Utilidad neta a distribuir (después de restar gastos de inversionistas)
     const utilidadNeta = utilidadBruta - gastosInversionistas;
-    
-    this.inversionistas.forEach(inv => {
+
+    this.inversionistas.forEach((inv) => {
       // Calcular porcentaje de participación
       inv.porcentajeParticipacion = totalInversion > 0 ? (inv.montoInversion / totalInversion) * 100 : 0;
-      
+
       // Calcular total de gastos del inversionista
       const totalGastosInv = inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0;
-      
+
       // Utilidad correspondiente = (porcentaje × utilidad neta) + gastos del inversionista
       const utilidadPorParticipacion = (inv.porcentajeParticipacion / 100) * utilidadNeta;
       inv.utilidadCorrespondiente = utilidadPorParticipacion + totalGastosInv;
     });
   }
-  
+
   next();
 });
 
@@ -466,16 +353,37 @@ vehicleSchema.virtual('margenGanancia').get(function () {
   return ((this.precioVenta - costoTotal) / costoTotal) * 100;
 });
 
+// Método virtual para calcular días en proceso
+vehicleSchema.virtual('diasEnProceso').get(function () {
+  const fechaInicio = this.fechaIngreso;
+  const fechaFin = this.fechaListoVenta || new Date();
+  const diffTime = fechaFin.getTime() - fechaInicio.getTime();
+  return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+});
+
+// Método virtual para calcular días en vitrina
+vehicleSchema.virtual('diasEnVitrina').get(function () {
+  if (!this.fechaListoVenta) return 0;
+  const fechaInicio = this.fechaListoVenta;
+  const fechaFin = this.fechaVenta || new Date();
+  const diffTime = fechaFin.getTime() - fechaInicio.getTime();
+  return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+});
+
 // Método virtual para verificar si está listo para venta
 vehicleSchema.virtual('listoParaVenta').get(function () {
-  const checklistCompleto = Object.values(this.checklist).every(item => item === true);
-  const documentosCompletos = 
+  const checklistCompleto = Object.values(this.checklist).every((item) => item === true);
+  const documentosCompletos =
     this.documentacion.soat.verificado &&
     this.documentacion.tecnomecanica.verificado &&
     this.documentacion.tarjetaPropiedad.verificado &&
     !this.documentacion.prenda.tiene;
-  
+
   return checklistCompleto && documentosCompletos;
 });
+
+// Configurar para incluir virtuales en JSON
+vehicleSchema.set('toJSON', { virtuals: true });
+vehicleSchema.set('toObject', { virtuals: true });
 
 export default mongoose.model<IVehicleDocument>('Vehicle', vehicleSchema);

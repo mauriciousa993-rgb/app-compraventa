@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+
 import Vehicle, { IDatosVenta } from '../models/Vehicle';
 import { AuthRequest } from '../types';
 import ExcelJS from 'exceljs';
@@ -186,6 +187,14 @@ export const updateVehicle = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
+    // Detectar cambio de estado a 'listo_venta' y establecer fechaListoVenta
+    const nuevoEstado = req.body.estado;
+    const estadoAnterior = vehicle.estado;
+    
+    if (nuevoEstado === 'listo_venta' && estadoAnterior !== 'listo_venta') {
+      req.body.fechaListoVenta = new Date();
+    }
+
     // Usar save() para disparar hooks de mongoose (recalcula gastos.total e inversionistas)
     vehicle.set(req.body);
     await vehicle.save();
@@ -195,6 +204,7 @@ export const updateVehicle = async (req: AuthRequest, res: Response): Promise<vo
       message: 'Vehículo actualizado exitosamente',
       vehicle,
     });
+
   } catch (error: any) {
     console.error('Error al actualizar vehículo:', error);
     
@@ -578,16 +588,18 @@ export const exportVehicleReport = async (
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Detalle del Vehículo');
 
-    // Configurar ancho de columnas
+    // Configurar ancho de columnas - 4 columnas para mejor organización
     worksheet.columns = [
-      { width: 25 },
-      { width: 30 },
+      { width: 30 }, // A: Concepto/Descripción
+      { width: 40 }, // B: Detalle/Descripción adicional
+      { width: 20 }, // C: Valor/Monto
+      { width: 15 }, // D: Fecha/Extra
     ];
 
     // Título
-    worksheet.mergeCells('A1:B1');
+    worksheet.mergeCells('A1:D1');
     const titleCell = worksheet.getCell('A1');
-    titleCell.value = 'REPORTE DETALLADO DE VEHÍCULO';
+    titleCell.value = `REPORTE DETALLADO - ${vehicle.marca} ${vehicle.modelo} (${vehicle.placa})`;
     titleCell.font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
     titleCell.fill = {
       type: 'pattern',
@@ -601,7 +613,7 @@ export const exportVehicleReport = async (
 
     // Función helper para agregar sección
     const addSection = (title: string) => {
-      worksheet.mergeCells(`A${currentRow}:B${currentRow}`);
+      worksheet.mergeCells(`A${currentRow}:D${currentRow}`);
       const cell = worksheet.getCell(`A${currentRow}`);
       cell.value = title;
       cell.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
@@ -613,11 +625,12 @@ export const exportVehicleReport = async (
       currentRow++;
     };
 
-    // Función helper para agregar fila de datos
-    const addDataRow = (label: string, value: any) => {
+    // Función helper para agregar fila de datos simple
+    const addDataRow = (label: string, value: any, extra: string = '') => {
       worksheet.getCell(`A${currentRow}`).value = label;
       worksheet.getCell(`A${currentRow}`).font = { bold: true };
-      worksheet.getCell(`B${currentRow}`).value = value;
+      worksheet.getCell(`B${currentRow}`).value = extra;
+      worksheet.getCell(`C${currentRow}`).value = value;
       currentRow++;
     };
 
@@ -628,46 +641,7 @@ export const exportVehicleReport = async (
     addDataRow('Año', vehicle.año);
     addDataRow('Placa', vehicle.placa);
     addDataRow('Color', vehicle.color);
-    addDataRow('Kilometraje', vehicle.kilometraje.toLocaleString('es-CO'));
-    currentRow++;
-
-    // Información Financiera
-    addSection('INFORMACIÓN FINANCIERA');
-    addDataRow('Precio de Compra', `$${vehicle.precioCompra.toLocaleString('es-CO')}`);
-    addDataRow('Precio de Venta', `$${vehicle.precioVenta.toLocaleString('es-CO')}`);
-    currentRow++;
-
-    // Gastos
-    addSection('GASTOS');
-    addDataRow('Gastos en Pintura', `$${vehicle.gastos.pintura.toLocaleString('es-CO')}`);
-    addDataRow('Gastos en Mecánica', `$${vehicle.gastos.mecanica.toLocaleString('es-CO')}`);
-    addDataRow('Gastos de Traspaso', `$${vehicle.gastos.traspaso.toLocaleString('es-CO')}`);
-    addDataRow('Gastos de Alistamiento', `$${vehicle.gastos.alistamiento.toLocaleString('es-CO')}`);
-    addDataRow('Gastos de Tapicería', `$${vehicle.gastos.tapiceria.toLocaleString('es-CO')}`);
-    addDataRow('Gastos de Transporte', `$${vehicle.gastos.transporte.toLocaleString('es-CO')}`);
-    addDataRow('Gastos Varios', `$${vehicle.gastos.varios.toLocaleString('es-CO')}`);
-    addDataRow('TOTAL GASTOS', `$${vehicle.gastos.total.toLocaleString('es-CO')}`);
-    worksheet.getCell(`A${currentRow - 1}`).font = { bold: true, color: { argb: 'FFFF0000' } };
-    worksheet.getCell(`B${currentRow - 1}`).font = { bold: true, color: { argb: 'FFFF0000' } };
-    currentRow++;
-
-    // Resumen Financiero
-    addSection('RESUMEN FINANCIERO');
-    const costoTotal = vehicle.precioCompra + vehicle.gastos.total;
-    const utilidad = vehicle.precioVenta - costoTotal;
-    const margen = costoTotal > 0 ? ((utilidad / costoTotal) * 100).toFixed(2) : '0';
-
-    addDataRow('Costo Total (Compra + Gastos)', `$${costoTotal.toLocaleString('es-CO')}`);
-    addDataRow('Precio de Venta', `$${vehicle.precioVenta.toLocaleString('es-CO')}`);
-    addDataRow('UTILIDAD', `$${utilidad.toLocaleString('es-CO')}`);
-    addDataRow('Margen de Ganancia', `${margen}%`);
-    
-    worksheet.getCell(`A${currentRow - 2}`).font = { bold: true, size: 12, color: { argb: utilidad >= 0 ? 'FF00B050' : 'FFFF0000' } };
-    worksheet.getCell(`B${currentRow - 2}`).font = { bold: true, size: 12, color: { argb: utilidad >= 0 ? 'FF00B050' : 'FFFF0000' } };
-    currentRow++;
-
-    // Estado y Fechas
-    addSection('ESTADO Y FECHAS');
+    addDataRow('Kilometraje', vehicle.kilometraje.toLocaleString('es-CO') + ' km');
     addDataRow('Estado', vehicle.estado.replace('_', ' ').toUpperCase());
     addDataRow('Fecha de Ingreso', vehicle.fechaIngreso.toLocaleDateString('es-CO'));
     if (vehicle.fechaVenta) {
@@ -675,85 +649,93 @@ export const exportVehicleReport = async (
     }
     currentRow++;
 
-    // Documentación
-    addSection('DOCUMENTACIÓN');
-    addDataRow('Prenda', vehicle.documentacion.prenda.tiene ? 'SÍ' : 'NO');
-    if (vehicle.documentacion.prenda.tiene && vehicle.documentacion.prenda.detalles) {
-      addDataRow('Detalles Prenda', vehicle.documentacion.prenda.detalles);
-    }
-    addDataRow('SOAT', vehicle.documentacion.soat.tiene ? 'SÍ' : 'NO');
-    if (vehicle.documentacion.soat.fechaVencimiento) {
-      addDataRow('Vencimiento SOAT', new Date(vehicle.documentacion.soat.fechaVencimiento).toLocaleDateString('es-CO'));
-    }
-    addDataRow('Tecnomecánica', vehicle.documentacion.tecnomecanica.tiene ? 'SÍ' : 'NO');
-    if (vehicle.documentacion.tecnomecanica.fechaVencimiento) {
-      addDataRow('Vencimiento Tecnomecánica', new Date(vehicle.documentacion.tecnomecanica.fechaVencimiento).toLocaleDateString('es-CO'));
-    }
-    addDataRow('Tarjeta de Propiedad', vehicle.documentacion.tarjetaPropiedad.tiene ? 'SÍ' : 'NO');
+    // Información Financiera - Resumen
+    addSection('RESUMEN FINANCIERO');
+    const costoTotal = vehicle.precioCompra + vehicle.gastos.total;
+    const utilidad = vehicle.precioVenta - costoTotal;
+    const margen = costoTotal > 0 ? ((utilidad / costoTotal) * 100).toFixed(2) : '0';
+
+    addDataRow('Precio de Compra', `$${vehicle.precioCompra.toLocaleString('es-CO')}`);
+    addDataRow('Total de Gastos', `$${vehicle.gastos.total.toLocaleString('es-CO')}`);
+    addDataRow('COSTO TOTAL', `$${costoTotal.toLocaleString('es-CO')}`, 'Compra + Gastos');
+    worksheet.getCell(`A${currentRow - 1}`).font = { bold: true, color: { argb: 'FF0070C0' } };
+    worksheet.getCell(`C${currentRow - 1}`).font = { bold: true, color: { argb: 'FF0070C0' } };
+    
+    addDataRow('Precio de Venta', `$${vehicle.precioVenta.toLocaleString('es-CO')}`);
+    addDataRow('UTILIDAD', `$${utilidad.toLocaleString('es-CO')}`, `${margen}% margen`);
+    worksheet.getCell(`A${currentRow - 1}`).font = { bold: true, size: 12, color: { argb: utilidad >= 0 ? 'FF00B050' : 'FFFF0000' } };
+    worksheet.getCell(`C${currentRow - 1}`).font = { bold: true, size: 12, color: { argb: utilidad >= 0 ? 'FF00B050' : 'FFFF0000' } };
     currentRow++;
 
-    // Inversionistas
+    // Tabla de Gastos Detallados
+    addSection('DETALLE DE GASTOS');
+    
+    // Encabezados de tabla
+    const headers = ['Categoría', 'Descripción', 'Monto', 'Fecha'];
+    headers.forEach((header, index) => {
+      const col = String.fromCharCode(65 + index); // A, B, C, D
+      const cell = worksheet.getCell(`${col}${currentRow}`);
+      cell.value = header;
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4472C4' },
+      };
+      cell.alignment = { horizontal: 'center' };
+    });
+    currentRow++;
+
+    // Función para agregar gastos de una categoría
+    const addGastoRows = (categoria: string, gastos: any[]) => {
+      if (!gastos || gastos.length === 0) return;
+      
+      gastos.forEach((gasto, index) => {
+        worksheet.getCell(`A${currentRow}`).value = index === 0 ? categoria : '';
+        worksheet.getCell(`B${currentRow}`).value = gasto.descripcion || 'Sin descripción';
+        worksheet.getCell(`C${currentRow}`).value = gasto.monto || 0;
+        worksheet.getCell(`C${currentRow}`).numFmt = '"$"#,##0';
+        worksheet.getCell(`D${currentRow}`).value = gasto.fecha ? new Date(gasto.fecha).toLocaleDateString('es-CO') : '';
+        
+        // Color alternado para mejor lectura
+        if (index % 2 === 1) {
+          ['A', 'B', 'C', 'D'].forEach(col => {
+            worksheet.getCell(`${col}${currentRow}`).fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFF2F2F2' },
+            };
+          });
+        }
+        currentRow++;
+      });
+    };
+
+    // Agregar todos los gastos detallados
+    if (vehicle.gastosDetallados) {
+      addGastoRows('Pintura', vehicle.gastosDetallados.pintura);
+      addGastoRows('Mecánica', vehicle.gastosDetallados.mecanica);
+      addGastoRows('Traspaso', vehicle.gastosDetallados.traspaso);
+      addGastoRows('Alistamiento', vehicle.gastosDetallados.alistamiento);
+      addGastoRows('Tapicería', vehicle.gastosDetallados.tapiceria);
+      addGastoRows('Transporte', vehicle.gastosDetallados.transporte);
+      addGastoRows('Varios', vehicle.gastosDetallados.varios);
+    }
+
+    // Fila de total de gastos
+    worksheet.getCell(`A${currentRow}`).value = 'TOTAL GASTOS';
+    worksheet.getCell(`A${currentRow}`).font = { bold: true, color: { argb: 'FFFF0000' } };
+    worksheet.mergeCells(`A${currentRow}:B${currentRow}`);
+    worksheet.getCell(`C${currentRow}`).value = vehicle.gastos.total;
+    worksheet.getCell(`C${currentRow}`).numFmt = '"$"#,##0';
+    worksheet.getCell(`C${currentRow}`).font = { bold: true, color: { argb: 'FFFF0000' } };
+    currentRow += 2;
+
+
+    // Inversionistas - Tabla mejorada
     if (vehicle.inversionistas && vehicle.inversionistas.length > 0) {
       addSection('INVERSIONISTAS Y DISTRIBUCIÓN DE UTILIDADES');
       
-      // Encabezados de la tabla de inversionistas
-      worksheet.getCell(`A${currentRow}`).value = 'Nombre';
-      worksheet.getCell(`A${currentRow}`).font = { bold: true };
-      worksheet.getCell(`A${currentRow}`).fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFE7E6E6' },
-      };
-      
-      worksheet.getCell(`B${currentRow}`).value = 'Monto Inversión';
-      worksheet.getCell(`B${currentRow}`).font = { bold: true };
-      worksheet.getCell(`B${currentRow}`).fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFE7E6E6' },
-      };
-      currentRow++;
-
-      worksheet.getCell(`A${currentRow}`).value = '';
-      worksheet.getCell(`B${currentRow}`).value = 'Retorno de Gastos';
-      worksheet.getCell(`B${currentRow}`).font = { bold: true };
-      worksheet.getCell(`B${currentRow}`).fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFFFC000' }, // Naranja
-      };
-      currentRow++;
-
-      worksheet.getCell(`A${currentRow}`).value = '';
-      worksheet.getCell(`B${currentRow}`).value = 'Participación %';
-      worksheet.getCell(`B${currentRow}`).font = { bold: true };
-      worksheet.getCell(`B${currentRow}`).fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFE7E6E6' },
-      };
-      currentRow++;
-
-      worksheet.getCell(`A${currentRow}`).value = '';
-      worksheet.getCell(`B${currentRow}`).value = 'Utilidad Neta';
-      worksheet.getCell(`B${currentRow}`).font = { bold: true };
-      worksheet.getCell(`B${currentRow}`).fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF92D050' }, // Verde
-      };
-      currentRow++;
-
-      worksheet.getCell(`A${currentRow}`).value = '';
-      worksheet.getCell(`B${currentRow}`).value = 'Total a Recibir';
-      worksheet.getCell(`B${currentRow}`).font = { bold: true };
-      worksheet.getCell(`B${currentRow}`).fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFB4A7D6' }, // Morado
-      };
-      currentRow++;
-
       // Calcular totales
       const totalInversion = vehicle.inversionistas.reduce((sum, inv) => sum + inv.montoInversion, 0);
       const totalGastosInv = vehicle.inversionistas.reduce((sum, inv) => {
@@ -772,100 +754,133 @@ export const exportVehicleReport = async (
       // Utilidad neta a distribuir (después de restar gastos de inversionistas)
       const utilidadNeta = utilidadBruta - totalGastosInv;
 
+      // Encabezados de tabla de inversionistas
+      const invHeaders = ['Inversionista', 'Inversión', 'Gastos', 'Participación', 'Utilidad', 'Total a Recibir'];
+      invHeaders.forEach((header, index) => {
+        const col = String.fromCharCode(65 + index);
+        const cell = worksheet.getCell(`${col}${currentRow}`);
+        cell.value = header;
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF7030A0' },
+        };
+        cell.alignment = { horizontal: 'center' };
+      });
+      currentRow++;
+
       // Datos de cada inversionista
       vehicle.inversionistas.forEach((inv, index) => {
         const porcentaje = totalInversion > 0 ? (inv.montoInversion / totalInversion) * 100 : 0;
         const gastosInv = inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0;
-        
-        // Utilidad neta del inversionista (sin incluir gastos)
         const utilidadNetaInv = (porcentaje / 100) * utilidadNeta;
-        
-        // Total a recibir (utilidad neta + retorno de gastos)
         const totalARecibir = utilidadNetaInv + gastosInv;
 
-        // Nombre
         worksheet.getCell(`A${currentRow}`).value = inv.nombre;
         worksheet.getCell(`B${currentRow}`).value = inv.montoInversion;
         worksheet.getCell(`B${currentRow}`).numFmt = '"$"#,##0';
-        currentRow++;
+        worksheet.getCell(`C${currentRow}`).value = gastosInv;
+        worksheet.getCell(`C${currentRow}`).numFmt = '"$"#,##0';
+        worksheet.getCell(`D${currentRow}`).value = porcentaje / 100;
+        worksheet.getCell(`D${currentRow}`).numFmt = '0.00"%"';
+        worksheet.getCell(`E${currentRow}`).value = utilidadNetaInv;
+        worksheet.getCell(`E${currentRow}`).numFmt = '"$"#,##0';
+        worksheet.getCell(`F${currentRow}`).value = totalARecibir;
+        worksheet.getCell(`F${currentRow}`).numFmt = '"$"#,##0';
+        worksheet.getCell(`F${currentRow}`).font = { bold: true };
 
-        // Retorno de Gastos
-        worksheet.getCell(`A${currentRow}`).value = '';
-        worksheet.getCell(`B${currentRow}`).value = gastosInv;
-        worksheet.getCell(`B${currentRow}`).numFmt = '"$"#,##0';
-        worksheet.getCell(`B${currentRow}`).font = { bold: true, color: { argb: 'FFFF6600' } };
-        currentRow++;
-
-        // Detalles de gastos (si existen)
-        if (inv.gastos && inv.gastos.length > 0) {
-          worksheet.getCell(`A${currentRow}`).value = '  Detalles:';
-          worksheet.getCell(`A${currentRow}`).font = { italic: true, size: 9 };
-          const detallesGastos = inv.gastos.map(g => `${g.categoria}: $${g.monto.toLocaleString('es-CO')}${g.descripcion ? ` (${g.descripcion})` : ''}`).join(', ');
-          worksheet.getCell(`B${currentRow}`).value = detallesGastos;
-          worksheet.getCell(`B${currentRow}`).font = { italic: true, size: 9 };
-          worksheet.getCell(`B${currentRow}`).alignment = { wrapText: true };
-          currentRow++;
+        // Color alternado
+        if (index % 2 === 1) {
+          ['A', 'B', 'C', 'D', 'E', 'F'].forEach(col => {
+            worksheet.getCell(`${col}${currentRow}`).fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFF2F2F2' },
+            };
+          });
         }
-
-        // Participación
-        worksheet.getCell(`A${currentRow}`).value = '';
-        worksheet.getCell(`B${currentRow}`).value = porcentaje;
-        worksheet.getCell(`B${currentRow}`).numFmt = '0.00"%"';
-        worksheet.getCell(`B${currentRow}`).font = { color: { argb: 'FF0070C0' } };
         currentRow++;
-
-        // Utilidad Neta (sin incluir gastos)
-        worksheet.getCell(`A${currentRow}`).value = '';
-        worksheet.getCell(`B${currentRow}`).value = utilidadNetaInv;
-        worksheet.getCell(`B${currentRow}`).numFmt = '"$"#,##0';
-        worksheet.getCell(`B${currentRow}`).font = { bold: true, color: { argb: utilidadNetaInv >= 0 ? 'FF00B050' : 'FFFF0000' } };
-        currentRow++;
-
-        // Total a Recibir (Utilidad Neta + Retorno de Gastos)
-        worksheet.getCell(`A${currentRow}`).value = '';
-        worksheet.getCell(`B${currentRow}`).value = totalARecibir;
-        worksheet.getCell(`B${currentRow}`).numFmt = '"$"#,##0';
-        worksheet.getCell(`B${currentRow}`).font = { bold: true, size: 11, color: { argb: 'FF7030A0' } };
-        currentRow++;
-
-        if (index < vehicle.inversionistas.length - 1) {
-          currentRow++; // Espacio entre inversionistas
-        }
       });
 
-      currentRow++;
+      // Fila de totales
+      worksheet.getCell(`A${currentRow}`).value = 'TOTALES';
+      worksheet.getCell(`A${currentRow}`).font = { bold: true };
+      worksheet.getCell(`B${currentRow}`).value = totalInversion;
+      worksheet.getCell(`B${currentRow}`).numFmt = '"$"#,##0';
+      worksheet.getCell(`B${currentRow}`).font = { bold: true };
+      worksheet.getCell(`C${currentRow}`).value = totalGastosInv;
+      worksheet.getCell(`C${currentRow}`).numFmt = '"$"#,##0';
+      worksheet.getCell(`C${currentRow}`).font = { bold: true };
+      worksheet.getCell(`D${currentRow}`).value = 1;
+      worksheet.getCell(`D${currentRow}`).numFmt = '0.00"%"';
+      worksheet.getCell(`E${currentRow}`).value = utilidadNeta;
+      worksheet.getCell(`E${currentRow}`).numFmt = '"$"#,##0';
+      worksheet.getCell(`E${currentRow}`).font = { bold: true, color: { argb: utilidadNeta >= 0 ? 'FF00B050' : 'FFFF0000' } };
+      currentRow += 2;
 
-      // Resumen de inversiones
-      worksheet.mergeCells(`A${currentRow}:B${currentRow}`);
-      const resumenCell = worksheet.getCell(`A${currentRow}`);
-      resumenCell.value = 'RESUMEN DE INVERSIONES';
-      resumenCell.font = { bold: true, size: 11 };
-      resumenCell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFD9D9D9' },
-      };
-      currentRow++;
-
-      addDataRow('Total Invertido', `$${totalInversion.toLocaleString('es-CO')}`);
-      addDataRow('Total Gastos Inversionistas', `$${totalGastosInv.toLocaleString('es-CO')}`);
-      addDataRow('Número de Socios', vehicle.inversionistas.length);
-      addDataRow('Utilidad Bruta', `$${utilidadBruta.toLocaleString('es-CO')}`);
-      addDataRow('Utilidad Neta a Distribuir', `$${utilidadNeta.toLocaleString('es-CO')}`);
+      // Detalle de gastos por inversionista
+      addSection('DETALLE DE GASTOS POR INVERSIONISTA');
       
-      worksheet.getCell(`B${currentRow - 1}`).font = { bold: true, color: { argb: utilidadNeta >= 0 ? 'FF00B050' : 'FFFF0000' } };
+      const gastoHeaders = ['Inversionista', 'Categoría', 'Descripción', 'Monto', 'Fecha'];
+      gastoHeaders.forEach((header, index) => {
+        const col = String.fromCharCode(65 + index);
+        const cell = worksheet.getCell(`${col}${currentRow}`);
+        cell.value = header;
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFF6600' },
+        };
+      });
+      currentRow++;
+
+      vehicle.inversionistas.forEach((inv) => {
+        if (inv.gastos && inv.gastos.length > 0) {
+          inv.gastos.forEach((gasto, gIndex) => {
+            worksheet.getCell(`A${currentRow}`).value = inv.nombre;
+            worksheet.getCell(`B${currentRow}`).value = gasto.categoria;
+            worksheet.getCell(`C${currentRow}`).value = gasto.descripcion || 'Sin descripción';
+            worksheet.getCell(`D${currentRow}`).value = gasto.monto;
+            worksheet.getCell(`D${currentRow}`).numFmt = '"$"#,##0';
+            worksheet.getCell(`E${currentRow}`).value = gasto.fecha ? new Date(gasto.fecha).toLocaleDateString('es-CO') : '';
+            
+            if (gIndex % 2 === 1) {
+              ['A', 'B', 'C', 'D', 'E'].forEach(col => {
+                worksheet.getCell(`${col}${currentRow}`).fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FFF2F2F2' },
+                };
+              });
+            }
+            currentRow++;
+          });
+        }
+      });
       currentRow++;
     }
+
+
+    // Documentación
+    addSection('DOCUMENTACIÓN');
+    addDataRow('Prenda', vehicle.documentacion.prenda.tiene ? 'SÍ' : 'NO', vehicle.documentacion.prenda.detalles || '');
+    addDataRow('SOAT', vehicle.documentacion.soat.tiene ? 'SÍ' : 'NO', vehicle.documentacion.soat.fechaVencimiento ? 'Vence: ' + new Date(vehicle.documentacion.soat.fechaVencimiento).toLocaleDateString('es-CO') : '');
+    addDataRow('Tecnomecánica', vehicle.documentacion.tecnomecanica.tiene ? 'SÍ' : 'NO', vehicle.documentacion.tecnomecanica.fechaVencimiento ? 'Vence: ' + new Date(vehicle.documentacion.tecnomecanica.fechaVencimiento).toLocaleDateString('es-CO') : '');
+    addDataRow('Tarjeta de Propiedad', vehicle.documentacion.tarjetaPropiedad.tiene ? 'SÍ' : 'NO', '');
+    currentRow++;
 
     // Observaciones
     if (vehicle.observaciones) {
       addSection('OBSERVACIONES');
-      worksheet.mergeCells(`A${currentRow}:B${currentRow + 2}`);
+      worksheet.mergeCells(`A${currentRow}:D${currentRow + 2}`);
       const obsCell = worksheet.getCell(`A${currentRow}`);
       obsCell.value = vehicle.observaciones;
       obsCell.alignment = { wrapText: true, vertical: 'top' };
       currentRow += 3;
     }
+
 
     // Generar archivo
     const fileName = `vehiculo-${vehicle.placa}-${Date.now()}.xlsx`;
@@ -1164,6 +1179,7 @@ export const exportExpensesTemplate = async (
     res.status(500).json({ message: 'Error al exportar plantilla de gastos', error: error.message });
   }
 };
+
 
 // Obtener reportes mensuales de ventas y gastos
 export const getMonthlyReports = async (

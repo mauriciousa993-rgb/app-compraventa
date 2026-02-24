@@ -2,7 +2,7 @@ export interface User {
   id: string;
   nombre: string;
   email: string;
-  rol: 'admin' | 'vendedor' | 'visualizador';
+  rol: 'admin' | 'vendedor' | 'visualizador' | 'inversionista';
   activo: boolean;
 }
 
@@ -182,6 +182,7 @@ export interface Vehicle {
   pendientes: string[];
   fechaIngreso: string;
   fechaVenta?: string;
+  fechaListoVenta?: string;
   datosVenta?: DatosVenta;
   registradoPor: {
     _id: string;

@@ -1,4 +1,4 @@
-﻿﻿import React, { useState, useEffect } from 'react';
+﻿﻿﻿﻿import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search, Car, Edit, Trash2, FileDown, X, ChevronDown, ChevronUp, FileText, DollarSign, Edit2 } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
@@ -407,19 +407,36 @@ const VehicleList: React.FC = () => {
                         <span className={`text-xs px-2 py-1 rounded-full font-medium ${
                           vehicle.estado === 'vendido' 
                             ? 'bg-[#311418] text-primary-300 border border-primary-700/60' 
-                            : 'bg-[#1a2129] text-silver border border-[#4d5663]'
+                            : vehicle.estado === 'en_proceso'
+                              ? 'bg-[#2b2116] text-[#f4c26b] border border-[#7e6642]'
+                              : 'bg-[#1a2129] text-silver border border-[#4d5663]'
                         }`}>
                           {(() => {
-                            const fechaIngreso = new Date(vehicle.fechaIngreso);
+                            // Vehículos en proceso: tiempo desde fechaIngreso hasta ahora
+                            if (vehicle.estado === 'en_proceso') {
+                              const fechaIngreso = new Date(vehicle.fechaIngreso);
+                              const fechaFinal = new Date();
+                              const diasEnProceso = Math.floor((fechaFinal.getTime() - fechaIngreso.getTime()) / (1000 * 60 * 60 * 24));
+                              return `${diasEnProceso} día${diasEnProceso !== 1 ? 's' : ''} en proceso`;
+                            }
+                            
+                            // Vehículos listos para venta, en negociación o vendidos: tiempo en vitrina
+                            // Usar fechaListoVenta si está disponible, si no, usar fechaIngreso
+                            const fechaInicioVitrina = vehicle.fechaListoVenta 
+                              ? new Date(vehicle.fechaListoVenta) 
+                              : new Date(vehicle.fechaIngreso);
                             const fechaFinal = vehicle.estado === 'vendido' && vehicle.fechaVenta 
                               ? new Date(vehicle.fechaVenta) 
                               : new Date();
-                            const diasEnVitrina = Math.floor((fechaFinal.getTime() - fechaIngreso.getTime()) / (1000 * 60 * 60 * 24));
-                            return vehicle.estado === 'vendido'
-                              ? `${diasEnVitrina} día${diasEnVitrina !== 1 ? 's' : ''} en inventario`
-                              : `${diasEnVitrina} día${diasEnVitrina !== 1 ? 's' : ''} en vitrina`;
+                            const diasEnVitrina = Math.floor((fechaFinal.getTime() - fechaInicioVitrina.getTime()) / (1000 * 60 * 60 * 24));
+                            
+                            if (vehicle.estado === 'vendido') {
+                              return `${diasEnVitrina} día${diasEnVitrina !== 1 ? 's' : ''} en vitrina`;
+                            }
+                            return `${diasEnVitrina} día${diasEnVitrina !== 1 ? 's' : ''} en vitrina`;
                           })()}
                         </span>
+
                       </div>
                       <p className="text-sm text-ink-200">
                         {vehicle.año} • <span className="font-medium">{vehicle.placa}</span>
