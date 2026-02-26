@@ -18,7 +18,7 @@ const getAPIURL = (): string => {
 
   // Fallback para Vercel cuando no hay variable configurada
   if (window.location.hostname.includes('vercel.app')) {
-    const fallbackApi = 'https://compraventa-backend.onrender.com/api';
+    const fallbackApi = 'https://app-compraventa.onrender.com/api';
     console.log('🌍 URL de API (fallback Vercel):', fallbackApi);
     return fallbackApi;
   }
