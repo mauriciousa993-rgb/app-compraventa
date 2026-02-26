@@ -172,7 +172,7 @@ const vehicleSchema = new Schema<IVehicleDocument>({
   modelo: { type: String, required: true },
   año: { type: Number, required: true },
   placa: { type: String, required: true, unique: true },
-  vin: { type: String, required: true, unique: true },
+  vin: { type: String, required: false, unique: true },
   color: { type: String, required: true },
   kilometraje: { type: Number, required: true },
   precioCompra: { type: Number, required: true },
