@@ -355,8 +355,10 @@ vehicleSchema.virtual('margenGanancia').get(function () {
 
 // Método virtual para calcular días en proceso
 vehicleSchema.virtual('diasEnProceso').get(function () {
+  if (!this.fechaIngreso) return 0;
   const fechaInicio = this.fechaIngreso;
   const fechaFin = this.fechaListoVenta || new Date();
+  if (!fechaInicio || !fechaFin) return 0;
   const diffTime = fechaFin.getTime() - fechaInicio.getTime();
   return Math.floor(diffTime / (1000 * 60 * 60 * 24));
 });
@@ -366,6 +368,7 @@ vehicleSchema.virtual('diasEnVitrina').get(function () {
   if (!this.fechaListoVenta) return 0;
   const fechaInicio = this.fechaListoVenta;
   const fechaFin = this.fechaVenta || new Date();
+  if (!fechaInicio || !fechaFin) return 0;
   const diffTime = fechaFin.getTime() - fechaInicio.getTime();
   return Math.floor(diffTime / (1000 * 60 * 60 * 24));
 });
