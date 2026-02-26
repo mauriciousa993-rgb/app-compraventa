@@ -183,8 +183,8 @@ export const updateVehicle = async (req: AuthRequest, res: Response): Promise<vo
       req.body.fechaListoVenta = new Date();
     }
 
-    // Usar findByIdAndUpdate con lean() para evitar validaciones problemáticas
-    // Solo actualizamos los campos que vienen en el body
+    // Usar una aproximación mixta: actualizar con findByIdAndUpdate pero mantener el documento
+    // para campos complejos que requieren el hook pre-save
     const updateFields: any = { ...req.body };
     
     // Eliminar campos problemáticos del update
@@ -199,15 +199,31 @@ export const updateVehicle = async (req: AuthRequest, res: Response): Promise<vo
     if (updateFields.precioVenta === '') updateFields.precioVenta = 0;
     if (updateFields.año === '') updateFields.año = 0;
 
-    const updatedVehicle = await Vehicle.findByIdAndUpdate(
-      id,
-      { $set: updateFields },
-      { new: true, runValidators: false }
-    ).populate('registradoPor', 'nombre email');
+    // Actualizar directamente los campos simples y luego guardar para los complejos
+    for (const [key, value] of Object.entries(updateFields)) {
+      // Campos que necesitan manejo especial (arrays y objetos anidados)
+      if (key === 'fotos' || key === 'gastos' || key === 'gastosDetallados' || 
+          key === 'inversionistas' || key === 'datosVenta' || key === 'documentacion' || 
+          key === 'checklist') {
+        // Para objetos/arrays complejos, usamos el método set del documento
+        if (value !== undefined) {
+          (vehicle as any)[key] = value;
+        }
+      } else {
+        // Para campos simples, actualizamos directamente
+        if (value !== undefined) {
+          (vehicle as any)[key] = value;
+        }
+      }
+    }
+
+    // Guardar el documento para que funcione el hook pre-save de gastos
+    await vehicle.save();
+    await vehicle.populate('registradoPor', 'nombre email');
 
     res.json({
       message: 'Vehículo actualizado exitosamente',
-      vehicle: updatedVehicle,
+      vehicle,
     });
 
   } catch (error: any) {
