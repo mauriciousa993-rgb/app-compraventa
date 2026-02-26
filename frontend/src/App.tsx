@@ -1,6 +1,8 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { useNotifications } from './hooks/useNotifications';
+import { PWAInstallButton } from './components/PWAInstallButton';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import VehicleList from './pages/VehicleList';
@@ -110,10 +112,18 @@ function AppRoutes() {
 }
 
 function App() {
+  const { showInstallButton, permission, installPWA, requestPermission } = useNotifications();
+
   return (
     <BrowserRouter>
       <AuthProvider>
         <AppRoutes />
+        <PWAInstallButton
+          showInstall={showInstallButton}
+          permission={permission}
+          onInstall={installPWA}
+          onRequestPermission={requestPermission}
+        />
       </AuthProvider>
     </BrowserRouter>
   );
