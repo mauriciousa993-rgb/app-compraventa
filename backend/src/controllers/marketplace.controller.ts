@@ -24,6 +24,7 @@ export const getMarketplaceVehicles = async (req: AuthRequest, res: Response): P
       const v = vehicle.toObject();
       return {
         ...v,
+        anio: v.año,
         fotos: {
           exteriores: (v.fotos?.exteriores || []).map(normalizePhotoPath),
           interiores: (v.fotos?.interiores || []).map(normalizePhotoPath),
