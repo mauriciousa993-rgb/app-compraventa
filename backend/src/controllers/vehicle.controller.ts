@@ -183,20 +183,41 @@ export const updateVehicle = async (req: AuthRequest, res: Response): Promise<vo
       req.body.fechaListoVenta = new Date();
     }
 
-    vehicle.set(req.body);
-    await vehicle.save();
-    await vehicle.populate('registradoPor', 'nombre email');
+    // Usar findByIdAndUpdate con lean() para evitar validaciones problemáticas
+    // Solo actualizamos los campos que vienen en el body
+    const updateFields: any = { ...req.body };
+    
+    // Eliminar campos problemáticos del update
+    delete updateFields._id;
+    delete updateFields.registradoPor;
+    delete updateFields.createdAt;
+    delete updateFields.updatedAt;
+    
+    // Convertir campos numéricos que vengan como string vacío
+    if (updateFields.kilometraje === '') updateFields.kilometraje = 0;
+    if (updateFields.precioCompra === '') updateFields.precioCompra = 0;
+    if (updateFields.precioVenta === '') updateFields.precioVenta = 0;
+    if (updateFields.año === '') updateFields.año = 0;
+
+    const updatedVehicle = await Vehicle.findByIdAndUpdate(
+      id,
+      { $set: updateFields },
+      { new: true, runValidators: false }
+    ).populate('registradoPor', 'nombre email');
 
     res.json({
       message: 'Vehículo actualizado exitosamente',
-      vehicle,
+      vehicle: updatedVehicle,
     });
 
   } catch (error: any) {
     console.error('Error al actualizar vehículo:', error);
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
     
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map((err: any) => err.message);
+      console.error('Validation errors:', errors);
       res.status(400).json({ 
         message: 'Error de validación', 
         errors: errors,
