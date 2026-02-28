@@ -41,20 +41,12 @@ const getPhotoFileName = (photoPath: string): string => {
 export const buildVehiclePhotoUrl = (photoPath?: string): string => {
   if (!photoPath) return '';
 
+  // Si ya es una URL absoluta (Cloudinary, etc.), devolverla directamente
   if (photoPath.startsWith('http://') || photoPath.startsWith('https://')) {
-    try {
-      const parsed = new URL(photoPath);
-      if (parsed.pathname.includes('/api/vehicles/photo/')) {
-        return photoPath;
-      }
-      const fileNameFromAbsolute = getPhotoFileName(parsed.pathname);
-      if (!fileNameFromAbsolute) return photoPath;
-      return `${API_URL}/vehicles/photo/${encodeURIComponent(fileNameFromAbsolute)}`;
-    } catch {
-      return photoPath;
-    }
+    return photoPath;
   }
 
+  // Si es una ruta local
   const fileName = getPhotoFileName(photoPath);
   if (!fileName) return '';
 
