@@ -56,6 +56,11 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
       domicilioContractual: '',
       clausulasAdicionales: '',
     },
+    comision: {
+      monto: 0,
+      porcentaje: 0,
+      descripcion: '',
+    },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -106,6 +111,18 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
       ...formData,
       transaccion: { ...formData.transaccion, [field]: value },
     });
+  };
+
+  const updateComision = (field: string, value: string | number) => {
+    setFormData({
+      ...formData,
+      comision: { ...formData.comision, [field]: value },
+    });
+  };
+
+  // Función para calcular monto de comisión basado en porcentaje
+  const calcularMontoComision = (porcentaje: number, precioVenta: number) => {
+    return (porcentaje / 100) * precioVenta;
   };
 
   if (!isOpen) return null;
@@ -186,6 +203,68 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
                 />
               </div>
             </div>
+          </div>
+
+          {/* COMISIÓN DEL VENDEDOR */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
+              Comisión del Vendedor
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Monto de Comisión ($)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1000"
+                  value={formData.comision.monto}
+                  onChange={(e) => updateComision('monto', parseFloat(e.target.value) || 0)}
+                  className="input"
+                  placeholder="Ej: 500000"
+                />
+                <p className="text-xs text-gray-500 mt-1">Monto fijo a pagar al vendedor</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Porcentaje de Comisión (%)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value={formData.comision.porcentaje}
+                  onChange={(e) => updateComision('porcentaje', parseFloat(e.target.value) || 0)}
+                  className="input"
+                  placeholder="Ej: 5"
+                />
+                <p className="text-xs text-gray-500 mt-1">% del precio de venta</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Descripción
+                </label>
+                <input
+                  type="text"
+                  value={formData.comision.descripcion}
+                  onChange={(e) => updateComision('descripcion', e.target.value)}
+                  className="input"
+                  placeholder="Ej: Comisión por cierre de venta"
+                />
+                <p className="text-xs text-gray-500 mt-1">Concepto o nota adicional</p>
+              </div>
+            </div>
+            {/* Mostrar cálculo automático si hay porcentaje */}
+            {formData.comision.porcentaje > 0 && (
+              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Nota:</strong> Si ingresa tanto monto como porcentaje, se utilizará el monto fijo. 
+                  El porcentaje es solo referencial para cálculo automático.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* DATOS DEL COMPRADOR */}

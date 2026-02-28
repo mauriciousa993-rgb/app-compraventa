@@ -105,6 +105,12 @@ export interface DatosVenta {
     domicilioContractual: string;
     clausulasAdicionales: string;
   };
+  // Campos de comisión del vendedor
+  comision: {
+    monto: number;
+    porcentaje: number;
+    descripcion: string;
+  };
 }
 
 export interface Vehicle {

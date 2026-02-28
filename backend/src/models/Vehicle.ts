@@ -53,6 +53,12 @@ export interface IDatosVenta {
     domicilioContractual: string;
     clausulasAdicionales: string;
   };
+  // Campos de comisión del vendedor
+  comision: {
+    monto: number;
+    porcentaje: number;
+    descripcion: string;
+  };
 }
 
 export interface IGastoDetalle {
@@ -246,6 +252,12 @@ const vehicleSchema = new Schema<IVehicleDocument>({
       horaEntrega: { type: String, default: '' },
       domicilioContractual: { type: String, default: '' },
       clausulasAdicionales: { type: String, default: '' },
+    },
+    // Campos de comisión del vendedor
+    comision: {
+      monto: { type: Number, default: 0 },
+      porcentaje: { type: Number, default: 0 },
+      descripcion: { type: String, default: '' },
     },
   },
   fotos: {

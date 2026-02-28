@@ -518,6 +518,20 @@ const VehicleList: React.FC = () => {
                             {formatCurrency(utilidad)}
                           </span>
                         </div>
+                        {/* Mostrar comisión si existe */}
+                        {vehicle.datosVenta?.comision && (vehicle.datosVenta.comision.monto > 0 || vehicle.datosVenta.comision.porcentaje > 0) && (
+                          <div className="flex justify-between text-sm pt-2 border-t">
+                            <span className="text-ink-200 font-semibold">Comisión Vendedor:</span>
+                            <span className="font-semibold text-purple-600">
+                              {formatCurrency(vehicle.datosVenta.comision.monto)}
+                              {vehicle.datosVenta.comision.porcentaje > 0 && (
+                                <span className="text-xs text-purple-500 ml-1">
+                                  ({vehicle.datosVenta.comision.porcentaje}%)
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        )}
                         <div className="flex justify-between text-sm">
                           <span className="text-ink-200 font-semibold">Margen de Ganancia:</span>
                           <span className={`font-semibold ${

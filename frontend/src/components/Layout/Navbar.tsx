@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LogOut, User, BarChart3, Menu, X, Store, Receipt, Bell, Search } from 'lucide-react';
+import { LogOut, User, BarChart3, Menu, X, Store, Receipt, Bell, Search, DollarSign } from 'lucide-react';
 import autoTechLogo from '../../assets/autotech-logo.png';
 import { vehiclesAPI } from '../../services/api';
 
@@ -112,6 +112,10 @@ const Navbar: React.FC = () => {
               <Receipt className="h-4 w-4 text-primary-400" />
               <span>Gastos Fijos</span>
             </Link>
+            <Link to="/commissions" className={`${navLinkClass} flex items-center space-x-1`}>
+              <DollarSign className="h-4 w-4 text-primary-400" />
+              <span>Comisiones</span>
+            </Link>
             {user?.rol === 'admin' && (
               <Link to="/users" className={navLinkClass}>
                 Usuarios
@@ -211,6 +215,14 @@ const Navbar: React.FC = () => {
               >
                 <Receipt className="h-4 w-4 text-primary-400" />
                 <span>Gastos Fijos</span>
+              </Link>
+              <Link
+                to="/commissions"
+                onClick={closeMobileMenu}
+                className="text-ink-100 hover:text-white transition-colors py-2 px-4 hover:bg-[#23252a] rounded-lg flex items-center space-x-2"
+              >
+                <DollarSign className="h-4 w-4 text-primary-400" />
+                <span>Comisiones</span>
               </Link>
               {user?.rol === 'admin' && (
                 <Link

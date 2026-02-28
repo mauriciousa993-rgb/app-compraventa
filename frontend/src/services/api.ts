@@ -286,4 +286,92 @@ export const fixedExpensesAPI = {
   },
 };
 
+// Commission Liquidation API
+export interface VentaComision {
+  placa: string;
+  vehiculo: string;
+  precioVenta: number;
+  fechaVenta: Date;
+  comision: number;
+  porcentaje: number;
+  descripcion: string;
+  liquidada: boolean;
+  fechaLiquidacion?: Date;
+}
+
+export interface ResumenComisiones {
+  vendedor: string;
+  totalComisiones: number;
+  cantidadVentas: number;
+  comisionesPagadas: number;
+  comisionesPendientes: number;
+  ventas: VentaComision[];
+  liquidado: boolean;
+  liquidacionId?: string;
+}
+
+export interface LiquidacionComision {
+  _id: string;
+  vendedor: string;
+  mes: number;
+  año: number;
+  totalComisiones: number;
+  comisionesPendientes: number;
+  comisionesPagadas: number;
+  estado: 'pendiente' | 'parcial' | 'liquidado';
+  notas: string;
+  Liquidaciones: {
+    placa: string;
+    comision: number;
+    liquidada: boolean;
+    fechaLiquidacion?: Date;
+  }[];
+}
+
+export const commissionsAPI = {
+  getResumen: async (año?: number, mes?: number) => {
+    const params = new URLSearchParams();
+    if (año) params.append('año', año.toString());
+    if (mes) params.append('mes', mes.toString());
+    const response = await api.get<ResumenComisiones[]>('/commissions/resumen', { params });
+    return response.data;
+  },
+
+  getVendedores: async (año?: number) => {
+    const params = new URLSearchParams();
+    if (año) params.append('año', año.toString());
+    const response = await api.get<string[]>('/commissions/vendedores', { params });
+    return response.data;
+  },
+
+  getAll: async (params?: { año?: number; mes?: number; vendedor?: string }) => {
+    const response = await api.get<LiquidacionComision[]>('/commissions', { params });
+    return response.data;
+  },
+
+  getById: async (id: string) => {
+    const response = await api.get<LiquidacionComision>(`/commissions/${id}`);
+    return response.data;
+  },
+
+  create: async (data: {
+    vendedor: string;
+    mes: number;
+    año: number;
+    Liquidaciones: { placa: string; comision: number; fechaVenta?: Date; liquidada: boolean }[];
+    notas?: string;
+  }) => {
+    const response = await api.post<LiquidacionComision>('/commissions', data);
+    return response.data;
+  },
+
+  liquidar: async (liquidacionId: string, placa: string) => {
+    const response = await api.post<LiquidacionComision>('/commissions/liquidar', {
+      liquidacionId,
+      placa,
+    });
+    return response.data;
+  },
+};
+
 export default api;

@@ -13,6 +13,7 @@ import Marketplace from './pages/Marketplace';
 import FixedExpenses from './pages/FixedExpenses';
 import Notifications from './pages/Notifications';
 import ConsultaTramite from './pages/ConsultaTramite';
+import CommissionLiquidation from './pages/CommissionLiquidation';
 
 // Componente para proteger rutas
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -103,6 +104,14 @@ function AppRoutes() {
         element={
           <PrivateRoute>
             <UserManagement />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/commissions"
+        element={
+          <PrivateRoute>
+            <CommissionLiquidation />
           </PrivateRoute>
         }
       />

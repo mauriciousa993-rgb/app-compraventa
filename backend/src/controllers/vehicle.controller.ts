@@ -519,12 +519,16 @@ export const exportToExcel = async (req: AuthRequest, res: Response): Promise<vo
       { header: 'Kilometraje', key: 'kilometraje', width: 12 },
       { header: 'Precio Compra', key: 'precioCompra', width: 15 },
       { header: 'Precio Venta', key: 'precioVenta', width: 15 },
-      { header: 'Ganancia', key: 'ganancia', width: 15 },
+      { header: 'Gastos Totales', key: 'gastosTotales', width: 15 },
+      { header: 'Comisión', key: 'comision', width: 15 },
+      { header: 'Ganancia Neta', key: 'gananciaNeta', width: 15 },
       { header: 'Estado', key: 'estado', width: 15 },
       { header: 'SOAT', key: 'soat', width: 12 },
       { header: 'Tecnomecánica', key: 'tecnomecanica', width: 15 },
       { header: 'Prenda', key: 'prenda', width: 10 },
       { header: 'Fecha Ingreso', key: 'fechaIngreso', width: 15 },
+      { header: 'Fecha Venta', key: 'fechaVenta', width: 15 },
+      { header: 'Vendedor', key: 'vendedor', width: 20 },
       { header: 'Registrado Por', key: 'registradoPor', width: 20 },
     ];
 
@@ -537,29 +541,54 @@ export const exportToExcel = async (req: AuthRequest, res: Response): Promise<vo
     worksheet.getRow(1).font = { color: { argb: 'FFFFFFFF' }, bold: true };
 
     vehicles.forEach((vehicle) => {
+      // Calcular gastos totales (generales + inversionistas)
+      const gastosGenerales =
+        (vehicle.gastos?.pintura || 0) +
+        (vehicle.gastos?.mecanica || 0) +
+        (vehicle.gastos?.traspaso || 0) +
+        (vehicle.gastos?.alistamiento || 0) +
+        (vehicle.gastos?.tapiceria || 0) +
+        (vehicle.gastos?.transporte || 0) +
+        (vehicle.gastos?.varios || 0);
+      
+      const gastosInversionistas = (vehicle.inversionistas || []).reduce((sum: number, inv: any) => {
+        const totalInv = (inv.gastos || []).reduce((acc: number, g: any) => acc + (g.monto || 0), 0);
+        return sum + totalInv;
+      }, 0);
+      
+      const gastosTotales = gastosGenerales + gastosInversionistas;
+      const comisionVendedor = vehicle.datosVenta?.comision?.monto || 0;
+      const gananciaNeta = vehicle.precioVenta - vehicle.precioCompra - gastosTotales - comisionVendedor;
+      
       worksheet.addRow({
         placa: vehicle.placa,
         marca: vehicle.marca,
         modelo: vehicle.modelo,
         año: vehicle.año,
         color: vehicle.color,
-        vin: vehicle.vin,
+        vin: vehicle.vin || '',
         kilometraje: vehicle.kilometraje,
         precioCompra: vehicle.precioCompra,
         precioVenta: vehicle.precioVenta,
-        ganancia: vehicle.precioVenta - vehicle.precioCompra,
+        gastosTotales: gastosTotales,
+        comision: comisionVendedor,
+        gananciaNeta: gananciaNeta,
         estado: vehicle.estado.replace('_', ' ').toUpperCase(),
-        soat: vehicle.documentacion.soat.tiene ? 'Sí' : 'No',
-        tecnomecanica: vehicle.documentacion.tecnomecanica.tiene ? 'Sí' : 'No',
-        prenda: vehicle.documentacion.prenda.tiene ? 'Sí' : 'No',
-        fechaIngreso: vehicle.fechaIngreso.toLocaleDateString('es-CO'),
-        registradoPor: (vehicle.registradoPor as any).nombre || 'N/A',
+        soat: vehicle.documentacion?.soat?.tiene ? 'Sí' : 'No',
+        tecnomecanica: vehicle.documentacion?.tecnomecanica?.tiene ? 'Sí' : 'No',
+        prenda: vehicle.documentacion?.prenda?.tiene ? 'Sí' : 'No',
+        fechaIngreso: vehicle.fechaIngreso ? new Date(vehicle.fechaIngreso).toLocaleDateString('es-CO') : '',
+        fechaVenta: vehicle.fechaVenta ? new Date(vehicle.fechaVenta).toLocaleDateString('es-CO') : '',
+        vendedor: vehicle.datosVenta?.vendedor?.nombre || '',
+        registradoPor: (vehicle.registradoPor as any)?.nombre || 'N/A',
       });
     });
 
     worksheet.getColumn('precioCompra').numFmt = '"$"#,##0.00';
     worksheet.getColumn('precioVenta').numFmt = '"$"#,##0.00';
-    worksheet.getColumn('ganancia').numFmt = '"$"#,##0.00';
+    worksheet.getColumn('gastosTotales').numFmt = '"$"#,##0.00';
+    worksheet.getColumn('comision').numFmt = '"$"#,##0.00';
+    worksheet.getColumn('gananciaNeta').numFmt = '"$"#,##0.00';
 
     const fileName = `inventario-vehiculos-${Date.now()}.xlsx`;
     const filePath = path.join(ensureUploadsDir(), fileName);
