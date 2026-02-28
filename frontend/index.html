@@ -12,23 +12,27 @@
     <title>Compraventa de Vehiculos - Sistema de Gestion</title>
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/autotech-logo.png" />
-    <!-- REDEPLOY_TRIGGER: 2026-02-28-sw-cache-fix -->
+    <!-- REDEPLOY_TRIGGER: 2026-02-28-sw-hard-disable -->
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker
-            .register('/sw.js', { updateViaCache: 'none' })
-            .then((registration) => {
-              registration.update();
-              console.log('SW registrado:', registration.scope);
-            })
-            .catch((error) => {
-              console.log('SW registro fallo:', error);
-            });
+        window.addEventListener('load', async () => {
+          try {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map((registration) => registration.unregister()));
+
+            if ('caches' in window) {
+              const cacheNames = await caches.keys();
+              await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
+            }
+
+            console.log('Service Worker desactivado y cache limpiada');
+          } catch (error) {
+            console.log('No se pudo limpiar Service Worker/cache:', error);
+          }
         });
       }
     </script>
