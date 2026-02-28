@@ -2,15 +2,7 @@ import { Request, Response } from 'express';
 import Vehicle from '../models/Vehicle';
 import { LiquidacionComision, ILiquidacionComision } from '../models/LiquidacionComision';
 import mongoose from 'mongoose';
-
-interface AuthRequest extends Request {
-  user?: {
-    _id: mongoose.Types.ObjectId;
-    nombre: string;
-    email: string;
-    rol: string;
-  };
-}
+import { AuthRequest } from '../types';
 
 // Obtener todas las liquidaciones con filtros opcionales
 export const getAllLiquidaciones = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -163,7 +155,7 @@ export const getVendedoresConComisiones = async (req: AuthRequest, res: Response
 export const createOrUpdateLiquidacion = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { vendedor, mes, año, Liquidaciones, notas } = req.body;
-    const userId = req.user?._id;
+    const userId = req.user?.userId;
 
     if (!vendedor || !mes || !año) {
       res.status(400).json({ message: 'Faltan datos requeridos' });
