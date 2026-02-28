@@ -6,6 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import PDFDocument from 'pdfkit';
 import { ensureUploadsDir, getPhotoFileName, getUploadsDir } from '../utils/uploads';
+import { isUsingCloudinary } from '../middleware/upload.middleware';
 
 const calculateVehicleTotalExpenses = (vehicle: any): number => {
   const gastos = vehicle.gastos || {};
@@ -295,6 +296,14 @@ export const deleteVehicle = async (req: AuthRequest, res: Response): Promise<vo
 export const getVehiclePhoto = async (req: Request, res: Response): Promise<void> => {
   try {
     const fileName = getPhotoFileName(req.params.filename || '');
+    
+    // Verificar si es una URL de Cloudinary
+    if (fileName.startsWith('https://res.cloudinary.com/') || fileName.startsWith('http://res.cloudinary.com/')) {
+      // Redireccionar a la URL de Cloudinary
+      res.redirect(fileName);
+      return;
+    }
+    
     if (!fileName) {
       res.status(404).json({ message: 'Foto no encontrada' });
       return;
@@ -581,24 +590,34 @@ export const uploadPhotos = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
-    const files = (req.files || []) as Array<{ filename: string }>;
-    const fileNames = files.map((file) => file.filename);
+    const files = (req.files || []) as Array<{ filename?: string; path?: string }>;
+    const useCloudinary = isUsingCloudinary();
+
+    // Obtener las URLs de las fotos (de Cloudinary o nombre de archivo local)
+    let fileUrls: string[];
+    if (useCloudinary) {
+      // Cloudinary devuelve la URL en 'path'
+      fileUrls = files.map((file) => file.path as string);
+    } else {
+      // Almacenamiento local guarda solo el nombre de archivo
+      fileUrls = files.map((file) => file.filename as string);
+    }
 
     if (tipo === 'exteriores') {
-      vehicle.fotos.exteriores.push(...fileNames);
+      vehicle.fotos.exteriores.push(...fileUrls);
     } else if (tipo === 'interiores') {
-      vehicle.fotos.interiores.push(...fileNames);
+      vehicle.fotos.interiores.push(...fileUrls);
     } else if (tipo === 'detalles') {
-      vehicle.fotos.detalles.push(...fileNames);
+      vehicle.fotos.detalles.push(...fileUrls);
     } else if (tipo === 'documentos') {
-      vehicle.fotos.documentos.push(...fileNames);
+      vehicle.fotos.documentos.push(...fileUrls);
     }
 
     await vehicle.save();
 
     res.json({
       message: 'Fotos subidas exitosamente',
-      fotos: fileNames,
+      fotos: fileUrls,
     });
   } catch (error: any) {
     res.status(500).json({ message: 'Error al subir fotos', error: error.message });

@@ -1,12 +1,13 @@
 import multer from 'multer';
 import path from 'path';
-import { ensureUploadsDir } from '../utils/uploads';
+import { ensureUploadsDir, getUploadsDir } from '../utils/uploads';
+import { cloudinaryStorage, isCloudinaryConfigured } from '../config/cloudinary';
 
-// Crear directorio de uploads si no existe
+// Crear directorio de uploads si no existe (solo para almacenamiento local)
 const uploadDir = ensureUploadsDir();
 
-// Configuración de almacenamiento
-const storage = multer.diskStorage({
+// Configuración de almacenamiento local
+const localStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadDir);
   },
@@ -30,9 +31,17 @@ const fileFilter = (req: any, file: any, cb: any) => {
   }
 };
 
+// Seleccionar el almacenamiento según la configuración
+const getStorage = () => {
+  if (isCloudinaryConfigured()) {
+    return cloudinaryStorage;
+  }
+  return localStorage;
+};
+
 // Configuración de multer
 export const upload = multer({
-  storage: storage,
+  storage: getStorage(),
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB máximo
   },
@@ -44,3 +53,6 @@ export const uploadMultiple = upload.array('fotos', 20); // Máximo 20 fotos
 
 // Middleware para un solo archivo
 export const uploadSingle = upload.single('foto');
+
+// Exportar función para verificar si se usa Cloudinary
+export const isUsingCloudinary = () => isCloudinaryConfigured();
