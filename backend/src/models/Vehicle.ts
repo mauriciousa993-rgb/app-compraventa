@@ -16,6 +16,19 @@ export interface IInversionista {
   utilidadCorrespondiente: number;
 }
 
+export interface IDatosSeparacion {
+  cliente: {
+    nombre: string;
+    identificacion: string;
+    direccion: string;
+    telefono: string;
+    email: string;
+  };
+  valorSeparacion: number;
+  fechaSeparacion: Date;
+  notas?: string;
+}
+
 export interface IDatosVenta {
   vendedor: {
     nombre: string;
@@ -102,9 +115,10 @@ export interface IVehicleDocument extends Document {
   };
   inversionistas: IInversionista[];
   tieneInversionistas: boolean;
-  estado: 'en_proceso' | 'listo_venta' | 'en_negociacion' | 'vendido' | 'retirado';
+  estado: 'en_proceso' | 'listo_venta' | 'en_negociacion' | 'separado' | 'vendido' | 'retirado';
   estadoTramite?: 'firma_documentos' | 'radicacion' | 'revision_documentos' | 'aprobado' | 'rechazado';
   datosVenta?: IDatosVenta;
+  datosSeparacion?: IDatosSeparacion;
   fotos: {
     exteriores: string[];
     interiores: string[];
@@ -209,7 +223,7 @@ const vehicleSchema = new Schema<IVehicleDocument>({
   tieneInversionistas: { type: Boolean, default: false },
   estado: {
     type: String,
-    enum: ['en_proceso', 'listo_venta', 'en_negociacion', 'vendido', 'retirado'],
+    enum: ['en_proceso', 'listo_venta', 'en_negociacion', 'separado', 'vendido', 'retirado'],
     default: 'en_proceso',
   },
   estadoTramite: {
@@ -259,6 +273,18 @@ const vehicleSchema = new Schema<IVehicleDocument>({
       porcentaje: { type: Number, default: 0 },
       descripcion: { type: String, default: '' },
     },
+  },
+  datosSeparacion: {
+    cliente: {
+      nombre: { type: String, default: '' },
+      identificacion: { type: String, default: '' },
+      direccion: { type: String, default: '' },
+      telefono: { type: String, default: '' },
+      email: { type: String, default: '' },
+    },
+    valorSeparacion: { type: Number, default: 0 },
+    fechaSeparacion: { type: Date },
+    notas: { type: String, default: '' },
   },
   fotos: {
     exteriores: [{ type: String }],

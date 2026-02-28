@@ -3,8 +3,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search, Car, Edit, Trash2, FileDown, X, ChevronDown, ChevronUp, FileText, DollarSign, Edit2 } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
 import api from '../services/api';
-import { Vehicle, DatosVenta } from '../types';
+import { Vehicle, DatosVenta, DatosSeparacion } from '../types';
 import SaleDataModal from '../components/SaleDataModal';
+import SeparationModal from '../components/SeparationModal';
 import { vehiclesAPI } from '../services/api';
 
 const VehicleList: React.FC = () => {
@@ -17,6 +18,7 @@ const VehicleList: React.FC = () => {
   const [filterEstado, setFilterEstado] = useState('todos');
   const [expandedVehicles, setExpandedVehicles] = useState<Set<string>>(new Set());
   const [saleModalOpen, setSaleModalOpen] = useState(false);
+  const [separationModalOpen, setSeparationModalOpen] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
 
   useEffect(() => {
@@ -187,13 +189,56 @@ const VehicleList: React.FC = () => {
     }
   };
 
+  const handleOpenSeparationModal = (vehicle: Vehicle) => {
+    setSelectedVehicle(vehicle);
+    setSeparationModalOpen(true);
+  };
+
+  const handleSaveSeparationData = async (data: DatosSeparacion) => {
+    if (!selectedVehicle) return;
+
+    try {
+      if (selectedVehicle.estado === 'separado' && selectedVehicle.datosSeparacion) {
+        await vehiclesAPI.updateSeparationData(selectedVehicle._id, data);
+        alert('Datos de separación actualizados exitosamente.');
+      } else {
+        await vehiclesAPI.saveSeparationData(selectedVehicle._id, data);
+        alert('Vehículo separado exitosamente. El cliente ha separado este vehículo.');
+      }
+
+      setSeparationModalOpen(false);
+      setSelectedVehicle(null);
+      loadVehicles();
+    } catch (error: any) {
+      console.error('Error al guardar datos de separación:', error);
+      
+      let errorMessage = 'Error al guardar los datos de separación';
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.errors) {
+        errorMessage = `Error de validación:\n${error.response.data.errors.join('\n')}`;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      alert(errorMessage);
+    }
+  };
+
+  const handleEditSeparationData = (vehicle: Vehicle) => {
+    setSelectedVehicle(vehicle);
+    setSeparationModalOpen(true);
+  };
+
   const getEstadoBadge = (estado: string) => {
     const badges: Record<string, { class: string; text: string }> = {
       en_proceso: { class: 'badge-warning', text: 'En Proceso' },
       listo_venta: { class: 'badge-success', text: 'Listo para Venta' },
       en_negociacion: { class: 'badge-info', text: 'En Negociación' },
+      separado: { class: 'badge-warning', text: 'Separado' },
       vendido: { class: 'badge-gray', text: 'Vendido' },
-      retrasado: { class: 'badge-danger', text: 'Retrasado' }
+      retrasado: { class: 'badge-danger', text: 'Retirado' }
     };
     const badge = badges[estado] || badges.en_proceso;
     return <span className={`badge ${badge.class}`}>{badge.text}</span>;
@@ -724,19 +769,58 @@ const VehicleList: React.FC = () => {
 
                     {/* Acciones */}
                     <div className="flex flex-wrap justify-end gap-2 pt-2 border-t">
-                      {/* Botones para vehículos NO vendidos */}
+                      {/* Botones para vehículos NO vendidos ni separados */}
 
-                      {vehicle.estado !== 'vendido' && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenSaleModal(vehicle);
-                          }}
-                          className="px-4 py-2 text-sm bg-primary-500 text-white hover:bg-primary-400 rounded-lg transition-colors border border-primary-400 flex items-center gap-2"
-                        >
-                          <DollarSign className="h-4 w-4" />
-                          Vender Vehículo
-                        </button>
+                      {vehicle.estado !== 'vendido' && vehicle.estado !== 'separado' && (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenSeparationModal(vehicle);
+                            }}
+                            className="px-4 py-2 text-sm bg-amber-500 text-white hover:bg-amber-400 rounded-lg transition-colors border border-amber-400 flex items-center gap-2"
+                          >
+                            <DollarSign className="h-4 w-4" />
+                            Separar Vehículo
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenSaleModal(vehicle);
+                            }}
+                            className="px-4 py-2 text-sm bg-primary-500 text-white hover:bg-primary-400 rounded-lg transition-colors border border-primary-400 flex items-center gap-2"
+                          >
+                            <DollarSign className="h-4 w-4" />
+                            Vender Vehículo
+                          </button>
+                        </>
+                      )}
+
+                      {/* Botones para vehículos separados */}
+
+                      {vehicle.estado === 'separado' && (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditSeparationData(vehicle);
+                            }}
+                            className="px-4 py-2 text-sm bg-amber-600 text-white hover:bg-amber-500 rounded-lg transition-colors border border-amber-500 flex items-center gap-2"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                            Editar Separación
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenSaleModal(vehicle);
+                            }}
+                            className="px-4 py-2 text-sm bg-primary-500 text-white hover:bg-primary-400 rounded-lg transition-colors border border-primary-400 flex items-center gap-2"
+                          >
+                            <DollarSign className="h-4 w-4" />
+                            Finalizar Venta
+                          </button>
+                        </>
                       )}
                       
                       {/* Botones para vehículos vendidos */}
@@ -850,6 +934,22 @@ const VehicleList: React.FC = () => {
             isEditMode={selectedVehicle.estado === 'vendido' && !!selectedVehicle.datosVenta}
           />
         </>
+      )}
+
+      {/* Modal de Separación */}
+      {selectedVehicle && (
+        <SeparationModal
+          isOpen={separationModalOpen}
+          onClose={() => {
+            setSeparationModalOpen(false);
+            setSelectedVehicle(null);
+          }}
+          onSubmit={handleSaveSeparationData}
+          vehiclePlaca={selectedVehicle.placa}
+          vehiclePrecioVenta={selectedVehicle.precioVenta}
+          initialData={selectedVehicle.datosSeparacion}
+          isEditMode={selectedVehicle.estado === 'separado' && !!selectedVehicle.datosSeparacion}
+        />
       )}
     </Layout>
   );

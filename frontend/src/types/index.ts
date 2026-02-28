@@ -68,6 +68,19 @@ export interface GastoDetalle {
   monto: number;
 }
 
+export interface DatosSeparacion {
+  cliente: {
+    nombre: string;
+    identificacion: string;
+    direccion: string;
+    telefono: string;
+    email: string;
+  };
+  valorSeparacion: number;
+  fechaSeparacion: string | Date;
+  notas?: string;
+}
+
 export interface DatosVenta {
   vendedor: {
     nombre: string;
@@ -145,7 +158,7 @@ export interface Vehicle {
   };
   inversionistas: Inversionista[];
   tieneInversionistas: boolean;
-  estado: 'en_proceso' | 'listo_venta' | 'en_negociacion' | 'vendido' | 'retirado';
+  estado: 'en_proceso' | 'listo_venta' | 'en_negociacion' | 'separado' | 'vendido' | 'retirado';
   estadoTramite?: 'firma_documentos' | 'radicacion' | 'recepcion_tarjeta' | 'entrega_cliente' | 'completado';
   documentacion: {
     prenda: {
@@ -190,6 +203,7 @@ export interface Vehicle {
   fechaVenta?: string;
   fechaListoVenta?: string;
   datosVenta?: DatosVenta;
+  datosSeparacion?: DatosSeparacion;
   registradoPor: {
     _id: string;
     nombre: string;

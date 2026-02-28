@@ -13,6 +13,8 @@ import {
   exportVehicleReport,
   exportMonthlyReport,
   saveSaleData,
+  saveSeparationData,
+  updateSeparationData,
   generateContract,
   generateTransferForm,
   getVehiclePhoto,
@@ -53,6 +55,11 @@ router.post('/:id/photos', authorize('admin', 'vendedor'), uploadMultiple, uploa
 // Rutas para contratos de compraventa
 router.post('/:id/sale-data', authorize('admin', 'vendedor'), saveSaleData);
 router.put('/:id/sale-data', authorize('admin', 'vendedor'), saveSaleData); // Reutiliza la misma función
+
+// Rutas para separación de vehículos
+router.post('/:id/separation-data', authorize('admin', 'vendedor'), saveSeparationData);
+router.put('/:id/separation-data', authorize('admin', 'vendedor'), updateSeparationData);
+
 router.get('/:id/contract', authorize('admin', 'vendedor'), generateContract);
 router.get('/:id/transfer-form', authorize('admin', 'vendedor'), generateTransferForm);
 

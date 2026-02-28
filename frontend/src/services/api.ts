@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AuthResponse, User, Vehicle, Statistics, DatosVenta, FixedExpense } from '../types';
+import { AuthResponse, User, Vehicle, Statistics, DatosVenta, DatosSeparacion, FixedExpense } from '../types';
 
 // Detectar IP local para móviles o URL de producción
 const getAPIURL = (): string => {
@@ -225,6 +225,16 @@ export const vehiclesAPI = {
 
   saveSaleData: async (id: string, data: DatosVenta) => {
     const response = await api.post(`/vehicles/${id}/sale-data`, data);
+    return response.data;
+  },
+
+  saveSeparationData: async (id: string, data: DatosSeparacion) => {
+    const response = await api.post(`/vehicles/${id}/separation-data`, data);
+    return response.data;
+  },
+
+  updateSeparationData: async (id: string, data: DatosSeparacion) => {
+    const response = await api.put(`/vehicles/${id}/separation-data`, data);
     return response.data;
   },
 

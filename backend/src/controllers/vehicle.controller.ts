@@ -724,6 +724,67 @@ export const saveSaleData = async (req: AuthRequest, res: Response): Promise<voi
   }
 };
 
+// Guardar datos de separación
+export const saveSeparationData = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const datosSeparacion = req.body;
+
+    const vehicle = await Vehicle.findById(id);
+
+    if (!vehicle) {
+      res.status(404).json({ message: 'Vehículo no encontrado' });
+      return;
+    }
+
+    vehicle.datosSeparacion = datosSeparacion;
+    vehicle.estado = 'separado';
+
+    await vehicle.save();
+
+    res.json({
+      message: 'Datos de separación guardados exitosamente',
+      vehicle,
+    });
+  } catch (error: any) {
+    console.error('Error en saveSeparationData:', error);
+    res.status(500).json({
+      message: 'Error al guardar datos de separación',
+      error: error.message,
+    });
+  }
+};
+
+// Actualizar datos de separación
+export const updateSeparationData = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const datosSeparacion = req.body;
+
+    const vehicle = await Vehicle.findById(id);
+
+    if (!vehicle) {
+      res.status(404).json({ message: 'Vehículo no encontrado' });
+      return;
+    }
+
+    vehicle.datosSeparacion = datosSeparacion;
+
+    await vehicle.save();
+
+    res.json({
+      message: 'Datos de separación actualizados exitosamente',
+      vehicle,
+    });
+  } catch (error: any) {
+    console.error('Error en updateSeparationData:', error);
+    res.status(500).json({
+      message: 'Error al actualizar datos de separación',
+      error: error.message,
+    });
+  }
+};
+
 // Generar contrato de compraventa en PDF
 export const generateContract = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
