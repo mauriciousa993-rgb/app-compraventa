@@ -6,29 +6,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#121212" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="AutoTech" />
-    <meta name="description" content="Sistema completo de gestión de inventario y compraventa de vehículos" />
-    <title>Compraventa de Vehículos - Sistema de Gestión</title>
+    <meta name="description" content="Sistema completo de gestion de inventario y compraventa de vehiculos" />
+    <title>Compraventa de Vehiculos - Sistema de Gestion</title>
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/autotech-logo.png" />
-    <!-- REDEPLOY_TRIGGER: 2026-02-13-v5-menu-hamburguesa-fotos -->
-
+    <!-- REDEPLOY_TRIGGER: 2026-02-28-sw-cache-fix -->
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <!-- Service Worker Registration for PWA -->
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
+          navigator.serviceWorker
+            .register('/sw.js', { updateViaCache: 'none' })
             .then((registration) => {
+              registration.update();
               console.log('SW registrado:', registration.scope);
             })
             .catch((error) => {
-              console.log('SW registro falló:', error);
+              console.log('SW registro fallo:', error);
             });
         });
       }

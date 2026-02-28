@@ -1,92 +1,102 @@
-// Service Worker para Compraventa de Vehículos PWA
-const CACHE_NAME = 'autotech-v1';
-const STATIC_CACHE = 'autotech-static-v1';
+// Service Worker for Compraventa de Vehiculos PWA
+const STATIC_CACHE = 'autotech-static-v2';
+const RUNTIME_CACHE = 'autotech-runtime-v2';
 
-// Recursos estáticos a cachear
 const staticUrlsToCache = [
-  '/',
-  '/index.html',
   '/manifest.json',
   '/autotech-logo.png',
   '/autotech-logo.svg'
 ];
 
-// Instalación del Service Worker
+const isSameOrigin = (url) => url.origin === self.location.origin;
+const isStaticAsset = (pathname) =>
+  pathname.startsWith('/assets/') ||
+  /\.(?:js|css|png|svg|ico|json|webp|jpg|jpeg|gif)$/i.test(pathname);
+
 self.addEventListener('install', (event) => {
-  console.log('[SW] Instalando Service Worker...');
-  
   event.waitUntil(
-    caches.open(STATIC_CACHE)
-      .then((cache) => {
-        console.log('[SW] Cache estático abierto');
-        return cache.addAll(staticUrlsToCache);
-      })
-      .then(() => {
-        console.log('[SW] Recursos cacheados exitosamente');
-        return self.skipWaiting();
-      })
-      .catch((err) => {
-        console.error('[SW] Error al cachear recursos:', err);
-      })
+    caches
+      .open(STATIC_CACHE)
+      .then((cache) => cache.addAll(staticUrlsToCache))
+      .then(() => self.skipWaiting())
   );
 });
 
-// Activación del Service Worker
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activando Service Worker...');
-  
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== STATIC_CACHE) {
-            console.log('[SW] Eliminando cache antiguo:', cacheName);
-            return caches.delete(cacheName);
+    caches
+      .keys()
+      .then((cacheNames) =>
+        Promise.all(
+          cacheNames
+            .filter((cacheName) => cacheName !== STATIC_CACHE && cacheName !== RUNTIME_CACHE)
+            .map((cacheName) => caches.delete(cacheName))
+        )
+      )
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+
+  if (request.method !== 'GET') {
+    return;
+  }
+
+  const url = new URL(request.url);
+
+  if (!isSameOrigin(url) || url.protocol === 'chrome-extension:' || url.pathname.startsWith('/api/')) {
+    return;
+  }
+
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.ok) {
+            const responseClone = networkResponse.clone();
+            caches.open(RUNTIME_CACHE).then((cache) => cache.put('/index.html', responseClone));
           }
+          return networkResponse;
         })
-      );
-    }).then(() => {
-      console.log('[SW] Service Worker activado');
-      return self.clients.claim();
+        .catch(() => caches.match('/index.html').then((cachedIndex) => cachedIndex || fetch('/')))
+    );
+    return;
+  }
+
+  if (!isStaticAsset(url.pathname)) {
+    return;
+  }
+
+  event.respondWith(
+    caches.match(request).then((cachedResponse) => {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+
+      return fetch(request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseClone = networkResponse.clone();
+          caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, responseClone));
+        }
+        return networkResponse;
+      });
     })
   );
 });
 
-// Fetch event - estrategia cache first
-self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-  
-  // No interceptar peticiones de extensión chrome-extension o API
-  if (url.protocol === 'chrome-extension:' || url.pathname.startsWith('/api/')) {
-    return;
-  }
-  
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        // Cache hit - retornar respuesta del cache
-        if (response) {
-          return response;
-        }
-        // No está en cache, ir a la red
-        return fetch(event.request);
-      })
-  );
-});
+// ==================== PUSH NOTIFICATIONS ====================
 
-// ==================== NOTIFICACIONES PUSH ====================
-
-// Escuchar eventos push del servidor
 self.addEventListener('push', (event) => {
-  console.log('[SW] Push recibido:', event);
-
   let data = {};
+
   try {
     data = event.data.json();
-  } catch (e) {
+  } catch {
     data = {
       title: 'AutoTech - Compraventa',
-      body: event.data.text() || 'Nueva notificación',
+      body: event.data?.text() || 'Nueva notificacion',
       icon: '/autotech-logo.png',
       badge: '/autotech-logo.png',
       tag: 'general',
@@ -95,7 +105,7 @@ self.addEventListener('push', (event) => {
   }
 
   const options = {
-    body: data.body || 'Nueva notificación de AutoTech',
+    body: data.body || 'Nueva notificacion de AutoTech',
     icon: data.icon || '/autotech-logo.png',
     badge: data.badge || '/autotech-logo.png',
     tag: data.tag || 'general',
@@ -105,39 +115,30 @@ self.addEventListener('push', (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(
-      data.title || 'AutoTech - Compraventa',
-      options
-    )
+    self.registration.showNotification(data.title || 'AutoTech - Compraventa', options)
   );
 });
 
-// Manejar clic en notificaciones
 self.addEventListener('notificationclick', (event) => {
-  console.log('[SW] Notificación clickeada:', event);
-
   event.notification.close();
 
   const url = event.notification.data?.url || '/';
-  
+
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true })
-      .then((clientList) => {
-        // Si ya hay una ventana abierta, enfocarla
-        for (const client of clientList) {
-          if (client.url === url && 'focus' in client) {
-            return client.focus();
-          }
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url === url && 'focus' in client) {
+          return client.focus();
         }
-        // Si no hay ventana abierta, abrir una nueva
-        if (clients.openWindow) {
-          return clients.openWindow(url);
-        }
-      })
+      }
+
+      if (clients.openWindow) {
+        return clients.openWindow(url);
+      }
+    })
   );
 });
 
-// Manejar mensajes desde la app
 self.addEventListener('message', (event) => {
   if (event.data === 'skipWaiting') {
     self.skipWaiting();
