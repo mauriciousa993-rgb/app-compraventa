@@ -112,6 +112,7 @@ body {
 }
 
 @layer utilities {
+  /* Modal dark theme support */
   .bg-surface-900 .bg-white {
     background-color: var(--surface) !important;
   }
@@ -138,5 +139,34 @@ body {
 
   .bg-surface-900 .bg-gray-50 {
     background-color: #1a1d23 !important;
+  }
+
+  /* Force black text for specific modals like Commission and Separation */
+  .modal-light {
+    background-color: #ffffff !important;
+  }
+  
+  .modal-light .text-gray-900,
+  .modal-light .text-gray-800,
+  .modal-light .text-gray-700 {
+    color: #000000 !important;
+  }
+  
+  .modal-light .text-gray-600,
+  .modal-light .text-gray-500 {
+    color: #374151 !important;
+  }
+  
+  .modal-light .border-gray-200,
+  .modal-light .border-gray-300 {
+    border-color: #d1d5db !important;
+  }
+  
+  .modal-light input,
+  .modal-light textarea,
+  .modal-light select {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border-color: #d1d5db !important;
   }
 }
