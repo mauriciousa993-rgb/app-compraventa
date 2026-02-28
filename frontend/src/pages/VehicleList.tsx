@@ -1,4 +1,4 @@
-﻿﻿﻿﻿import React, { useState, useEffect } from 'react';
+﻿﻿import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search, Car, Edit, Trash2, FileDown, X, ChevronDown, ChevronUp, FileText, DollarSign, Edit2 } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
@@ -767,31 +767,6 @@ const VehicleList: React.FC = () => {
                         </>
                       )}
 
-                      <button
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          try {
-                            const response = await api.get(`/vehicles/${vehicle._id}/expenses-template`, {
-                              responseType: 'blob'
-                            });
-                            const url = window.URL.createObjectURL(new Blob([response.data]));
-                            const link = document.createElement('a');
-                            link.href = url;
-                            link.setAttribute('download', `gastos-${vehicle.placa}-${Date.now()}.xlsx`);
-                            document.body.appendChild(link);
-                            link.click();
-                            link.remove();
-                          } catch (error) {
-                            console.error('Error al exportar plantilla:', error);
-                            alert('Error al exportar plantilla de gastos');
-                          }
-                        }}
-
-                        className="px-4 py-2 text-sm text-primary-300 hover:bg-[#2a161a] rounded-lg transition-colors flex items-center gap-2"
-                      >
-                        <FileDown className="h-4 w-4" />
-                        Plantilla Gastos
-                      </button>
                       <button
                         onClick={async (e) => {
                           e.stopPropagation();

@@ -12,7 +12,6 @@ import {
   getMonthlyReports,
   exportVehicleReport,
   exportMonthlyReport,
-  exportExpensesTemplate,
   saveSaleData,
   generateContract,
   generateTransferForm,
@@ -45,7 +44,6 @@ router.get('/expiring-documents', getVehiclesWithExpiringDocuments);
 router.get('/export', exportToExcel);
 router.get('/:id', getVehicleById);
 router.get('/:id/export', exportVehicleReport);
-router.get('/:id/expenses-template', exportExpensesTemplate);
 router.put('/:id', authorize('admin', 'vendedor'), updateVehicle);
 router.delete('/:id', authorize('admin'), deleteVehicle);
 
