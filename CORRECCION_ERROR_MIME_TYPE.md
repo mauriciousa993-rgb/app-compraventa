@@ -3,8 +3,8 @@
 ## Errores corregidos:
 
 ### 1. Error Principal: "Failed to load module script"
-- **Causa**: La configuración de `vercel.json` usaba `rewrites` que enviaba TODAS las solicitudes a `index.html`, incluyendo los archivos JavaScript con hash como `index-CctOtfyY.js`
-- **Solución**: Cambié la configuración a `routes` con el handle "filesystem" para que primero busque archivos estáticos y solo redirija a index.html si no encuentra el archivo
+- **Causa**: La configuración de `vercel.json` tenía una configuración compleja de `routes` que interfería con la carga de archivos estáticos de Vite
+- **Solución**: Cambié la configuración a `rewrites` simple que es el estándar para proyectos Vite en Vercel
 
 ### 2. Meta tag obsoleto
 - **Causa**: `<meta name="apple-mobile-web-app-capable" content="yes">` está deprecated
@@ -15,21 +15,17 @@
 - **Solución**: Eliminé el de la raíz, quedó solo el de `frontend/`
 
 ## Archivos modificados:
-1. `frontend/vercel.json` - Nueva configuración de routes
+1. `frontend/vercel.json` - Configuración simplificada con rewrites
 2. `frontend/index.html` - Agregado meta tag correcto
 3. `vercel.json` (raíz) - Eliminado
 
-## Acción requerida:
-Debes hacer un **redeploy** en Vercel para que los cambios surtan efecto.
+## Estado actual:
+Los cambios ya están subidos a GitHub. Vercel debería detectar automáticamente el cambio y hacer redeploy en 2-3 minutos.
 
-Ejecuta en tu terminal:
-```bash
-cd c:/Users/mauri/OneDrive/Escritorio/app compraventa
-subir-cambios-vercel.bat
-```
-
-O manualmente en Vercel:
+## Si el error persiste:
 1. Ve a https://vercel.com/dashboard
 2. Selecciona tu proyecto
 3. Click en "Deployments"
-4. Click en "Redeploy" en el último deployment
+4. Click en el último deployment
+5. Click en "Redeploy"
+6. Limpia la cache del navegador: Ctrl+Shift+R
