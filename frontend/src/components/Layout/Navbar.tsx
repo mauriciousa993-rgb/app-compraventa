@@ -94,55 +94,9 @@ const Navbar: React.FC = () => {
             </div>
           </Link>
 
-          <div className="hidden xl:flex items-center space-x-2">
-            <Link to="/" className={navLinkClass}>
-              Dashboard
-            </Link>
-            <Link to="/vehicles" className={navLinkClass}>
-              Vehiculos
-            </Link>
-            <Link to="/notifications" className={`${navLinkClass} flex items-center space-x-1 relative`}>
-              <Bell className="h-4 w-4 text-primary-400" />
-              <span>Notificaciones</span>
-              {notificationCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                  {notificationCount > 9 ? '9+' : notificationCount}
-                </span>
-              )}
-            </Link>
-            <Link to="/marketplace" className={`${navLinkClass} flex items-center space-x-1`}>
-              <Store className="h-4 w-4 text-primary-400" />
-              <span>Marketplace</span>
-            </Link>
-            <Link to="/consulta-tramite" className={`${navLinkClass} flex items-center space-x-1`}>
-              <Search className="h-4 w-4 text-primary-400" />
-              <span>Consulta Trámite</span>
-            </Link>
-            <Link to="/reports" className={`${navLinkClass} flex items-center space-x-1`}>
-              <BarChart3 className="h-4 w-4 text-primary-400" />
-              <span>Reportes</span>
-            </Link>
-            {(user?.rol === 'admin' || user?.rol === 'vendedor') && (
-              <Link to="/vehicles/inspection" className={`${navLinkClass} flex items-center space-x-1`}>
-                <ClipboardCheck className="h-4 w-4 text-primary-400" />
-                <span>Checklist</span>
-              </Link>
-            )}
-            <Link to="/fixed-expenses" className={`${navLinkClass} flex items-center space-x-1`}>
-              <Receipt className="h-4 w-4 text-primary-400" />
-              <span>Gastos Fijos</span>
-            </Link>
-            <Link to="/commissions" className={`${navLinkClass} flex items-center space-x-1`}>
-              <DollarSign className="h-4 w-4 text-primary-400" />
-              <span>Comisiones</span>
-            </Link>
-            {user?.rol === 'admin' && (
-              <Link to="/users" className={navLinkClass}>
-                Usuarios
-              </Link>
-            )}
-
-            <div className="flex items-center space-x-4 border-l border-[#343840] pl-6 ml-3">
+          <div className="flex items-center gap-4">
+            {/* Usuario y logout siempre visibles en pantallas grandes */}
+            <div className="hidden lg:flex items-center space-x-4 border-l border-[#343840] pl-4">
               <div className="flex items-center space-x-2">
                 <User className="h-5 w-5 text-primary-400" />
                 <div className="text-sm">
@@ -150,7 +104,6 @@ const Navbar: React.FC = () => {
                   <div className="text-ink-300 text-xs capitalize">{user?.rol}</div>
                 </div>
               </div>
-
               <button
                 type="button"
                 onClick={handleLogout}
@@ -160,18 +113,19 @@ const Navbar: React.FC = () => {
                 <LogOut className="h-5 w-5" />
               </button>
             </div>
-          </div>
 
-          <button
-            type="button"
-            onClick={toggleMobileMenu}
-            className="inline-flex items-center gap-2 p-2 bg-[#1f2126] hover:bg-[#292c32] rounded-lg transition-colors flex-shrink-0 border border-[#343840]"
-            aria-label="Toggle menu"
-            aria-expanded={isMobileMenuOpen}
-          >
-            {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-            <span className="hidden sm:inline text-sm font-semibold">Menu</span>
-          </button>
+            {/* Menu hamburguesa siempre visible */}
+            <button
+              type="button"
+              onClick={toggleMobileMenu}
+              className="inline-flex items-center gap-2 p-2 bg-[#1f2126] hover:bg-[#292c32] rounded-lg transition-colors flex-shrink-0 border border-[#343840]"
+              aria-label="Toggle menu"
+              aria-expanded={isMobileMenuOpen}
+            >
+              {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+              <span className="text-sm font-semibold">Menu</span>
+            </button>
+          </div>
         </div>
 
         {isMobileMenuOpen && (

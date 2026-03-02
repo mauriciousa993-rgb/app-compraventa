@@ -10,6 +10,7 @@ import {
   ChevronUp,
   Printer,
   RefreshCw,
+  User,
 } from 'lucide-react';
 
 const CommissionLiquidation: React.FC = () => {
@@ -17,6 +18,7 @@ const CommissionLiquidation: React.FC = () => {
   const [resumen, setResumen] = useState<ResumenComisiones[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedVendedor, setSelectedVendedor] = useState<string | null>(null);
+  const [filtroVendedor, setFiltroVendedor] = useState<string>('');
   const [año, setAño] = useState(new Date().getFullYear());
   const [mes, setMes] = useState<number | null>(null);
 
@@ -97,9 +99,17 @@ const CommissionLiquidation: React.FC = () => {
     }
   };
 
-  const totalComisiones = resumen.reduce((sum, r) => sum + r.totalComisiones, 0);
-  const totalPagadas = resumen.reduce((sum, r) => sum + r.comisionesPagadas, 0);
-  const totalPendientes = resumen.reduce((sum, r) => sum + r.comisionesPendientes, 0);
+  // Obtener lista de vendedores únicos para el filtro
+  const vendedores = resumen.map((r) => r.vendedor).sort();
+
+  // Filtrar resumen por vendedor seleccionado
+  const resumenFiltrado = filtroVendedor
+    ? resumen.filter((r) => r.vendedor === filtroVendedor)
+    : resumen;
+
+  const totalComisiones = resumenFiltrado.reduce((sum, r) => sum + r.totalComisiones, 0);
+  const totalPagadas = resumenFiltrado.reduce((sum, r) => sum + r.comisionesPagadas, 0);
+  const totalPendientes = resumenFiltrado.reduce((sum, r) => sum + r.comisionesPendientes, 0);
 
   if (isLoading) {
     return (
@@ -140,6 +150,37 @@ const CommissionLiquidation: React.FC = () => {
 
         {/* Filtros */}
         <div className="flex flex-wrap gap-4 bg-white p-4 rounded-lg shadow-sm border">
+          <div className="flex items-end gap-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                <span className="flex items-center gap-1">
+                  <User size={14} />
+                  Vendedor
+                </span>
+              </label>
+              <select
+                value={filtroVendedor}
+                onChange={(e) => setFiltroVendedor(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white text-gray-900 min-w-[200px]"
+              >
+                <option value="">Todos los vendedores</option>
+                {vendedores.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {filtroVendedor && (
+              <button
+                onClick={() => setFiltroVendedor('')}
+                className="px-3 py-2 text-sm text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
+                title="Limpiar filtro de vendedor"
+              >
+                ✕
+              </button>
+            )}
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Año</label>
             <select
@@ -209,13 +250,17 @@ const CommissionLiquidation: React.FC = () => {
 
         {/* Lista de Vendedores */}
         <div className="space-y-4">
-          {resumen.length === 0 ? (
+          {resumenFiltrado.length === 0 ? (
             <div className="bg-white p-8 rounded-lg shadow-sm border text-center">
               <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">No hay ventas con comisiones en el período seleccionado</p>
+              <p className="text-gray-600">
+                {filtroVendedor
+                  ? `No hay ventas con comisiones para el vendedor seleccionado`
+                  : 'No hay ventas con comisiones en el período seleccionado'}
+              </p>
             </div>
           ) : (
-            resumen.map((vendedor) => (
+            resumenFiltrado.map((vendedor) => (
               <div
                 key={vendedor.vendedor}
                 className="bg-white rounded-lg shadow-sm border overflow-hidden"
