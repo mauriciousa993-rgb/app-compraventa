@@ -49,14 +49,12 @@ const PERCENTAGE_ITEM_KEYS = new Set<string>(['llantas_delanteras', 'llantas_tra
 const TRANSMISSION_ITEM_KEYS = new Set<string>(['transmision_tipo']);
 
 const DAMAGE_ZONE_TEMPLATE: TemplateDamageZone[] = [
-  { key: 'frente', label: 'Frente' },
-  { key: 'capo', label: 'Capo' },
+  { key: 'frente', label: 'Lateral derecho' },
+  { key: 'capo', label: 'Techo' },
   { key: 'techo', label: 'Techo' },
-  { key: 'trasera', label: 'Parte trasera' },
-  { key: 'lateral_izq', label: 'Lateral izquierdo' },
-  { key: 'lateral_der', label: 'Lateral derecho' },
-  { key: 'puerta_izq', label: 'Puertas izquierdas' },
-  { key: 'puerta_der', label: 'Puertas derechas' },
+  { key: 'trasera', label: 'Lateral izquierdo' },
+  { key: 'lateral_izq', label: 'Frente' },
+  { key: 'lateral_der', label: 'Parte trasera' },
 ];
 
 const createDefaultItems = (): VehicleInspectionItem[] =>
@@ -386,10 +384,10 @@ const VehicleInspectionChecklist: React.FC = () => {
 
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
-      doc.text('Frente', leftX, firstRowY - 2);
-      doc.text('Trasera', rightX, firstRowY - 2);
-      doc.text('Lado izquierdo', leftX, secondRowY - 2);
-      doc.text('Lado derecho', rightX, secondRowY - 2);
+      doc.text('Lateral derecho', leftX, firstRowY - 2);
+      doc.text('Lateral izquierdo', rightX, firstRowY - 2);
+      doc.text('Frente', leftX, secondRowY - 2);
+      doc.text('Parte trasera', rightX, secondRowY - 2);
 
       doc.addImage(captures.frente, 'PNG', leftX, firstRowY, imageWidth, imageHeight);
       doc.addImage(captures.trasera, 'PNG', rightX, firstRowY, imageWidth, imageHeight);

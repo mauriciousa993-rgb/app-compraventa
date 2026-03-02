@@ -80,43 +80,35 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
   };
 
   const ZONE_MARKER_PROFILE: Record<string, ZoneMarkerProfile> = {
+    // frente ahora es lateral derecho
     frente: {
-      // Frente: parte frontal del vehículo (Z positivo en la vista del modelo)
-      direction: [0, 0.07, 1],
-      seed: [0, 0.38, 0.98],
-    },
-    capo: {
-      // Capo: parte frontal superior
-      direction: [0, 0.38, 0.6],
-      seed: [0, 0.66, 0.5],
-    },
-    techo: {
-      // Techo: parte superior
-      direction: [0, 1, 0],
-      seed: [0, 0.93, 0.04],
-    },
-    trasera: {
-      // Trasera: parte trasera del vehículo (Z negativo en la vista del modelo)
-      direction: [0, 0.05, -1],
-      seed: [0, 0.36, -0.98],
-    },
-    lateral_izq: {
-      // Lateral izquierdo: X negativo
-      direction: [-1, 0.08, 0],
-      seed: [-0.98, 0.52, 0.04],
-    },
-    lateral_der: {
-      // Lateral derecho: X positivo
       direction: [1, 0.08, 0],
       seed: [0.98, 0.52, 0.04],
     },
-    puerta_izq: {
-      direction: [-1, 0.02, 0.02],
-      seed: [-0.9, 0.48, 0.24],
+    // capo ahora es techo
+    capo: {
+      direction: [0, 1, 0],
+      seed: [0, 0.93, 0.04],
     },
-    puerta_der: {
-      direction: [1, 0.02, 0.02],
-      seed: [0.9, 0.48, 0.24],
+    // techo ya no se usa - eliminado
+    techo: {
+      direction: [0, 1, 0],
+      seed: [0, 0.93, 0.04],
+    },
+    // trasera ahora es lateral izquierdo
+    trasera: {
+      direction: [-1, 0.08, 0],
+      seed: [-0.98, 0.52, 0.04],
+    },
+    // lateral_izq ahora es frente
+    lateral_izq: {
+      direction: [0, 0.07, -1],
+      seed: [0, 0.38, -0.98],
+    },
+    // lateral_der ahora es parte trasera
+    lateral_der: {
+      direction: [0, 0.05, 1],
+      seed: [0, 0.36, 0.98],
     },
   };
 
@@ -436,6 +428,7 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
   }, [damageZones, selectedZone]);
 
   // Funcion para detectar la zona del vehiculo basada en la posicion del clic
+  // Ahora: frente=lateral der, capo=techo, lateral_izq=frente, lateral_der=trasera
   const detectZoneFromPosition = (point: THREE.Vector3): string | null => {
     const model = modelRef.current;
     if (!model) return null;
@@ -457,44 +450,28 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     const normZ = relZ / halfZ;
     const normY = relY / size.y;
 
-    // Logica de deteccion de zonas (corregida)
+    // Logica de deteccion de zonas
     // Techo: parte superior
     if (normY > 0.7) {
-      return 'techo';
-    }
-
-    // Frente: parte frontal (Z negativo en coordenadas del modelo)
-    // Trasera: parte trasera (Z positivo en coordenadas del modelo)
-    if (Math.abs(normZ) > 0.7) {
-      if (normZ < 0) {
-        return 'frente';
-      } else {
-        return 'trasera';
-      }
-    }
-
-    // Lateral izquierdo: X negativo
-    // Lateral derecho: X positivo
-    if (Math.abs(normX) > 0.6) {
-      if (normX < 0) {
-        return 'lateral_izq';
-      } else {
-        return 'lateral_der';
-      }
-    }
-
-    // Para el capo, verificamos si esta en la parte frontal superior
-    // Capo esta en la parte frontal (Z negativo) y en la parte superior
-    if (normZ < 0 && normZ > -0.5 && normY > 0.3) {
       return 'capo';
     }
 
-    // Puertas
-    if (Math.abs(normX) > 0.3 && Math.abs(normX) < 0.8 && normY > 0.1 && normY < 0.6) {
-      if (normX < 0) {
-        return 'puerta_izq';
+    // Frente (lateral_izq en el modelo original): parte frontal
+    if (Math.abs(normZ) > 0.7) {
+      if (normZ < 0) {
+        return 'lateral_izq'; // Ahora es "frente"
       } else {
-        return 'puerta_der';
+        return 'lateral_der'; // Ahora es "parte trasera"
+      }
+    }
+
+    // Lateral der (frente en el modelo original): X positivo
+    // Lateral izq (trasera en el modelo original): X negativo
+    if (Math.abs(normX) > 0.6) {
+      if (normX < 0) {
+        return 'trasera'; // Ahora es "lateral izquierdo"
+      } else {
+        return 'frente'; // Ahora es "lateral derecho"
       }
     }
 
@@ -548,13 +525,15 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
   }, [onZoneClick]);
 
   const applyCameraPreset = (preset: 'front' | 'rear' | 'left' | 'right' | 'top' | 'iso') => {
-    // Corregir direcciones: el modelo parece estar rotado
-    // Ahora: front = Z negativo (delante), rear = Z positivo (atrás)
-    // left = X negativo, right = X positivo
-    if (preset === 'front') setCameraByDirection(new THREE.Vector3(0, 0.16, -1));
-    if (preset === 'rear') setCameraByDirection(new THREE.Vector3(0, 0.16, 1));
-    if (preset === 'left') setCameraByDirection(new THREE.Vector3(-1, 0.2, 0));
-    if (preset === 'right') setCameraByDirection(new THREE.Vector3(1, 0.2, 0));
+    // Corregir direcciones para el nuevo mapeo:
+    // frente (lateral der original) = X positivo
+    // trasera (lateral izq original) = X negativo
+    // left = Z negativo
+    // right = Z positivo
+    if (preset === 'front') setCameraByDirection(new THREE.Vector3(1, 0.2, 0)); // lateral derecho
+    if (preset === 'rear') setCameraByDirection(new THREE.Vector3(-1, 0.2, 0)); // lateral izquierdo
+    if (preset === 'left') setCameraByDirection(new THREE.Vector3(0, 0.16, -1)); // frente
+    if (preset === 'right') setCameraByDirection(new THREE.Vector3(0, 0.16, 1)); // trasera
     if (preset === 'top') setCameraByDirection(new THREE.Vector3(0.01, 1, 0.01));
     if (preset === 'iso') setCameraByDirection(new THREE.Vector3(1, 0.5, 1));
   };
