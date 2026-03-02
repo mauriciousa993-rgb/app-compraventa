@@ -13,7 +13,7 @@ interface Vehicle3DModelViewerProps {
 
 type ZoneMarkerProfile = {
   direction: [number, number, number];
-  seeds: Array<[number, number, number]>;
+  seed: [number, number, number];
 };
 
 type MaterialWithColor = THREE.Material & {
@@ -69,84 +69,35 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
   const ZONE_MARKER_PROFILE: Record<string, ZoneMarkerProfile> = {
     frente: {
       direction: [0, 0.05, -1],
-      seeds: [
-        [0, 0.37, -0.98],
-        [-0.2, 0.39, -0.94],
-        [0.2, 0.39, -0.94],
-        [0, 0.5, -0.9],
-        [0, 0.27, -0.98],
-      ],
+      seed: [0, 0.36, -0.98],
     },
     capo: {
       direction: [0, 0.38, -1],
-      seeds: [
-        [0, 0.64, -0.55],
-        [-0.2, 0.62, -0.54],
-        [0.2, 0.62, -0.54],
-        [0, 0.72, -0.42],
-        [0, 0.56, -0.66],
-      ],
+      seed: [0, 0.66, -0.56],
     },
     techo: {
       direction: [0, 1, 0],
-      seeds: [
-        [0, 0.95, 0],
-        [-0.17, 0.92, -0.03],
-        [0.17, 0.92, -0.03],
-        [-0.15, 0.9, 0.18],
-        [0.15, 0.9, 0.18],
-        [0, 0.89, 0.25],
-      ],
+      seed: [0, 0.93, 0.04],
     },
     trasera: {
       direction: [0, 0.07, 1],
-      seeds: [
-        [0, 0.4, 0.98],
-        [-0.2, 0.42, 0.94],
-        [0.2, 0.42, 0.94],
-        [0, 0.53, 0.88],
-        [0, 0.28, 0.98],
-      ],
+      seed: [0, 0.38, 0.98],
     },
     lateral_izq: {
       direction: [-1, 0.08, 0],
-      seeds: [
-        [-0.98, 0.54, -0.32],
-        [-0.98, 0.52, -0.03],
-        [-0.98, 0.5, 0.24],
-        [-0.92, 0.4, -0.08],
-        [-0.92, 0.4, 0.2],
-      ],
+      seed: [-0.98, 0.52, 0.04],
     },
     lateral_der: {
       direction: [1, 0.08, 0],
-      seeds: [
-        [0.98, 0.54, -0.32],
-        [0.98, 0.52, -0.03],
-        [0.98, 0.5, 0.24],
-        [0.92, 0.4, -0.08],
-        [0.92, 0.4, 0.2],
-      ],
+      seed: [0.98, 0.52, 0.04],
     },
     puerta_izq: {
       direction: [-1, 0.02, 0.02],
-      seeds: [
-        [-0.92, 0.5, -0.02],
-        [-0.92, 0.48, 0.18],
-        [-0.92, 0.46, 0.34],
-        [-0.86, 0.58, 0.1],
-        [-0.86, 0.38, 0.14],
-      ],
+      seed: [-0.9, 0.48, 0.24],
     },
     puerta_der: {
       direction: [1, 0.02, 0.02],
-      seeds: [
-        [0.92, 0.5, -0.02],
-        [0.92, 0.48, 0.18],
-        [0.92, 0.46, 0.34],
-        [0.86, 0.58, 0.1],
-        [0.86, 0.38, 0.14],
-      ],
+      seed: [0.9, 0.48, 0.24],
     },
   };
 
@@ -191,47 +142,46 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
 
     zones.forEach((zone) => {
       const profile = ZONE_MARKER_PROFILE[zone.key];
-      if (!profile || profile.seeds.length === 0) return;
+      if (!profile) return;
       const rayOutDirection = new THREE.Vector3(...profile.direction).normalize();
 
       const isDamaged = zone.status === 'mal';
-      profile.seeds.forEach(([nx, ny, nz]) => {
-        const seed = new THREE.Vector3(
-          center.x + nx * halfX * 0.95,
-          box.min.y + ny * size.y,
-          center.z + nz * halfZ * 0.95
-        );
+      const [nx, ny, nz] = profile.seed;
+      const seed = new THREE.Vector3(
+        center.x + nx * halfX * 0.95,
+        box.min.y + ny * size.y,
+        center.z + nz * halfZ * 0.95
+      );
 
-        const rayStart = seed.clone().addScaledVector(rayOutDirection, outsideDistance);
-        raycaster.set(rayStart, rayOutDirection.clone().multiplyScalar(-1));
-        const intersections = raycaster.intersectObjects(meshes, false);
+      const rayStart = seed.clone().addScaledVector(rayOutDirection, outsideDistance);
+      raycaster.set(rayStart, rayOutDirection.clone().multiplyScalar(-1));
+      const intersections = raycaster.intersectObjects(meshes, false);
 
-        let markerPosition = seed.clone();
-        if (intersections.length > 0) {
-          const hit = intersections[0];
-          const hitNormal = hit.face?.normal
-            ? hit.face.normal.clone().transformDirection((hit.object as THREE.Mesh).matrixWorld)
-            : rayOutDirection;
-          markerPosition = hit.point.clone().addScaledVector(hitNormal.normalize(), markerRadius * 0.55);
-        }
+      let markerPosition = seed.clone();
+      if (intersections.length > 0) {
+        const hit = intersections[0];
+        const hitNormal = hit.face?.normal
+          ? hit.face.normal.clone().transformDirection((hit.object as THREE.Mesh).matrixWorld)
+          : rayOutDirection;
+        markerPosition = hit.point.clone().addScaledVector(hitNormal.normalize(), markerRadius * 0.55);
+      }
 
-        const marker = new THREE.Mesh(
-          new THREE.SphereGeometry(isDamaged ? markerRadius * 1.05 : markerRadius * 0.78, 16, 16),
-          new THREE.MeshStandardMaterial({
-            color: isDamaged ? '#ef4444' : '#22c55e',
-            emissive: isDamaged ? '#7f1d1d' : '#052e16',
-            emissiveIntensity: isDamaged ? 0.6 : 0.24,
-            roughness: 0.3,
-            metalness: 0.15,
-            transparent: true,
-            opacity: isDamaged ? 0.98 : 0.55,
-          })
-        );
-        marker.position.copy(markerPosition);
-        marker.castShadow = false;
-        marker.receiveShadow = false;
-        markerGroup.add(marker);
-      });
+      const marker = new THREE.Mesh(
+        new THREE.SphereGeometry(isDamaged ? markerRadius * 1.15 : markerRadius * 0.9, 18, 18),
+        new THREE.MeshStandardMaterial({
+          color: isDamaged ? '#ef4444' : '#22c55e',
+          emissive: isDamaged ? '#7f1d1d' : '#052e16',
+          emissiveIntensity: isDamaged ? 0.64 : 0.26,
+          roughness: 0.3,
+          metalness: 0.15,
+          transparent: true,
+          opacity: isDamaged ? 0.99 : 0.62,
+        })
+      );
+      marker.position.copy(markerPosition);
+      marker.castShadow = false;
+      marker.receiveShadow = false;
+      markerGroup.add(marker);
     });
   };
 
@@ -340,7 +290,8 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
         const maxAxis = Math.max(size.x, size.y, size.z) || 1;
         const scale = 8 / maxAxis;
         fbx.scale.setScalar(scale);
-        fbx.rotation.y = Math.PI * 0.88;
+        // Sin rotacion adicional para mantener ejes de zonas consistentes
+        fbx.rotation.y = 0;
 
         fbx.traverse((obj: any) => {
           if (!obj.isMesh) return;
