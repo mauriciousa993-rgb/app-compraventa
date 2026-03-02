@@ -11,6 +11,12 @@ interface Vehicle3DModelViewerProps {
   damageZones: VehicleDamageZone[];
 }
 
+type MaterialWithColor = THREE.Material & {
+  color?: THREE.Color;
+  emissive?: THREE.Color;
+  emissiveIntensity?: number;
+};
+
 const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -27,6 +33,17 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
     () => damageZones.filter((zone) => zone.status === 'mal').map((zone) => zone.label),
     [damageZones]
   );
+
+  const forEachMeshMaterial = (
+    material: THREE.Material | THREE.Material[],
+    callback: (mat: MaterialWithColor) => void
+  ) => {
+    if (Array.isArray(material)) {
+      material.forEach((mat) => callback(mat as MaterialWithColor));
+      return;
+    }
+    callback(material as MaterialWithColor);
+  };
 
   useEffect(() => {
     const container = containerRef.current;
@@ -113,14 +130,20 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
           if (!obj.isMesh) return;
           obj.castShadow = true;
           obj.receiveShadow = true;
-          if (obj.material) {
-            const mat = obj.material as THREE.MeshStandardMaterial;
-            mat.metalness = typeof mat.metalness === 'number' ? mat.metalness : 0.3;
-            mat.roughness = typeof mat.roughness === 'number' ? mat.roughness : 0.5;
+          if (!obj.material) return;
+          forEachMeshMaterial(obj.material, (mat) => {
+            const standardMat = mat as THREE.MeshStandardMaterial;
+            if (typeof standardMat.metalness === 'number') {
+              standardMat.metalness = standardMat.metalness;
+            }
+            if (typeof standardMat.roughness === 'number') {
+              standardMat.roughness = standardMat.roughness;
+            }
+            if (mat.color instanceof THREE.Color) {
+              mat.userData = { ...(mat.userData || {}), baseColor: mat.color.clone() };
+            }
             mat.needsUpdate = true;
-            obj.userData.baseColor =
-              mat.color instanceof THREE.Color ? mat.color.clone() : new THREE.Color('#9ca3af');
-          }
+          });
         });
 
         // Ajustar la base del modelo al piso y encuadrar camara automaticamente
@@ -192,19 +215,30 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
 
     model.traverse((obj: any) => {
       if (!obj.isMesh || !obj.material) return;
-      const mat = obj.material as THREE.MeshStandardMaterial;
-      const baseColor = obj.userData.baseColor as THREE.Color | undefined;
-      if (baseColor) {
-        mat.color.copy(baseColor);
-      }
-      if (hasDamage) {
-        mat.emissive = new THREE.Color('#3b0a0a');
-        mat.emissiveIntensity = 0.15;
-      } else {
-        mat.emissive = new THREE.Color('#000000');
-        mat.emissiveIntensity = 0;
-      }
-      mat.needsUpdate = true;
+      forEachMeshMaterial(obj.material, (mat) => {
+        try {
+          const baseColor = mat.userData?.baseColor as THREE.Color | undefined;
+          if (baseColor && mat.color instanceof THREE.Color) {
+            mat.color.copy(baseColor);
+          }
+
+          // Solo aplicar emisión si el material la soporta
+          if (mat.emissive instanceof THREE.Color) {
+            if (hasDamage) {
+              mat.emissive.set('#3b0a0a');
+              mat.emissiveIntensity = 0.15;
+            } else {
+              mat.emissive.set('#000000');
+              mat.emissiveIntensity = 0;
+            }
+          }
+
+          mat.needsUpdate = true;
+        } catch (error) {
+          // Evitar que una variación de material rompa toda la app
+          console.error('Error aplicando estado visual al material 3D:', error);
+        }
+      });
     });
   }, [damageZones]);
 
