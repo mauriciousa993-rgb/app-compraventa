@@ -101,13 +101,13 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
         const size = box.getSize(new THREE.Vector3());
         const center = box.getCenter(new THREE.Vector3());
 
-        fbx.position.sub(center);
-        fbx.position.y += size.y * 0.18;
+        // Centrar la geometria en el origen antes de escalar
+        fbx.position.set(-center.x, -center.y, -center.z);
 
         const maxAxis = Math.max(size.x, size.y, size.z) || 1;
         const scale = 8 / maxAxis;
         fbx.scale.setScalar(scale);
-        fbx.rotation.y = Math.PI * 0.82;
+        fbx.rotation.y = Math.PI * 0.88;
 
         fbx.traverse((obj: any) => {
           if (!obj.isMesh) return;
@@ -122,6 +122,18 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
               mat.color instanceof THREE.Color ? mat.color.clone() : new THREE.Color('#9ca3af');
           }
         });
+
+        // Ajustar la base del modelo al piso y encuadrar camara automaticamente
+        const fittedBox = new THREE.Box3().setFromObject(fbx);
+        const fittedSphere = fittedBox.getBoundingSphere(new THREE.Sphere());
+        const yShift = -1.8 - fittedBox.min.y;
+        fbx.position.y += yShift;
+
+        const radius = Math.max(fittedSphere.radius, 2);
+        camera.position.set(radius * 1.8, radius * 0.95, radius * 1.8);
+        controls.target.set(0, 0.2, 0);
+        camera.lookAt(controls.target);
+        controls.update();
 
         scene.add(fbx);
         modelRef.current = fbx;
@@ -210,6 +222,17 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
     controls.update();
   };
 
+  const FallbackVehicle = () => (
+    <div className="h-72 w-full rounded-lg border border-[#2f3238] bg-[#111827] flex items-center justify-center">
+      <svg viewBox="0 0 420 220" className="w-[320px] h-[170px]">
+        <rect x="86" y="96" width="248" height="70" rx="26" fill="#1f2937" stroke="#4b5563" />
+        <rect x="140" y="68" width="142" height="44" rx="18" fill="#334155" stroke="#64748b" />
+        <circle cx="145" cy="170" r="24" fill="#0f172a" stroke="#6b7280" />
+        <circle cx="274" cy="170" r="24" fill="#0f172a" stroke="#6b7280" />
+      </svg>
+    </div>
+  );
+
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -243,8 +266,13 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
         </button>
       </div>
 
-      <div className="rounded-xl border border-[#2f3238] bg-[#0b1220] p-2">
+      <div className="rounded-xl border border-[#2f3238] bg-[#0b1220] p-2 relative">
         <div ref={containerRef} className="h-72 w-full rounded-lg overflow-hidden" />
+        {loadError && (
+          <div className="absolute inset-2">
+            <FallbackVehicle />
+          </div>
+        )}
       </div>
 
       {isLoading && <p className="text-xs text-ink-300 mt-2">Cargando modelo 3D...</p>}
