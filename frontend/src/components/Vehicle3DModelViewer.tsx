@@ -24,6 +24,7 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const modelRef = useRef<THREE.Group | null>(null);
+  const zoneMarkerGroupRef = useRef<THREE.Group | null>(null);
   const frameRef = useRef<number | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -43,6 +44,79 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
       return;
     }
     callback(material as MaterialWithColor);
+  };
+
+  const ZONE_LOCAL_COORDS: Record<string, [number, number, number]> = {
+    frente: [0, 0.42, -0.96],
+    capo: [0, 0.66, -0.52],
+    techo: [0, 0.95, 0],
+    trasera: [0, 0.46, 0.96],
+    lateral_izq: [-0.96, 0.58, 0],
+    lateral_der: [0.96, 0.58, 0],
+    puerta_izq: [-0.9, 0.45, 0.2],
+    puerta_der: [0.9, 0.45, 0.2],
+  };
+
+  const clearZoneMarkers = () => {
+    const markerGroup = zoneMarkerGroupRef.current;
+    if (!markerGroup) return;
+    while (markerGroup.children.length > 0) {
+      const child = markerGroup.children.pop() as THREE.Mesh | undefined;
+      if (!child) continue;
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        if (Array.isArray(child.material)) {
+          child.material.forEach((mat) => mat.dispose());
+        } else {
+          child.material.dispose();
+        }
+      }
+    }
+  };
+
+  const renderZoneMarkers = (zones: VehicleDamageZone[]) => {
+    const model = modelRef.current;
+    const markerGroup = zoneMarkerGroupRef.current;
+    if (!model || !markerGroup) return;
+
+    clearZoneMarkers();
+
+    const box = new THREE.Box3().setFromObject(model);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const halfX = Math.max(size.x / 2, 0.1);
+    const halfZ = Math.max(size.z / 2, 0.1);
+    const markerRadius = Math.max(Math.min(size.x, size.y, size.z) * 0.03, 0.08);
+
+    zones.forEach((zone) => {
+      const coords = ZONE_LOCAL_COORDS[zone.key];
+      if (!coords) return;
+
+      const [nx, ny, nz] = coords;
+      const position = new THREE.Vector3(
+        center.x + nx * halfX * 0.95,
+        box.min.y + ny * size.y,
+        center.z + nz * halfZ * 0.95
+      );
+
+      const isDamaged = zone.status === 'mal';
+      const marker = new THREE.Mesh(
+        new THREE.SphereGeometry(markerRadius, 18, 18),
+        new THREE.MeshStandardMaterial({
+          color: isDamaged ? '#ef4444' : '#22c55e',
+          emissive: isDamaged ? '#7f1d1d' : '#052e16',
+          emissiveIntensity: isDamaged ? 0.55 : 0.22,
+          roughness: 0.3,
+          metalness: 0.15,
+          transparent: true,
+          opacity: isDamaged ? 0.98 : 0.75,
+        })
+      );
+      marker.position.copy(position);
+      marker.castShadow = false;
+      marker.receiveShadow = false;
+      markerGroup.add(marker);
+    });
   };
 
   useEffect(() => {
@@ -91,6 +165,10 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
     floor.receiveShadow = true;
     scene.add(floor);
 
+    const markerGroup = new THREE.Group();
+    zoneMarkerGroupRef.current = markerGroup;
+    scene.add(markerGroup);
+
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.07;
@@ -114,6 +192,27 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
     loader.load(
       MODEL_URL,
       (fbx) => {
+        // Normalizar orientacion: altura en eje Y y largo en eje Z
+        const preBox = new THREE.Box3().setFromObject(fbx);
+        const preSize = preBox.getSize(new THREE.Vector3());
+        const minAxis =
+          preSize.x <= preSize.y && preSize.x <= preSize.z
+            ? 'x'
+            : preSize.y <= preSize.x && preSize.y <= preSize.z
+              ? 'y'
+              : 'z';
+        if (minAxis === 'x') {
+          fbx.rotateZ(Math.PI / 2);
+        } else if (minAxis === 'z') {
+          fbx.rotateX(-Math.PI / 2);
+        }
+
+        const alignedBox = new THREE.Box3().setFromObject(fbx);
+        const alignedSize = alignedBox.getSize(new THREE.Vector3());
+        if (alignedSize.x > alignedSize.z) {
+          fbx.rotateY(Math.PI / 2);
+        }
+
         const box = new THREE.Box3().setFromObject(fbx);
         const size = box.getSize(new THREE.Vector3());
         const center = box.getCenter(new THREE.Vector3());
@@ -160,6 +259,7 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
 
         scene.add(fbx);
         modelRef.current = fbx;
+        renderZoneMarkers(damageZones);
         setIsLoading(false);
       },
       undefined,
@@ -190,6 +290,7 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
       resizeObserver.disconnect();
       if (frameRef.current) cancelAnimationFrame(frameRef.current);
       controls.dispose();
+      clearZoneMarkers();
       scene.traverse((obj: any) => {
         if (!obj.isMesh) return;
         if (obj.geometry) obj.geometry.dispose();
@@ -209,7 +310,6 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
   }, []);
 
   useEffect(() => {
-    const hasDamage = damageZones.some((zone) => zone.status === 'mal');
     const model = modelRef.current;
     if (!model) return;
 
@@ -222,15 +322,10 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
             mat.color.copy(baseColor);
           }
 
-          // Solo aplicar emisión si el material la soporta
+          // Restaurar emisión base para no teñir todo el carro
           if (mat.emissive instanceof THREE.Color) {
-            if (hasDamage) {
-              mat.emissive.set('#3b0a0a');
-              mat.emissiveIntensity = 0.15;
-            } else {
-              mat.emissive.set('#000000');
-              mat.emissiveIntensity = 0;
-            }
+            mat.emissive.set('#000000');
+            mat.emissiveIntensity = 0;
           }
 
           mat.needsUpdate = true;
@@ -240,6 +335,8 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
         }
       });
     });
+
+    renderZoneMarkers(damageZones);
   }, [damageZones]);
 
   const setPresetView = (preset: 'front' | 'side' | 'top' | 'iso') => {
