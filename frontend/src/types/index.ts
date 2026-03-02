@@ -127,6 +127,7 @@ export interface DatosVenta {
 }
 
 export type InspectionStatus = 'bien' | 'mal';
+export type TransmissionType = '' | 'mecanica' | 'automatica';
 
 export interface VehicleInspectionItem {
   key: string;
@@ -134,6 +135,9 @@ export interface VehicleInspectionItem {
   category: string;
   status: InspectionStatus;
   observaciones: string;
+  responsable: string;
+  porcentajeEstado?: number | null;
+  tipoTransmision?: TransmissionType;
 }
 
 export interface VehicleDamageZone {
@@ -141,6 +145,7 @@ export interface VehicleDamageZone {
   label: string;
   status: InspectionStatus;
   observaciones: string;
+  responsable: string;
 }
 
 export interface VehicleInspectionChecklist {

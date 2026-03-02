@@ -8,6 +8,9 @@ export interface IInspectionItem {
   category: string;
   status: InspectionStatus;
   observaciones: string;
+  responsable: string;
+  porcentajeEstado?: number | null;
+  tipoTransmision?: '' | 'mecanica' | 'automatica';
 }
 
 export interface IDamageZone {
@@ -15,6 +18,7 @@ export interface IDamageZone {
   label: string;
   status: InspectionStatus;
   observaciones: string;
+  responsable: string;
 }
 
 export interface IVehicleInspectionChecklistDocument extends Document {
@@ -37,6 +41,9 @@ const inspectionItemSchema = new Schema<IInspectionItem>(
     category: { type: String, required: true, trim: true },
     status: { type: String, enum: ['bien', 'mal'], required: true },
     observaciones: { type: String, default: '', trim: true },
+    responsable: { type: String, default: '', trim: true },
+    porcentajeEstado: { type: Number, min: 0, max: 100, default: null },
+    tipoTransmision: { type: String, enum: ['', 'mecanica', 'automatica'], default: '' },
   },
   { _id: false }
 );
@@ -47,6 +54,7 @@ const damageZoneSchema = new Schema<IDamageZone>(
     label: { type: String, required: true, trim: true },
     status: { type: String, enum: ['bien', 'mal'], required: true },
     observaciones: { type: String, default: '', trim: true },
+    responsable: { type: String, default: '', trim: true },
   },
   { _id: false }
 );

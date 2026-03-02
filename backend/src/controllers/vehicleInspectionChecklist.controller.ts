@@ -12,6 +12,9 @@ interface ChecklistInputRow {
   category?: string;
   status?: InspectionStatus;
   observaciones?: string;
+  responsable?: string;
+  porcentajeEstado?: number | string | null;
+  tipoTransmision?: string;
 }
 
 interface DamageZoneInputRow {
@@ -19,9 +22,21 @@ interface DamageZoneInputRow {
   label?: string;
   status?: InspectionStatus;
   observaciones?: string;
+  responsable?: string;
 }
 
 const normalizeStatus = (value: any): InspectionStatus => (value === 'mal' ? 'mal' : 'bien');
+const normalizeTransmissionType = (value: any): '' | 'mecanica' | 'automatica' =>
+  value === 'mecanica' || value === 'automatica' ? value : '';
+
+const normalizePercentage = (value: any): number | null => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  if (Number.isNaN(parsed)) return null;
+  if (parsed < 0) return 0;
+  if (parsed > 100) return 100;
+  return parsed;
+};
 
 const sanitizeChecklistItem = (row: ChecklistInputRow) => ({
   key: (row.key || '').toString().trim(),
@@ -29,6 +44,9 @@ const sanitizeChecklistItem = (row: ChecklistInputRow) => ({
   category: (row.category || 'General').toString().trim(),
   status: normalizeStatus(row.status),
   observaciones: (row.observaciones || '').toString().trim(),
+  responsable: (row.responsable || '').toString().trim(),
+  porcentajeEstado: normalizePercentage(row.porcentajeEstado),
+  tipoTransmision: normalizeTransmissionType(row.tipoTransmision),
 });
 
 const sanitizeDamageZone = (row: DamageZoneInputRow) => ({
@@ -36,10 +54,25 @@ const sanitizeDamageZone = (row: DamageZoneInputRow) => ({
   label: (row.label || '').toString().trim(),
   status: normalizeStatus(row.status),
   observaciones: (row.observaciones || '').toString().trim(),
+  responsable: (row.responsable || '').toString().trim(),
 });
 
 const formatStatus = (status: InspectionStatus): string => (status === 'mal' ? 'MAL' : 'BIEN');
 const formatDecision = (status: InspectionStatus): string => (status === 'mal' ? 'SI' : 'NO');
+const formatTransmission = (value: string): string => {
+  if (value === 'mecanica') return 'Mecanica';
+  if (value === 'automatica') return 'Automatica';
+  return '';
+};
+const formatItemExtra = (item: any): string => {
+  if (typeof item.porcentajeEstado === 'number') {
+    return `${item.porcentajeEstado}%`;
+  }
+  if (item.tipoTransmision) {
+    return formatTransmission(item.tipoTransmision);
+  }
+  return '';
+};
 
 export const getVehicleInspectionChecklist = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -152,11 +185,13 @@ export const exportVehicleInspectionChecklist = async (req: AuthRequest, res: Re
       { header: 'Categoria', key: 'category', width: 20 },
       { header: 'Item', key: 'label', width: 30 },
       { header: 'Estado', key: 'status', width: 12 },
+      { header: 'Valor', key: 'value', width: 18 },
       { header: 'Requiere Accion', key: 'needsAction', width: 18 },
+      { header: 'Responsable', key: 'responsable', width: 24 },
       { header: 'Observaciones', key: 'observaciones', width: 50 },
     ];
 
-    resumenSheet.mergeCells('A1:E1');
+    resumenSheet.mergeCells('A1:G1');
     const titleCell = resumenSheet.getCell('A1');
     titleCell.value = `CHECKLIST DE INGRESO - ${vehicle.marca} ${vehicle.modelo} (${vehicle.placa})`;
     titleCell.font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
@@ -173,7 +208,7 @@ export const exportVehicleInspectionChecklist = async (req: AuthRequest, res: Re
     resumenSheet.getCell('B5').value = checklist.generalObservations || '';
 
     const headerRow = resumenSheet.getRow(7);
-    headerRow.values = ['Categoria', 'Item', 'Estado', 'Requiere Accion', 'Observaciones'];
+    headerRow.values = ['Categoria', 'Item', 'Estado', 'Valor', 'Requiere Accion', 'Responsable', 'Observaciones'];
     headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF374151' } };
 
@@ -184,7 +219,9 @@ export const exportVehicleInspectionChecklist = async (req: AuthRequest, res: Re
         item.category,
         item.label,
         formatStatus(item.status),
+        formatItemExtra(item),
         formatDecision(item.status),
+        item.responsable || '',
         item.observaciones || '',
       ];
       if (item.status === 'mal') {
@@ -202,6 +239,7 @@ export const exportVehicleInspectionChecklist = async (req: AuthRequest, res: Re
       { header: 'Zona', key: 'label', width: 25 },
       { header: 'Estado', key: 'status', width: 12 },
       { header: 'Requiere Reparacion', key: 'needsRepair', width: 22 },
+      { header: 'Responsable', key: 'responsable', width: 24 },
       { header: 'Observaciones', key: 'observaciones', width: 50 },
     ];
     damageSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -212,6 +250,7 @@ export const exportVehicleInspectionChecklist = async (req: AuthRequest, res: Re
         label: zone.label,
         status: formatStatus(zone.status),
         needsRepair: formatDecision(zone.status),
+        responsable: zone.responsable || '',
         observaciones: zone.observaciones || '',
       });
     });
@@ -220,6 +259,7 @@ export const exportVehicleInspectionChecklist = async (req: AuthRequest, res: Re
     actionSheet.columns = [
       { header: 'Tipo', key: 'type', width: 18 },
       { header: 'Elemento', key: 'element', width: 35 },
+      { header: 'Responsable', key: 'responsable', width: 24 },
       { header: 'Detalle', key: 'details', width: 60 },
     ];
     actionSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -231,6 +271,7 @@ export const exportVehicleInspectionChecklist = async (req: AuthRequest, res: Re
         actionSheet.addRow({
           type: 'Mecanico / estetico',
           element: item.label,
+          responsable: item.responsable || '',
           details: item.observaciones || 'Revisar y reparar este componente',
         });
       });
@@ -241,6 +282,7 @@ export const exportVehicleInspectionChecklist = async (req: AuthRequest, res: Re
         actionSheet.addRow({
           type: 'Dano visual',
           element: zone.label,
+          responsable: zone.responsable || '',
           details: zone.observaciones || 'Reparar dano en zona de carroceria',
         });
       });
@@ -249,6 +291,7 @@ export const exportVehicleInspectionChecklist = async (req: AuthRequest, res: Re
       actionSheet.addRow({
         type: 'General',
         element: 'Sin pendientes',
+        responsable: '',
         details: 'No se registraron reparaciones pendientes',
       });
     }

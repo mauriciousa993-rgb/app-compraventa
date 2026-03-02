@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -13,25 +13,38 @@ import Layout from '../components/Layout/Layout';
 import { vehiclesAPI } from '../services/api';
 import { Vehicle, VehicleDamageZone, VehicleInspectionItem } from '../types';
 
-type TemplateChecklistItem = Omit<VehicleInspectionItem, 'status' | 'observaciones'>;
-type TemplateDamageZone = Omit<VehicleDamageZone, 'status' | 'observaciones'>;
+type TemplateChecklistItem = Omit<
+  VehicleInspectionItem,
+  'status' | 'observaciones' | 'responsable' | 'porcentajeEstado' | 'tipoTransmision'
+>;
+type TemplateDamageZone = Omit<VehicleDamageZone, 'status' | 'observaciones' | 'responsable'>;
 
 const CHECKLIST_TEMPLATE: TemplateChecklistItem[] = [
   { key: 'frenos', label: 'Frenos', category: 'Mecanica' },
   { key: 'suspension', label: 'Suspension', category: 'Mecanica' },
   { key: 'direccion', label: 'Direccion', category: 'Mecanica' },
-  { key: 'transmision', label: 'Transmision', category: 'Mecanica' },
   { key: 'aceite_motor', label: 'Aceite de motor', category: 'Mecanica' },
   { key: 'refrigerante', label: 'Refrigerante', category: 'Mecanica' },
   { key: 'bateria', label: 'Bateria', category: 'Electrico' },
   { key: 'luces', label: 'Luces', category: 'Electrico' },
-  { key: 'llantas', label: 'Llantas', category: 'Seguridad' },
+  { key: 'transmision_tipo', label: 'Transmision (mecanica o automatica)', category: 'Mecanica' },
+  { key: 'llantas_delanteras', label: 'Estado llantas delanteras (%)', category: 'Seguridad' },
+  { key: 'llantas_traseras', label: 'Estado llantas traseras (%)', category: 'Seguridad' },
+  { key: 'estado_rines', label: 'Estado de rines', category: 'Seguridad' },
+  { key: 'estado_placas', label: 'Estado de placas', category: 'Documentacion' },
+  { key: 'tarjeta_propiedad', label: 'Tarjeta de propiedad', category: 'Documentacion' },
+  { key: 'segunda_llave', label: 'Segunda llave', category: 'Documentacion' },
+  { key: 'kit_carrera', label: 'Kit de carrera', category: 'Seguridad' },
+  { key: 'estado_timon', label: 'Estado de timon', category: 'Estetica' },
   { key: 'carroceria', label: 'Carroceria', category: 'Estetica' },
   { key: 'pintura', label: 'Pintura', category: 'Estetica' },
   { key: 'interior', label: 'Interior y tapiceria', category: 'Estetica' },
   { key: 'vidrios', label: 'Vidrios y espejos', category: 'Estetica' },
   { key: 'aire_acondicionado', label: 'Aire acondicionado', category: 'Confort' },
 ];
+
+const PERCENTAGE_ITEM_KEYS = new Set<string>(['llantas_delanteras', 'llantas_traseras']);
+const TRANSMISSION_ITEM_KEYS = new Set<string>(['transmision_tipo']);
 
 const DAMAGE_ZONE_TEMPLATE: TemplateDamageZone[] = [
   { key: 'frente', label: 'Frente' },
@@ -45,10 +58,17 @@ const DAMAGE_ZONE_TEMPLATE: TemplateDamageZone[] = [
 ];
 
 const createDefaultItems = (): VehicleInspectionItem[] =>
-  CHECKLIST_TEMPLATE.map((item) => ({ ...item, status: 'bien', observaciones: '' }));
+  CHECKLIST_TEMPLATE.map((item) => ({
+    ...item,
+    status: 'bien',
+    observaciones: '',
+    responsable: '',
+    porcentajeEstado: null,
+    tipoTransmision: '',
+  }));
 
 const createDefaultDamageZones = (): VehicleDamageZone[] =>
-  DAMAGE_ZONE_TEMPLATE.map((zone) => ({ ...zone, status: 'bien', observaciones: '' }));
+  DAMAGE_ZONE_TEMPLATE.map((zone) => ({ ...zone, status: 'bien', observaciones: '', responsable: '' }));
 
 const mergeItems = (savedItems: any[] | undefined): VehicleInspectionItem[] =>
   CHECKLIST_TEMPLATE.map((template) => {
@@ -57,6 +77,12 @@ const mergeItems = (savedItems: any[] | undefined): VehicleInspectionItem[] =>
       ...template,
       status: saved?.status === 'mal' ? 'mal' : 'bien',
       observaciones: saved?.observaciones || '',
+      responsable: saved?.responsable || '',
+      porcentajeEstado:
+        typeof saved?.porcentajeEstado === 'number' && !Number.isNaN(saved?.porcentajeEstado)
+          ? Math.max(0, Math.min(100, saved.porcentajeEstado))
+          : null,
+      tipoTransmision: saved?.tipoTransmision === 'mecanica' || saved?.tipoTransmision === 'automatica' ? saved.tipoTransmision : '',
     };
   });
 
@@ -67,8 +93,134 @@ const mergeDamageZones = (savedZones: any[] | undefined): VehicleDamageZone[] =>
       ...template,
       status: saved?.status === 'mal' ? 'mal' : 'bien',
       observaciones: saved?.observaciones || '',
+      responsable: saved?.responsable || '',
     };
   });
+
+const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
+
+const VehicleDamage3DViewer: React.FC<{ damageZones: VehicleDamageZone[] }> = ({ damageZones }) => {
+  const [rotationX, setRotationX] = useState(-12);
+  const [rotationY, setRotationY] = useState(-28);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const getZoneColor = (zoneKey: string): string => {
+    const zone = damageZones.find((item) => item.key === zoneKey);
+    return zone?.status === 'mal' ? '#ef4444' : '#16a34a';
+  };
+
+  const startDrag = (clientX: number, clientY: number) => {
+    setIsDragging(true);
+    dragStartRef.current = { x: clientX, y: clientY };
+  };
+
+  const moveDrag = (clientX: number, clientY: number) => {
+    if (!dragStartRef.current) return;
+    const deltaX = clientX - dragStartRef.current.x;
+    const deltaY = clientY - dragStartRef.current.y;
+
+    setRotationY((prev) => prev + deltaX * 0.35);
+    setRotationX((prev) => clamp(prev - deltaY * 0.25, -45, 45));
+    dragStartRef.current = { x: clientX, y: clientY };
+  };
+
+  const endDrag = () => {
+    setIsDragging(false);
+    dragStartRef.current = null;
+  };
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <button
+          type="button"
+          onClick={() => {
+            setRotationX(-12);
+            setRotationY(-28);
+          }}
+          className="px-3 py-1 text-xs rounded-md border border-[#3b404a] text-ink-200 hover:text-white hover:border-primary-500"
+        >
+          Vista inicial
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setRotationX(0);
+            setRotationY(0);
+          }}
+          className="px-3 py-1 text-xs rounded-md border border-[#3b404a] text-ink-200 hover:text-white hover:border-primary-500"
+        >
+          Frente
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setRotationX(0);
+            setRotationY(-90);
+          }}
+          className="px-3 py-1 text-xs rounded-md border border-[#3b404a] text-ink-200 hover:text-white hover:border-primary-500"
+        >
+          Lateral
+        </button>
+      </div>
+      <div
+        className={`rounded-xl border border-[#2f3238] bg-[#12151b] p-3 h-72 touch-none select-none ${
+          isDragging ? 'cursor-grabbing' : 'cursor-grab'
+        }`}
+        onMouseDown={(e) => startDrag(e.clientX, e.clientY)}
+        onMouseMove={(e) => {
+          if (!isDragging) return;
+          moveDrag(e.clientX, e.clientY);
+        }}
+        onMouseUp={endDrag}
+        onMouseLeave={endDrag}
+        onTouchStart={(e) => {
+          if (e.touches.length === 0) return;
+          const touch = e.touches[0];
+          startDrag(touch.clientX, touch.clientY);
+        }}
+        onTouchMove={(e) => {
+          if (e.touches.length === 0) return;
+          const touch = e.touches[0];
+          moveDrag(touch.clientX, touch.clientY);
+        }}
+        onTouchEnd={endDrag}
+      >
+        <div className="w-full h-full [perspective:1200px] flex items-center justify-center">
+          <div
+            style={{
+              transformStyle: 'preserve-3d',
+              transform: `rotateX(${rotationX}deg) rotateY(${rotationY}deg)`,
+              transition: isDragging ? 'none' : 'transform 140ms ease-out',
+            }}
+          >
+            <svg viewBox="0 0 420 260" className="w-[330px] h-[210px] drop-shadow-[0_14px_25px_rgba(0,0,0,0.65)]">
+              <ellipse cx="210" cy="220" rx="120" ry="18" fill="#0b0f17" />
+
+              <polygon points="145,88 214,58 282,87 214,116" fill={getZoneColor('techo')} stroke="#111827" strokeWidth="2" />
+              <polygon points="108,122 145,88 214,116 177,148" fill={getZoneColor('capo')} stroke="#111827" strokeWidth="2" />
+              <polygon points="95,145 108,122 177,148 163,171" fill={getZoneColor('frente')} stroke="#111827" strokeWidth="2" />
+              <polygon points="214,58 250,78 282,87 247,102" fill={getZoneColor('trasera')} stroke="#111827" strokeWidth="2" />
+
+              <polygon points="145,88 108,122 108,182 145,149" fill={getZoneColor('lateral_izq')} stroke="#111827" strokeWidth="2" />
+              <polygon points="282,87 318,120 318,182 282,149" fill={getZoneColor('lateral_der')} stroke="#111827" strokeWidth="2" />
+
+              <polygon points="145,149 108,182 145,196 182,162" fill={getZoneColor('puerta_izq')} stroke="#111827" strokeWidth="2" />
+              <polygon points="282,149 318,182 282,196 245,162" fill={getZoneColor('puerta_der')} stroke="#111827" strokeWidth="2" />
+
+              <circle cx="144" cy="198" r="22" fill="#0f172a" stroke="#4b5563" strokeWidth="3" />
+              <circle cx="284" cy="198" r="22" fill="#0f172a" stroke="#4b5563" strokeWidth="3" />
+            </svg>
+          </div>
+        </div>
+      </div>
+      <p className="text-xs text-ink-300 mt-2">
+        Arrastra para rotar. Rojo = zona con dano, verde = zona en buen estado.
+      </p>
+    </div>
+  );
+};
 
 const VehicleInspectionChecklist: React.FC = () => {
   const navigate = useNavigate();
@@ -163,6 +315,17 @@ const VehicleInspectionChecklist: React.FC = () => {
   const failingItems = useMemo(() => items.filter((item) => item.status === 'mal'), [items]);
   const damagedZones = useMemo(() => damageZones.filter((zone) => zone.status === 'mal'), [damageZones]);
 
+  const getItemSpecificValue = (item: VehicleInspectionItem): string => {
+    if (PERCENTAGE_ITEM_KEYS.has(item.key) && typeof item.porcentajeEstado === 'number') {
+      return `${item.porcentajeEstado}%`;
+    }
+    if (TRANSMISSION_ITEM_KEYS.has(item.key)) {
+      if (item.tipoTransmision === 'mecanica') return 'Mecanica';
+      if (item.tipoTransmision === 'automatica') return 'Automatica';
+    }
+    return '';
+  };
+
   const summaryLines = useMemo(() => {
     const rows: string[] = [];
     rows.push(`Vehiculo: ${selectedVehicle?.marca || ''} ${selectedVehicle?.modelo || ''} (${selectedVehicle?.placa || ''})`);
@@ -171,14 +334,20 @@ const VehicleInspectionChecklist: React.FC = () => {
     rows.push('');
     rows.push(`Pendientes mecanicos/esteticos: ${failingItems.length}`);
     failingItems.forEach((item) => {
+      const extras: string[] = [];
+      const value = getItemSpecificValue(item);
+      if (value) extras.push(value);
+      if (item.responsable.trim()) extras.push(`Responsable: ${item.responsable.trim()}`);
+      const meta = extras.length > 0 ? ` (${extras.join(' | ')})` : '';
       const detail = item.observaciones ? ` - ${item.observaciones}` : '';
-      rows.push(`- ${item.label}${detail}`);
+      rows.push(`- ${item.label}${meta}${detail}`);
     });
     rows.push('');
     rows.push(`Zonas con dano visual: ${damagedZones.length}`);
     damagedZones.forEach((zone) => {
+      const owner = zone.responsable.trim() ? ` (Responsable: ${zone.responsable.trim()})` : '';
       const detail = zone.observaciones ? ` - ${zone.observaciones}` : '';
-      rows.push(`- ${zone.label}${detail}`);
+      rows.push(`- ${zone.label}${owner}${detail}`);
     });
     if (generalObservations.trim()) {
       rows.push('');
@@ -196,12 +365,34 @@ const VehicleInspectionChecklist: React.FC = () => {
     setItems((prev) => prev.map((item) => (item.key === key ? { ...item, observaciones } : item)));
   };
 
+  const updateItemResponsable = (key: string, responsable: string) => {
+    setItems((prev) => prev.map((item) => (item.key === key ? { ...item, responsable } : item)));
+  };
+
+  const updateItemPercentage = (key: string, value: string) => {
+    const trimmed = value.trim();
+    const parsed = trimmed === '' ? null : Number(trimmed);
+    const normalized =
+      parsed === null || Number.isNaN(parsed) ? null : Math.max(0, Math.min(100, Math.round(parsed)));
+    setItems((prev) => prev.map((item) => (item.key === key ? { ...item, porcentajeEstado: normalized } : item)));
+  };
+
+  const updateItemTransmissionType = (key: string, tipoTransmision: '' | 'mecanica' | 'automatica') => {
+    setItems((prev) =>
+      prev.map((item) => (item.key === key ? { ...item, tipoTransmision } : item))
+    );
+  };
+
   const updateZoneStatus = (key: string, status: 'bien' | 'mal') => {
     setDamageZones((prev) => prev.map((zone) => (zone.key === key ? { ...zone, status } : zone)));
   };
 
   const updateZoneObservation = (key: string, observaciones: string) => {
     setDamageZones((prev) => prev.map((zone) => (zone.key === key ? { ...zone, observaciones } : zone)));
+  };
+
+  const updateZoneResponsable = (key: string, responsable: string) => {
+    setDamageZones((prev) => prev.map((zone) => (zone.key === key ? { ...zone, responsable } : zone)));
   };
 
   const handleSaveChecklist = async () => {
@@ -240,11 +431,6 @@ const VehicleInspectionChecklist: React.FC = () => {
       console.error('Error al exportar checklist:', error);
       alert(error?.response?.data?.message || 'No se pudo exportar el checklist');
     }
-  };
-
-  const getZoneColor = (zoneKey: string) => {
-    const zone = damageZones.find((item) => item.key === zoneKey);
-    return zone?.status === 'mal' ? '#ef4444' : '#22c55e';
   };
 
   if (isLoadingVehicles) {
@@ -386,6 +572,42 @@ const VehicleInspectionChecklist: React.FC = () => {
                               className="input-field text-sm"
                               placeholder="Observaciones o trabajo requerido"
                             />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                              <input
+                                type="text"
+                                value={item.responsable}
+                                onChange={(e) => updateItemResponsable(item.key, e.target.value)}
+                                className="input-field text-sm"
+                                placeholder="Responsable de la tarea"
+                              />
+                              {PERCENTAGE_ITEM_KEYS.has(item.key) && (
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  value={typeof item.porcentajeEstado === 'number' ? item.porcentajeEstado : ''}
+                                  onChange={(e) => updateItemPercentage(item.key, e.target.value)}
+                                  className="input-field text-sm"
+                                  placeholder="Estado (%)"
+                                />
+                              )}
+                              {TRANSMISSION_ITEM_KEYS.has(item.key) && (
+                                <select
+                                  value={item.tipoTransmision || ''}
+                                  onChange={(e) =>
+                                    updateItemTransmissionType(
+                                      item.key,
+                                      e.target.value as '' | 'mecanica' | 'automatica'
+                                    )
+                                  }
+                                  className="input-field text-sm"
+                                >
+                                  <option value="">Seleccionar tipo</option>
+                                  <option value="mecanica">Mecanica</option>
+                                  <option value="automatica">Automatica</option>
+                                </select>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -410,23 +632,9 @@ const VehicleInspectionChecklist: React.FC = () => {
               <div className="card">
                 <h2 className="text-lg font-semibold text-white mb-3">Mapa visual de danos</h2>
                 <p className="text-sm text-ink-200 mb-4">
-                  Las zonas en rojo requieren reparacion. Verde significa sin dano reportado.
+                  Visual 3D rotable para inspeccionar danos por zona del vehiculo.
                 </p>
-                <div className="rounded-xl border border-[#2f3238] bg-[#12151b] p-3">
-                  <svg viewBox="0 0 460 230" className="w-full h-auto">
-                    <rect x="110" y="40" width="240" height="150" rx="58" fill="#1f2937" stroke="#6b7280" />
-                    <rect x="180" y="20" width="100" height="26" rx="12" fill={getZoneColor('frente')} />
-                    <rect x="160" y="52" width="140" height="30" rx="10" fill={getZoneColor('capo')} />
-                    <rect x="150" y="88" width="160" height="30" rx="10" fill={getZoneColor('techo')} />
-                    <rect x="180" y="192" width="100" height="24" rx="10" fill={getZoneColor('trasera')} />
-                    <rect x="94" y="84" width="42" height="72" rx="8" fill={getZoneColor('lateral_izq')} />
-                    <rect x="324" y="84" width="42" height="72" rx="8" fill={getZoneColor('lateral_der')} />
-                    <rect x="132" y="126" width="78" height="46" rx="8" fill={getZoneColor('puerta_izq')} />
-                    <rect x="250" y="126" width="78" height="46" rx="8" fill={getZoneColor('puerta_der')} />
-                    <circle cx="168" cy="174" r="20" fill="#111827" stroke="#4b5563" />
-                    <circle cx="292" cy="174" r="20" fill="#111827" stroke="#4b5563" />
-                  </svg>
-                </div>
+                <VehicleDamage3DViewer damageZones={damageZones} />
 
                 <div className="mt-4 space-y-3">
                   {damageZones.map((zone) => (
@@ -464,6 +672,13 @@ const VehicleInspectionChecklist: React.FC = () => {
                         rows={2}
                         className="input-field text-sm"
                         placeholder="Detalle de dano en esta zona"
+                      />
+                      <input
+                        type="text"
+                        value={zone.responsable}
+                        onChange={(e) => updateZoneResponsable(zone.key, e.target.value)}
+                        className="input-field text-sm mt-2"
+                        placeholder="Responsable de reparacion"
                       />
                     </div>
                   ))}
