@@ -107,7 +107,7 @@ const VehicleDamage3DViewer: React.FC<{ damageZones: VehicleDamageZone[] }> = ({
 
   const getZoneColor = (zoneKey: string): string => {
     const zone = damageZones.find((item) => item.key === zoneKey);
-    return zone?.status === 'mal' ? '#ef4444' : '#16a34a';
+    return zone?.status === 'mal' ? '#ef4444' : '#4f6278';
   };
 
   const startDrag = (clientX: number, clientY: number) => {
@@ -195,28 +195,53 @@ const VehicleDamage3DViewer: React.FC<{ damageZones: VehicleDamageZone[] }> = ({
               transition: isDragging ? 'none' : 'transform 140ms ease-out',
             }}
           >
-            <svg viewBox="0 0 420 260" className="w-[330px] h-[210px] drop-shadow-[0_14px_25px_rgba(0,0,0,0.65)]">
-              <ellipse cx="210" cy="220" rx="120" ry="18" fill="#0b0f17" />
+            <svg viewBox="0 0 460 280" className="w-[360px] h-[230px] drop-shadow-[0_16px_28px_rgba(0,0,0,0.7)]">
+              <defs>
+                <linearGradient id="bodyBase" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor="#1f2937" />
+                  <stop offset="100%" stopColor="#0f172a" />
+                </linearGradient>
+                <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#7dd3fc" stopOpacity="0.55" />
+                  <stop offset="100%" stopColor="#1e3a8a" stopOpacity="0.35" />
+                </linearGradient>
+              </defs>
 
-              <polygon points="145,88 214,58 282,87 214,116" fill={getZoneColor('techo')} stroke="#111827" strokeWidth="2" />
-              <polygon points="108,122 145,88 214,116 177,148" fill={getZoneColor('capo')} stroke="#111827" strokeWidth="2" />
-              <polygon points="95,145 108,122 177,148 163,171" fill={getZoneColor('frente')} stroke="#111827" strokeWidth="2" />
-              <polygon points="214,58 250,78 282,87 247,102" fill={getZoneColor('trasera')} stroke="#111827" strokeWidth="2" />
+              <ellipse cx="230" cy="244" rx="146" ry="22" fill="#0a0f18" />
 
-              <polygon points="145,88 108,122 108,182 145,149" fill={getZoneColor('lateral_izq')} stroke="#111827" strokeWidth="2" />
-              <polygon points="282,87 318,120 318,182 282,149" fill={getZoneColor('lateral_der')} stroke="#111827" strokeWidth="2" />
+              <ellipse cx="132" cy="210" rx="28" ry="34" fill="#0b1220" />
+              <ellipse cx="328" cy="210" rx="28" ry="34" fill="#0b1220" />
+              <ellipse cx="132" cy="210" rx="15" ry="19" fill="#6b7280" />
+              <ellipse cx="328" cy="210" rx="15" ry="19" fill="#6b7280" />
 
-              <polygon points="145,149 108,182 145,196 182,162" fill={getZoneColor('puerta_izq')} stroke="#111827" strokeWidth="2" />
-              <polygon points="282,149 318,182 282,196 245,162" fill={getZoneColor('puerta_der')} stroke="#111827" strokeWidth="2" />
+              <path d="M92 162 L120 138 L182 102 L278 102 L340 138 L368 162 L368 198 L324 220 L136 220 L92 198 Z" fill="url(#bodyBase)" stroke="#0b1320" strokeWidth="3" />
 
-              <circle cx="144" cy="198" r="22" fill="#0f172a" stroke="#4b5563" strokeWidth="3" />
-              <circle cx="284" cy="198" r="22" fill="#0f172a" stroke="#4b5563" strokeWidth="3" />
+              <polygon points="120,138 182,102 278,102 340,138 292,154 166,154" fill={getZoneColor('capo')} stroke="#0f172a" strokeWidth="2.5" />
+              <polygon points="182,102 212,72 248,72 278,102 248,126 212,126" fill={getZoneColor('techo')} stroke="#0f172a" strokeWidth="2.5" />
+              <polygon points="166,154 292,154 336,166 308,188 150,188 122,166" fill={getZoneColor('trasera')} stroke="#0f172a" strokeWidth="2.5" />
+              <polygon points="92,162 120,138 166,154 150,182 104,188" fill={getZoneColor('frente')} stroke="#0f172a" strokeWidth="2.5" />
+
+              <polygon points="92,162 120,138 166,154 166,186 136,210 92,198" fill={getZoneColor('lateral_izq')} stroke="#0f172a" strokeWidth="2.5" />
+              <polygon points="368,162 340,138 292,154 292,186 324,210 368,198" fill={getZoneColor('lateral_der')} stroke="#0f172a" strokeWidth="2.5" />
+              <polygon points="166,154 166,186 214,198 214,168" fill={getZoneColor('puerta_izq')} stroke="#0f172a" strokeWidth="2.5" />
+              <polygon points="292,154 292,186 246,198 246,168" fill={getZoneColor('puerta_der')} stroke="#0f172a" strokeWidth="2.5" />
+
+              <polygon points="196,110 214,88 246,88 264,110 242,126 218,126" fill="url(#glass)" stroke="#1e3a8a" strokeWidth="1.5" />
+              <polygon points="172,154 188,142 214,152 214,168 186,172" fill="url(#glass)" stroke="#1e3a8a" strokeWidth="1.2" />
+              <polygon points="288,154 272,142 246,152 246,168 274,172" fill="url(#glass)" stroke="#1e3a8a" strokeWidth="1.2" />
+
+              <rect x="103" y="171" width="16" height="8" rx="3" fill="#fef08a" />
+              <rect x="341" y="171" width="16" height="8" rx="3" fill="#fca5a5" />
+
+              <path d="M106 186 L144 196" stroke="#0f172a" strokeWidth="1.8" />
+              <path d="M316 196 L354 186" stroke="#0f172a" strokeWidth="1.8" />
+              <path d="M188 188 L272 188" stroke="#0f172a" strokeWidth="1.6" />
             </svg>
           </div>
         </div>
       </div>
       <p className="text-xs text-ink-300 mt-2">
-        Arrastra para rotar. Rojo = zona con dano, verde = zona en buen estado.
+        Arrastra para rotar. Rojo = zona con dano. Azul/gris = zona sin dano.
       </p>
     </div>
   );
