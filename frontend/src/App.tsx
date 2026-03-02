@@ -14,6 +14,7 @@ import FixedExpenses from './pages/FixedExpenses';
 import Notifications from './pages/Notifications';
 import ConsultaTramite from './pages/ConsultaTramite';
 import CommissionLiquidation from './pages/CommissionLiquidation';
+import VehicleInspectionChecklist from './pages/VehicleInspectionChecklist';
 
 // Componente para proteger rutas
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -72,6 +73,14 @@ function AppRoutes() {
         element={
           <PrivateRoute>
             <VehicleForm />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/vehicles/inspection"
+        element={
+          <PrivateRoute>
+            <VehicleInspectionChecklist />
           </PrivateRoute>
         }
       />

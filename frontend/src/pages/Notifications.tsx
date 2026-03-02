@@ -118,7 +118,7 @@ const Notifications: React.FC = () => {
     return type === 'soat' ? 'SOAT' : 'Tecnomecánica';
   };
 
-  const formatDate = (date: Date | undefined) => {
+  const formatDate = (date: Date | string | undefined) => {
     if (!date) return 'N/A';
     return new Date(date).toLocaleDateString('es-CO', {
       year: 'numeric',

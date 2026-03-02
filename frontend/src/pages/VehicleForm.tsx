@@ -157,6 +157,11 @@ const VehicleForm: React.FC = () => {
       domicilioContractual: '',
       clausulasAdicionales: '',
     },
+    comision: {
+      monto: 0,
+      porcentaje: 0,
+      descripcion: '',
+    },
   });
 
   // Formatear número con separador de miles

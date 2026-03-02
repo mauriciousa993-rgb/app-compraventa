@@ -1,7 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LogOut, User, BarChart3, Menu, X, Store, Receipt, Bell, Search, DollarSign } from 'lucide-react';
+import {
+  LogOut,
+  User,
+  BarChart3,
+  Menu,
+  X,
+  Store,
+  Receipt,
+  Bell,
+  Search,
+  DollarSign,
+  ClipboardCheck,
+} from 'lucide-react';
 import autoTechLogo from '../../assets/autotech-logo.png';
 import { vehiclesAPI } from '../../services/api';
 
@@ -108,6 +120,10 @@ const Navbar: React.FC = () => {
               <BarChart3 className="h-4 w-4 text-primary-400" />
               <span>Reportes</span>
             </Link>
+            <Link to="/vehicles/inspection" className={`${navLinkClass} flex items-center space-x-1`}>
+              <ClipboardCheck className="h-4 w-4 text-primary-400" />
+              <span>Checklist</span>
+            </Link>
             <Link to="/fixed-expenses" className={`${navLinkClass} flex items-center space-x-1`}>
               <Receipt className="h-4 w-4 text-primary-400" />
               <span>Gastos Fijos</span>
@@ -207,6 +223,14 @@ const Navbar: React.FC = () => {
               >
                 <BarChart3 className="h-4 w-4 text-primary-400" />
                 <span>Reportes</span>
+              </Link>
+              <Link
+                to="/vehicles/inspection"
+                onClick={closeMobileMenu}
+                className="text-ink-100 hover:text-white transition-colors py-2 px-4 hover:bg-[#23252a] rounded-lg flex items-center space-x-2"
+              >
+                <ClipboardCheck className="h-4 w-4 text-primary-400" />
+                <span>Checklist</span>
               </Link>
               <Link
                 to="/fixed-expenses"

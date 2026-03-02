@@ -1,6 +1,6 @@
 ﻿﻿import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search, Car, Edit, Trash2, FileDown, X, ChevronDown, ChevronUp, FileText, DollarSign, Edit2 } from 'lucide-react';
+import { Plus, Search, Car, Edit, Trash2, FileDown, X, ChevronDown, ChevronUp, FileText, DollarSign, Edit2, ClipboardCheck } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
 import api from '../services/api';
 import { Vehicle, DatosVenta, DatosSeparacion } from '../types';
@@ -865,6 +865,16 @@ const VehicleList: React.FC = () => {
                         </>
                       )}
 
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/vehicles/inspection?vehicle=${vehicle._id}`);
+                        }}
+                        className="px-4 py-2 text-sm text-[#f3c679] hover:bg-[#2a2215] rounded-lg transition-colors flex items-center gap-2 border border-[#6b542d]"
+                      >
+                        <ClipboardCheck className="h-4 w-4" />
+                        Checklist Ingreso
+                      </button>
                       <button
                         onClick={async (e) => {
                           e.stopPropagation();

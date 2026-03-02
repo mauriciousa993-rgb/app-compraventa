@@ -126,6 +126,43 @@ export interface DatosVenta {
   };
 }
 
+export type InspectionStatus = 'bien' | 'mal';
+
+export interface VehicleInspectionItem {
+  key: string;
+  label: string;
+  category: string;
+  status: InspectionStatus;
+  observaciones: string;
+}
+
+export interface VehicleDamageZone {
+  key: string;
+  label: string;
+  status: InspectionStatus;
+  observaciones: string;
+}
+
+export interface VehicleInspectionChecklist {
+  _id?: string;
+  vehicle: string;
+  inspectorName: string;
+  inspectionDate: string;
+  items: VehicleInspectionItem[];
+  damageZones: VehicleDamageZone[];
+  generalObservations: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface VehicleInspectionChecklistPayload {
+  inspectorName: string;
+  inspectionDate: string;
+  items: VehicleInspectionItem[];
+  damageZones: VehicleDamageZone[];
+  generalObservations: string;
+}
+
 export interface Vehicle {
   _id: string;
   marca: string;
@@ -204,6 +241,7 @@ export interface Vehicle {
   fechaListoVenta?: string;
   datosVenta?: DatosVenta;
   datosSeparacion?: DatosSeparacion;
+  inspectionChecklist?: VehicleInspectionChecklist;
   registradoPor: {
     _id: string;
     nombre: string;

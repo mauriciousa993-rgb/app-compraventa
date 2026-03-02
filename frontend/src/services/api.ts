@@ -1,5 +1,15 @@
 import axios from 'axios';
-import { AuthResponse, User, Vehicle, Statistics, DatosVenta, DatosSeparacion, FixedExpense } from '../types';
+import {
+  AuthResponse,
+  User,
+  Vehicle,
+  Statistics,
+  DatosVenta,
+  DatosSeparacion,
+  FixedExpense,
+  VehicleInspectionChecklist,
+  VehicleInspectionChecklistPayload,
+} from '../types';
 
 // Detectar IP local para móviles o URL de producción
 const getAPIURL = (): string => {
@@ -259,6 +269,33 @@ export const vehiclesAPI = {
     const link = document.createElement('a');
     link.href = url;
     link.setAttribute('download', `formulario-traspaso-${id}-${Date.now()}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  },
+
+  getInspectionChecklist: async (id: string) => {
+    const response = await api.get<VehicleInspectionChecklist>(`/vehicles/${id}/inspection-checklist`);
+    return response.data;
+  },
+
+  saveInspectionChecklist: async (id: string, data: VehicleInspectionChecklistPayload) => {
+    const response = await api.put<{ message: string; checklist: VehicleInspectionChecklist }>(
+      `/vehicles/${id}/inspection-checklist`,
+      data
+    );
+    return response.data;
+  },
+
+  exportInspectionChecklist: async (id: string) => {
+    const response = await api.get(`/vehicles/${id}/inspection-checklist/export`, {
+      responseType: 'blob',
+    });
+
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `checklist-ingreso-${id}-${Date.now()}.xlsx`);
     document.body.appendChild(link);
     link.click();
     link.remove();

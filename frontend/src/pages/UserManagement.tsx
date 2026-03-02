@@ -13,7 +13,7 @@ const UserManagement: React.FC = () => {
     nombre: '',
     email: '',
     password: '',
-    rol: 'visualizador' as 'admin' | 'vendedor' | 'visualizador',
+    rol: 'visualizador' as User['rol'],
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');

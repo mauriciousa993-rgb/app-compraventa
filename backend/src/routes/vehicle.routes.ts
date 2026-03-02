@@ -20,6 +20,11 @@ import {
   getVehiclePhoto,
   consultarEstadoTramite,
 } from '../controllers/vehicle.controller';
+import {
+  exportVehicleInspectionChecklist,
+  getVehicleInspectionChecklist,
+  upsertVehicleInspectionChecklist,
+} from '../controllers/vehicleInspectionChecklist.controller';
 import { getMarketplaceVehicles } from '../controllers/marketplace.controller';
 import { exportBusinessTemplate } from '../controllers/reportTemplates.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
@@ -44,6 +49,9 @@ router.get('/reports/monthly/export', exportMonthlyReport);
 router.get('/reports/templates/:templateType', exportBusinessTemplate);
 router.get('/expiring-documents', getVehiclesWithExpiringDocuments);
 router.get('/export', exportToExcel);
+router.get('/:id/inspection-checklist', getVehicleInspectionChecklist);
+router.put('/:id/inspection-checklist', authorize('admin', 'vendedor'), upsertVehicleInspectionChecklist);
+router.get('/:id/inspection-checklist/export', exportVehicleInspectionChecklist);
 router.get('/:id', getVehicleById);
 router.get('/:id/export', exportVehicleReport);
 router.put('/:id', authorize('admin', 'vendedor'), updateVehicle);
