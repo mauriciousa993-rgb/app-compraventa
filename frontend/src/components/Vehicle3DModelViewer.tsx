@@ -11,6 +11,11 @@ interface Vehicle3DModelViewerProps {
   damageZones: VehicleDamageZone[];
 }
 
+type ZoneMarkerProfile = {
+  direction: [number, number, number];
+  seeds: Array<[number, number, number]>;
+};
+
 type MaterialWithColor = THREE.Material & {
   color?: THREE.Color;
   emissive?: THREE.Color;
@@ -61,64 +66,88 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
     controls.update();
   };
 
-  const ZONE_LOCAL_COORDS: Record<string, Array<[number, number, number]>> = {
-    frente: [
-      [0, 0.42, -0.98],
-      [-0.22, 0.44, -0.95],
-      [0.22, 0.44, -0.95],
-      [0, 0.32, -0.99],
-      [0, 0.52, -0.93],
-    ],
-    capo: [
-      [0, 0.66, -0.62],
-      [-0.24, 0.64, -0.6],
-      [0.24, 0.64, -0.6],
-      [-0.12, 0.72, -0.5],
-      [0.12, 0.72, -0.5],
-    ],
-    techo: [
-      [0, 0.94, 0],
-      [-0.2, 0.92, -0.04],
-      [0.2, 0.92, -0.04],
-      [-0.16, 0.9, 0.18],
-      [0.16, 0.9, 0.18],
-      [0, 0.88, 0.22],
-    ],
-    trasera: [
-      [0, 0.46, 0.98],
-      [-0.22, 0.46, 0.96],
-      [0.22, 0.46, 0.96],
-      [0, 0.34, 0.99],
-      [0, 0.56, 0.9],
-    ],
-    lateral_izq: [
-      [-0.98, 0.58, -0.34],
-      [-0.98, 0.56, -0.05],
-      [-0.98, 0.54, 0.24],
-      [-0.93, 0.44, -0.12],
-      [-0.93, 0.44, 0.18],
-    ],
-    lateral_der: [
-      [0.98, 0.58, -0.34],
-      [0.98, 0.56, -0.05],
-      [0.98, 0.54, 0.24],
-      [0.93, 0.44, -0.12],
-      [0.93, 0.44, 0.18],
-    ],
-    puerta_izq: [
-      [-0.92, 0.5, -0.02],
-      [-0.92, 0.48, 0.18],
-      [-0.92, 0.46, 0.34],
-      [-0.86, 0.58, 0.1],
-      [-0.86, 0.38, 0.14],
-    ],
-    puerta_der: [
-      [0.92, 0.5, -0.02],
-      [0.92, 0.48, 0.18],
-      [0.92, 0.46, 0.34],
-      [0.86, 0.58, 0.1],
-      [0.86, 0.38, 0.14],
-    ],
+  const ZONE_MARKER_PROFILE: Record<string, ZoneMarkerProfile> = {
+    frente: {
+      direction: [0, 0.05, -1],
+      seeds: [
+        [0, 0.37, -0.98],
+        [-0.2, 0.39, -0.94],
+        [0.2, 0.39, -0.94],
+        [0, 0.5, -0.9],
+        [0, 0.27, -0.98],
+      ],
+    },
+    capo: {
+      direction: [0, 0.38, -1],
+      seeds: [
+        [0, 0.64, -0.55],
+        [-0.2, 0.62, -0.54],
+        [0.2, 0.62, -0.54],
+        [0, 0.72, -0.42],
+        [0, 0.56, -0.66],
+      ],
+    },
+    techo: {
+      direction: [0, 1, 0],
+      seeds: [
+        [0, 0.95, 0],
+        [-0.17, 0.92, -0.03],
+        [0.17, 0.92, -0.03],
+        [-0.15, 0.9, 0.18],
+        [0.15, 0.9, 0.18],
+        [0, 0.89, 0.25],
+      ],
+    },
+    trasera: {
+      direction: [0, 0.07, 1],
+      seeds: [
+        [0, 0.4, 0.98],
+        [-0.2, 0.42, 0.94],
+        [0.2, 0.42, 0.94],
+        [0, 0.53, 0.88],
+        [0, 0.28, 0.98],
+      ],
+    },
+    lateral_izq: {
+      direction: [-1, 0.08, 0],
+      seeds: [
+        [-0.98, 0.54, -0.32],
+        [-0.98, 0.52, -0.03],
+        [-0.98, 0.5, 0.24],
+        [-0.92, 0.4, -0.08],
+        [-0.92, 0.4, 0.2],
+      ],
+    },
+    lateral_der: {
+      direction: [1, 0.08, 0],
+      seeds: [
+        [0.98, 0.54, -0.32],
+        [0.98, 0.52, -0.03],
+        [0.98, 0.5, 0.24],
+        [0.92, 0.4, -0.08],
+        [0.92, 0.4, 0.2],
+      ],
+    },
+    puerta_izq: {
+      direction: [-1, 0.02, 0.02],
+      seeds: [
+        [-0.92, 0.5, -0.02],
+        [-0.92, 0.48, 0.18],
+        [-0.92, 0.46, 0.34],
+        [-0.86, 0.58, 0.1],
+        [-0.86, 0.38, 0.14],
+      ],
+    },
+    puerta_der: {
+      direction: [1, 0.02, 0.02],
+      seeds: [
+        [0.92, 0.5, -0.02],
+        [0.92, 0.48, 0.18],
+        [0.92, 0.46, 0.34],
+        [0.86, 0.58, 0.1],
+        [0.86, 0.38, 0.14],
+      ],
+    },
   };
 
   const clearZoneMarkers = () => {
@@ -145,24 +174,46 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
 
     clearZoneMarkers();
 
+    const meshes: THREE.Mesh[] = [];
+    model.traverse((child: any) => {
+      if (child.isMesh) meshes.push(child as THREE.Mesh);
+    });
+    if (meshes.length === 0) return;
+
     const box = new THREE.Box3().setFromObject(model);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
     const halfX = Math.max(size.x / 2, 0.1);
     const halfZ = Math.max(size.z / 2, 0.1);
     const markerRadius = Math.max(Math.min(size.x, size.y, size.z) * 0.03, 0.08);
+    const outsideDistance = Math.max(size.x, size.y, size.z) * 1.1;
+    const raycaster = new THREE.Raycaster();
 
     zones.forEach((zone) => {
-      const zonePoints = ZONE_LOCAL_COORDS[zone.key];
-      if (!zonePoints || zonePoints.length === 0) return;
+      const profile = ZONE_MARKER_PROFILE[zone.key];
+      if (!profile || profile.seeds.length === 0) return;
+      const rayOutDirection = new THREE.Vector3(...profile.direction).normalize();
 
       const isDamaged = zone.status === 'mal';
-      zonePoints.forEach(([nx, ny, nz]) => {
-        const position = new THREE.Vector3(
+      profile.seeds.forEach(([nx, ny, nz]) => {
+        const seed = new THREE.Vector3(
           center.x + nx * halfX * 0.95,
           box.min.y + ny * size.y,
           center.z + nz * halfZ * 0.95
         );
+
+        const rayStart = seed.clone().addScaledVector(rayOutDirection, outsideDistance);
+        raycaster.set(rayStart, rayOutDirection.clone().multiplyScalar(-1));
+        const intersections = raycaster.intersectObjects(meshes, false);
+
+        let markerPosition = seed.clone();
+        if (intersections.length > 0) {
+          const hit = intersections[0];
+          const hitNormal = hit.face?.normal
+            ? hit.face.normal.clone().transformDirection((hit.object as THREE.Mesh).matrixWorld)
+            : rayOutDirection;
+          markerPosition = hit.point.clone().addScaledVector(hitNormal.normalize(), markerRadius * 0.55);
+        }
 
         const marker = new THREE.Mesh(
           new THREE.SphereGeometry(isDamaged ? markerRadius * 1.05 : markerRadius * 0.78, 16, 16),
@@ -176,7 +227,7 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
             opacity: isDamaged ? 0.98 : 0.55,
           })
         );
-        marker.position.copy(position);
+        marker.position.copy(markerPosition);
         marker.castShadow = false;
         marker.receiveShadow = false;
         markerGroup.add(marker);
