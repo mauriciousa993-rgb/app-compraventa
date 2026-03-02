@@ -117,6 +117,7 @@ const VehicleInspectionChecklist: React.FC = () => {
   const [generalObservations, setGeneralObservations] = useState('');
   const [items, setItems] = useState<VehicleInspectionItem[]>(createDefaultItems());
   const [damageZones, setDamageZones] = useState<VehicleDamageZone[]>(createDefaultDamageZones());
+  const [selectedZone, setSelectedZone] = useState<string>('');
 
   useEffect(() => {
     loadVehicles();
@@ -149,6 +150,7 @@ const VehicleInspectionChecklist: React.FC = () => {
     setGeneralObservations('');
     setItems(createDefaultItems());
     setDamageZones(createDefaultDamageZones());
+    setSelectedZone('');
   };
 
   const loadChecklist = async (vehicleId: string) => {
@@ -579,11 +581,31 @@ const VehicleInspectionChecklist: React.FC = () => {
                 <p className="text-sm text-ink-200 mb-4">
                   Visual 3D rotable para inspeccionar danos por zona del vehiculo.
                 </p>
-                <Vehicle3DModelViewer ref={viewerRef} damageZones={damageZones} />
+                <Vehicle3DModelViewer 
+                  ref={viewerRef} 
+                  damageZones={damageZones}
+                  onZoneClick={(zoneKey) => {
+                    setSelectedZone(zoneKey);
+                    // Enfocar la zona en la lista desplazandose hasta ella
+                    const zoneElement = document.getElementById(`zone-${zoneKey}`);
+                    if (zoneElement) {
+                      zoneElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                  }}
+                  selectedZone={selectedZone}
+                />
 
                 <div className="mt-4 space-y-3">
                   {damageZones.map((zone) => (
-                    <div key={zone.key} className="rounded-lg border border-[#2f3238] p-3 bg-[#1a1d23]">
+                    <div 
+                      key={zone.key} 
+                      id={`zone-${zone.key}`}
+                      className={`rounded-lg border p-3 bg-[#1a1d23] transition-all ${
+                        selectedZone === zone.key 
+                          ? 'border-primary-500 ring-1 ring-primary-500/50' 
+                          : 'border-[#2f3238]'
+                      }`}
+                    >
                       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-2">
                         <p className="text-white font-medium">{zone.label}</p>
                         <div className="flex gap-2">

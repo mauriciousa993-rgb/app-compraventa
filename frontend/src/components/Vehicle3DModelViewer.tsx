@@ -9,6 +9,8 @@ const FALLBACK_TEXTURE_URL = '/models/kia-nq5-22my-wheel-small-17inch.png';
 
 interface Vehicle3DModelViewerProps {
   damageZones: VehicleDamageZone[];
+  onZoneClick?: (zoneKey: string) => void;
+  selectedZone?: string;
 }
 
 export interface Vehicle3DModelViewerHandle {
@@ -31,7 +33,7 @@ type MaterialWithColor = THREE.Material & {
   emissiveIntensity?: number;
 };
 
-const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DModelViewerProps>(({ damageZones }, ref) => {
+const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DModelViewerProps>(({ damageZones, onZoneClick, selectedZone }, ref) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -42,6 +44,8 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
   const orbitDistanceRef = useRef<number>(12);
   const targetRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0.2, 0));
   const frameRef = useRef<number | null>(null);
+  const raycasterRef = useRef<THREE.Raycaster>(new THREE.Raycaster());
+  const mouseRef = useRef<THREE.Vector2>(new THREE.Vector2());
 
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -155,6 +159,7 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
       const rayOutDirection = new THREE.Vector3(...profile.direction).normalize();
 
       const isDamaged = zone.status === 'mal';
+      const isSelected = selectedZone === zone.key;
       const [nx, ny, nz] = profile.seed;
       const seed = new THREE.Vector3(
         center.x + nx * halfX * 0.95,
@@ -175,16 +180,17 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
         markerPosition = hit.point.clone().addScaledVector(hitNormal.normalize(), markerRadius * 0.55);
       }
 
+      const markerSize = isSelected ? markerRadius * 1.4 : (isDamaged ? markerRadius * 1.15 : markerRadius * 0.9);
       const marker = new THREE.Mesh(
-        new THREE.SphereGeometry(isDamaged ? markerRadius * 1.15 : markerRadius * 0.9, 18, 18),
+        new THREE.SphereGeometry(markerSize, 18, 18),
         new THREE.MeshStandardMaterial({
-          color: isDamaged ? '#ef4444' : '#22c55e',
-          emissive: isDamaged ? '#7f1d1d' : '#052e16',
-          emissiveIntensity: isDamaged ? 0.64 : 0.26,
+          color: isSelected ? '#3b82f6' : (isDamaged ? '#ef4444' : '#22c55e'),
+          emissive: isSelected ? '#1e3a8a' : (isDamaged ? '#7f1d1d' : '#052e16'),
+          emissiveIntensity: isSelected ? 0.8 : (isDamaged ? 0.64 : 0.26),
           roughness: 0.3,
           metalness: 0.15,
           transparent: true,
-          opacity: isDamaged ? 0.99 : 0.62,
+          opacity: isSelected ? 0.99 : (isDamaged ? 0.99 : 0.62),
         })
       );
       marker.position.copy(markerPosition);
@@ -421,7 +427,113 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     });
 
     renderZoneMarkers(damageZones);
-  }, [damageZones]);
+  }, [damageZones, selectedZone]);
+
+  // Funcion para detectar la zona del vehiculo basada en la posicion del clic
+  const detectZoneFromPosition = (point: THREE.Vector3): string | null => {
+    const model = modelRef.current;
+    if (!model) return null;
+
+    const box = new THREE.Box3().setFromObject(model);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+
+    // Coordenadas relativas al centro del modelo
+    const relX = point.x - center.x;
+    const relY = point.y - center.y;
+    const relZ = point.z - center.z;
+
+    const halfX = size.x / 2;
+    const halfZ = size.z / 2;
+
+    // Normalizar las coordenadas
+    const normX = relX / halfX;
+    const normZ = relZ / halfZ;
+    const normY = relY / size.y;
+
+    // Logica de deteccion de zonas
+    if (normY > 0.7) {
+      return 'techo';
+    }
+
+    if (Math.abs(normZ) > 0.7) {
+      if (normZ > 0) {
+        return 'frente';
+      } else {
+        return 'trasera';
+      }
+    }
+
+    if (Math.abs(normX) > 0.6) {
+      if (normX < 0) {
+        return 'lateral_izq';
+      } else {
+        return 'lateral_der';
+      }
+    }
+
+    // Para el capo, verificamos si esta en la parte frontal superior
+    if (normZ < 0 && normZ > -0.5 && normY > 0.3) {
+      return 'capo';
+    }
+
+    // Puertas
+    if (Math.abs(normX) > 0.3 && Math.abs(normX) < 0.8 && normY > 0.1 && normY < 0.6) {
+      if (normX < 0) {
+        return 'puerta_izq';
+      } else {
+        return 'puerta_der';
+      }
+    }
+
+    return null;
+  };
+
+  // Manejar clic en el modelo 3D
+  const handleModelClick = (event: MouseEvent) => {
+    const container = containerRef.current;
+    const camera = cameraRef.current;
+    const renderer = rendererRef.current;
+    if (!container || !camera || !renderer) return;
+
+    const rect = container.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    mouseRef.current.set(x, y);
+    raycasterRef.current.setFromCamera(mouseRef.current, camera);
+
+    const model = modelRef.current;
+    if (!model) return;
+
+    const meshes: THREE.Mesh[] = [];
+    model.traverse((child: any) => {
+      if (child.isMesh) meshes.push(child as THREE.Mesh);
+    });
+
+    const intersects = raycasterRef.current.intersectObjects(meshes, false);
+
+    if (intersects.length > 0) {
+      const hitPoint = intersects[0].point;
+      const zoneKey = detectZoneFromPosition(hitPoint);
+
+      if (zoneKey && onZoneClick) {
+        onZoneClick(zoneKey);
+      }
+    }
+  };
+
+  // Agregar evento de clic al modelo
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    container.addEventListener('click', handleModelClick);
+
+    return () => {
+      container.removeEventListener('click', handleModelClick);
+    };
+  }, [onZoneClick]);
 
   const applyCameraPreset = (preset: 'front' | 'rear' | 'left' | 'right' | 'top' | 'iso') => {
     if (preset === 'front') setCameraByDirection(new THREE.Vector3(0, 0.16, 1));
