@@ -123,14 +123,14 @@ const CommissionLiquidation: React.FC = () => {
           <div className="flex gap-2">
             <button
               onClick={loadResumen}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
             >
               <RefreshCw size={18} />
               Actualizar
             </button>
             <button
               onClick={() => window.print()}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
             >
               <Printer size={18} />
               Imprimir
@@ -145,7 +145,7 @@ const CommissionLiquidation: React.FC = () => {
             <select
               value={año}
               onChange={(e) => setAño(parseInt(e.target.value))}
-              className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white text-gray-900"
             >
               {años.map((a) => (
                 <option key={a} value={a}>
@@ -159,7 +159,7 @@ const CommissionLiquidation: React.FC = () => {
             <select
               value={mes ?? ''}
               onChange={(e) => setMes(e.target.value ? parseInt(e.target.value) : null)}
-              className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white text-gray-900"
             >
               {meses.map((m) => (
                 <option key={m.value ?? 'all'} value={m.value ?? ''}>

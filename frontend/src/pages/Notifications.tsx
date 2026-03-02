@@ -8,7 +8,7 @@ interface NotificationItem {
   vehicle: Vehicle;
   type: 'soat' | 'tecnomecanica';
   daysRemaining: number;
-  severity: 'critical' | 'warning' | 'info';
+  severity: 'critical' | 'warning' | 'info' | 'expired';
 }
 
 const Notifications: React.FC = () => {
@@ -33,12 +33,13 @@ const Notifications: React.FC = () => {
           const soatDate = new Date(vehicle.documentacion.soat.fechaVencimiento);
           const daysRemaining = Math.ceil((soatDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
           
-          if (daysRemaining >= 0 && daysRemaining <= 30) {
+          // Incluir documentos vencidos (daysRemaining < 0) y próximos a vencer (0-30 días)
+          if (daysRemaining < 0 || (daysRemaining >= 0 && daysRemaining <= 30)) {
             notificationsList.push({
               vehicle,
               type: 'soat',
               daysRemaining,
-              severity: daysRemaining <= 7 ? 'critical' : daysRemaining <= 15 ? 'warning' : 'info'
+              severity: daysRemaining < 0 ? 'expired' : daysRemaining <= 7 ? 'critical' : daysRemaining <= 15 ? 'warning' : 'info'
             });
           }
         }
@@ -48,20 +49,21 @@ const Notifications: React.FC = () => {
           const tecnoDate = new Date(vehicle.documentacion.tecnomecanica.fechaVencimiento);
           const daysRemaining = Math.ceil((tecnoDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
           
-          if (daysRemaining >= 0 && daysRemaining <= 30) {
+          // Incluir documentos vencidos (daysRemaining < 0) y próximos a vencer (0-30 días)
+          if (daysRemaining < 0 || (daysRemaining >= 0 && daysRemaining <= 30)) {
             notificationsList.push({
               vehicle,
               type: 'tecnomecanica',
               daysRemaining,
-              severity: daysRemaining <= 7 ? 'critical' : daysRemaining <= 15 ? 'warning' : 'info'
+              severity: daysRemaining < 0 ? 'expired' : daysRemaining <= 7 ? 'critical' : daysRemaining <= 15 ? 'warning' : 'info'
             });
           }
         }
       });
 
-      // Ordenar por severidad y días restantes
+      // Ordenar por severidad y días restantes (los vencidos primero)
       notificationsList.sort((a, b) => {
-        const severityOrder = { critical: 0, warning: 1, info: 2 };
+        const severityOrder = { expired: 0, critical: 1, warning: 2, info: 3 };
         if (severityOrder[a.severity] !== severityOrder[b.severity]) {
           return severityOrder[a.severity] - severityOrder[b.severity];
         }
@@ -78,6 +80,8 @@ const Notifications: React.FC = () => {
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
+      case 'expired':
+        return 'bg-red-200 border-red-700 text-red-900';
       case 'critical':
         return 'bg-red-100 border-red-500 text-red-900';
       case 'warning':
@@ -91,6 +95,12 @@ const Notifications: React.FC = () => {
 
   const getSeverityIcon = (severity: string) => {
     switch (severity) {
+      case 'expired':
+        return (
+          <svg className="w-6 h-6 text-red-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        );
       case 'critical':
         return (
           <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -133,7 +143,7 @@ const Notifications: React.FC = () => {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white">Notificaciones</h1>
           <p className="mt-2 text-sm text-ink-300">
-            Documentos de vehículos próximos a vencer
+            Documentos de vehículos vencidos y próximos a vencer
           </p>
         </div>
 

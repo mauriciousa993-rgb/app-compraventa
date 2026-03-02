@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { DatosVenta } from '../types';
+import { useAuth } from '../context/AuthContext';
 
 interface SaleDataModalProps {
   isOpen: boolean;
@@ -19,49 +20,73 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
   initialData,
   isEditMode = false,
 }) => {
-  const [formData, setFormData] = useState<DatosVenta>(initialData || {
-    vendedor: {
-      nombre: '',
-      identificacion: '',
-      direccion: '',
-      telefono: '',
-    },
-    comprador: {
-      nombre: '',
-      identificacion: '',
-      direccion: '',
-      telefono: '',
-      email: '',
-    },
-    vehiculoAdicional: {
-      tipoCarroceria: '',
-      capacidad: '',
-      numeroPuertas: 4,
-      numeroMotor: '',
-      linea: '',
-      actaManifiesto: '',
-      sitioMatricula: '',
-      tipoServicio: 'PARTICULAR',
-    },
-    transaccion: {
-      lugarCelebracion: '',
-      fechaCelebracion: new Date().toISOString().split('T')[0],
-      precioLetras: '',
-      formaPago: '',
-      vendedorAnterior: '',
-      cedulaVendedorAnterior: '',
-      diasTraspaso: 30,
-      fechaEntrega: new Date().toISOString().split('T')[0],
-      horaEntrega: '',
-      domicilioContractual: '',
-      clausulasAdicionales: '',
-    },
-    comision: {
-      monto: 0,
-      porcentaje: 0,
-      descripcion: '',
-    },
-  });
+  const { user } = useAuth();
+  
+  // Inicializar el formulario con datos iniciales o valores por defecto
+  const getInitialData = () => {
+    if (initialData) return initialData;
+    
+    // Si es una nueva venta (no modo edición), autocompletar con el usuario actual
+    return {
+      vendedor: {
+        nombre: user?.nombre || user?.email || '',
+        identificacion: '',
+        direccion: '',
+        telefono: '',
+      },
+      comprador: {
+        nombre: '',
+        identificacion: '',
+        direccion: '',
+        telefono: '',
+        email: '',
+      },
+      vehiculoAdicional: {
+        tipoCarroceria: '',
+        capacidad: '',
+        numeroPuertas: 4,
+        numeroMotor: '',
+        linea: '',
+        actaManifiesto: '',
+        sitioMatricula: '',
+        tipoServicio: 'PARTICULAR',
+      },
+      transaccion: {
+        lugarCelebracion: '',
+        fechaCelebracion: new Date().toISOString().split('T')[0],
+        precioLetras: '',
+        formaPago: '',
+        vendedorAnterior: '',
+        cedulaVendedorAnterior: '',
+        diasTraspaso: 30,
+        fechaEntrega: new Date().toISOString().split('T')[0],
+        horaEntrega: '',
+        domicilioContractual: '',
+        clausulasAdicionales: '',
+      },
+      comision: {
+        monto: 0,
+        porcentaje: 0,
+        descripcion: '',
+      },
+    };
+  };
+
+  const [formData, setFormData] = useState<DatosVenta>(getInitialData());
+
+  // Actualizar el formulario cuando cambia el modo o el usuario
+  useEffect(() => {
+    if (!isEditMode && user) {
+      // Solo autocompletar si es modo creación y tenemos el usuario
+      setFormData(prev => ({
+        ...prev,
+        vendedor: {
+          ...prev.vendedor,
+          nombre: prev.vendedor.nombre || user.nombre || user.email || ''
+        }
+      }));
+    }
+  }, [user, isEditMode]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

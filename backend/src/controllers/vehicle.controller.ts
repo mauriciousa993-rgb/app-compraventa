@@ -653,7 +653,7 @@ export const uploadPhotos = async (req: AuthRequest, res: Response): Promise<voi
   }
 };
 
-// Obtener vehículos con documentos próximos a vencer
+// Obtener vehículos con documentos próximos a vencer y vencidos
 export const getVehiclesWithExpiringDocuments = async (
   req: AuthRequest,
   res: Response
@@ -662,19 +662,35 @@ export const getVehiclesWithExpiringDocuments = async (
     const diasAlerta = 30;
     const fechaLimite = new Date();
     fechaLimite.setDate(fechaLimite.getDate() + diasAlerta);
+    const fechaActual = new Date();
 
+    // Buscar vehículos con documentos vencidos O próximos a vencer (en los próximos 30 días)
     const vehicles = await Vehicle.find({
       $or: [
         {
+          // Documentos ya vencidos (fechaVencimiento < fecha actual)
           'documentacion.soat.fechaVencimiento': {
-            $lte: fechaLimite,
-            $gte: new Date(),
+            $lt: fechaActual,
           },
         },
         {
+          // SOAT próximo a vencer (entre ahora y 30 días)
+          'documentacion.soat.fechaVencimiento': {
+            $lte: fechaLimite,
+            $gte: fechaActual,
+          },
+        },
+        {
+          // Documentos de tecnomecánica ya vencidos
+          'documentacion.tecnomecanica.fechaVencimiento': {
+            $lt: fechaActual,
+          },
+        },
+        {
+          // Tecnomecánica próxima a vencer (entre ahora y 30 días)
           'documentacion.tecnomecanica.fechaVencimiento': {
             $lte: fechaLimite,
-            $gte: new Date(),
+            $gte: fechaActual,
           },
         },
       ],

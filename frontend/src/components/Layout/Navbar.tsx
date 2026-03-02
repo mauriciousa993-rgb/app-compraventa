@@ -36,16 +36,18 @@ const Navbar: React.FC = () => {
       const today = new Date();
 
       vehicles.forEach((vehicle) => {
+        // Verificar SOAT - incluye vencidos y próximos a vencer
         if (vehicle.documentacion?.soat?.fechaVencimiento) {
           const soatDate = new Date(vehicle.documentacion.soat.fechaVencimiento);
           const daysRemaining = Math.ceil((soatDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-          if (daysRemaining >= 0 && daysRemaining <= 30) count++;
+          if (daysRemaining < 0 || (daysRemaining >= 0 && daysRemaining <= 30)) count++;
         }
 
+        // Verificar Tecnomecánica - incluye vencidos y próximos a vencer
         if (vehicle.documentacion?.tecnomecanica?.fechaVencimiento) {
           const tecnoDate = new Date(vehicle.documentacion.tecnomecanica.fechaVencimiento);
           const daysRemaining = Math.ceil((tecnoDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-          if (daysRemaining >= 0 && daysRemaining <= 30) count++;
+          if (daysRemaining < 0 || (daysRemaining >= 0 && daysRemaining <= 30)) count++;
         }
       });
 
@@ -120,10 +122,12 @@ const Navbar: React.FC = () => {
               <BarChart3 className="h-4 w-4 text-primary-400" />
               <span>Reportes</span>
             </Link>
-            <Link to="/vehicles/inspection" className={`${navLinkClass} flex items-center space-x-1`}>
-              <ClipboardCheck className="h-4 w-4 text-primary-400" />
-              <span>Checklist</span>
-            </Link>
+            {(user?.rol === 'admin' || user?.rol === 'vendedor') && (
+              <Link to="/vehicles/inspection" className={`${navLinkClass} flex items-center space-x-1`}>
+                <ClipboardCheck className="h-4 w-4 text-primary-400" />
+                <span>Checklist</span>
+              </Link>
+            )}
             <Link to="/fixed-expenses" className={`${navLinkClass} flex items-center space-x-1`}>
               <Receipt className="h-4 w-4 text-primary-400" />
               <span>Gastos Fijos</span>
@@ -224,14 +228,16 @@ const Navbar: React.FC = () => {
                 <BarChart3 className="h-4 w-4 text-primary-400" />
                 <span>Reportes</span>
               </Link>
-              <Link
-                to="/vehicles/inspection"
-                onClick={closeMobileMenu}
-                className="text-ink-100 hover:text-white transition-colors py-2 px-4 hover:bg-[#23252a] rounded-lg flex items-center space-x-2"
-              >
-                <ClipboardCheck className="h-4 w-4 text-primary-400" />
-                <span>Checklist</span>
-              </Link>
+              {(user?.rol === 'admin' || user?.rol === 'vendedor') && (
+                <Link
+                  to="/vehicles/inspection"
+                  onClick={closeMobileMenu}
+                  className="text-ink-100 hover:text-white transition-colors py-2 px-4 hover:bg-[#23252a] rounded-lg flex items-center space-x-2"
+                >
+                  <ClipboardCheck className="h-4 w-4 text-primary-400" />
+                  <span>Checklist</span>
+                </Link>
+              )}
               <Link
                 to="/fixed-expenses"
                 onClick={closeMobileMenu}
