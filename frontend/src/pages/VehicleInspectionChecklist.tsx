@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -10,6 +10,7 @@ import {
   Save,
 } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
+import Vehicle3DModelViewer from '../components/Vehicle3DModelViewer';
 import { vehiclesAPI } from '../services/api';
 import { Vehicle, VehicleDamageZone, VehicleInspectionItem } from '../types';
 
@@ -96,156 +97,6 @@ const mergeDamageZones = (savedZones: any[] | undefined): VehicleDamageZone[] =>
       responsable: saved?.responsable || '',
     };
   });
-
-const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
-
-const VehicleDamage3DViewer: React.FC<{ damageZones: VehicleDamageZone[] }> = ({ damageZones }) => {
-  const [rotationX, setRotationX] = useState(-12);
-  const [rotationY, setRotationY] = useState(-28);
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
-
-  const getZoneColor = (zoneKey: string): string => {
-    const zone = damageZones.find((item) => item.key === zoneKey);
-    return zone?.status === 'mal' ? '#ef4444' : '#4f6278';
-  };
-
-  const startDrag = (clientX: number, clientY: number) => {
-    setIsDragging(true);
-    dragStartRef.current = { x: clientX, y: clientY };
-  };
-
-  const moveDrag = (clientX: number, clientY: number) => {
-    if (!dragStartRef.current) return;
-    const deltaX = clientX - dragStartRef.current.x;
-    const deltaY = clientY - dragStartRef.current.y;
-
-    setRotationY((prev) => prev + deltaX * 0.35);
-    setRotationX((prev) => clamp(prev - deltaY * 0.25, -45, 45));
-    dragStartRef.current = { x: clientX, y: clientY };
-  };
-
-  const endDrag = () => {
-    setIsDragging(false);
-    dragStartRef.current = null;
-  };
-
-  return (
-    <div>
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <button
-          type="button"
-          onClick={() => {
-            setRotationX(-12);
-            setRotationY(-28);
-          }}
-          className="px-3 py-1 text-xs rounded-md border border-[#3b404a] text-ink-200 hover:text-white hover:border-primary-500"
-        >
-          Vista inicial
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setRotationX(0);
-            setRotationY(0);
-          }}
-          className="px-3 py-1 text-xs rounded-md border border-[#3b404a] text-ink-200 hover:text-white hover:border-primary-500"
-        >
-          Frente
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setRotationX(0);
-            setRotationY(-90);
-          }}
-          className="px-3 py-1 text-xs rounded-md border border-[#3b404a] text-ink-200 hover:text-white hover:border-primary-500"
-        >
-          Lateral
-        </button>
-      </div>
-      <div
-        className={`rounded-xl border border-[#2f3238] bg-[#12151b] p-3 h-72 touch-none select-none ${
-          isDragging ? 'cursor-grabbing' : 'cursor-grab'
-        }`}
-        onMouseDown={(e) => startDrag(e.clientX, e.clientY)}
-        onMouseMove={(e) => {
-          if (!isDragging) return;
-          moveDrag(e.clientX, e.clientY);
-        }}
-        onMouseUp={endDrag}
-        onMouseLeave={endDrag}
-        onTouchStart={(e) => {
-          if (e.touches.length === 0) return;
-          const touch = e.touches[0];
-          startDrag(touch.clientX, touch.clientY);
-        }}
-        onTouchMove={(e) => {
-          if (e.touches.length === 0) return;
-          const touch = e.touches[0];
-          moveDrag(touch.clientX, touch.clientY);
-        }}
-        onTouchEnd={endDrag}
-      >
-        <div className="w-full h-full [perspective:1200px] flex items-center justify-center">
-          <div
-            style={{
-              transformStyle: 'preserve-3d',
-              transform: `rotateX(${rotationX}deg) rotateY(${rotationY}deg)`,
-              transition: isDragging ? 'none' : 'transform 140ms ease-out',
-            }}
-          >
-            <svg viewBox="0 0 460 280" className="w-[360px] h-[230px] drop-shadow-[0_16px_28px_rgba(0,0,0,0.7)]">
-              <defs>
-                <linearGradient id="bodyBase" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="#1f2937" />
-                  <stop offset="100%" stopColor="#0f172a" />
-                </linearGradient>
-                <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#7dd3fc" stopOpacity="0.55" />
-                  <stop offset="100%" stopColor="#1e3a8a" stopOpacity="0.35" />
-                </linearGradient>
-              </defs>
-
-              <ellipse cx="230" cy="244" rx="146" ry="22" fill="#0a0f18" />
-
-              <ellipse cx="132" cy="210" rx="28" ry="34" fill="#0b1220" />
-              <ellipse cx="328" cy="210" rx="28" ry="34" fill="#0b1220" />
-              <ellipse cx="132" cy="210" rx="15" ry="19" fill="#6b7280" />
-              <ellipse cx="328" cy="210" rx="15" ry="19" fill="#6b7280" />
-
-              <path d="M92 162 L120 138 L182 102 L278 102 L340 138 L368 162 L368 198 L324 220 L136 220 L92 198 Z" fill="url(#bodyBase)" stroke="#0b1320" strokeWidth="3" />
-
-              <polygon points="120,138 182,102 278,102 340,138 292,154 166,154" fill={getZoneColor('capo')} stroke="#0f172a" strokeWidth="2.5" />
-              <polygon points="182,102 212,72 248,72 278,102 248,126 212,126" fill={getZoneColor('techo')} stroke="#0f172a" strokeWidth="2.5" />
-              <polygon points="166,154 292,154 336,166 308,188 150,188 122,166" fill={getZoneColor('trasera')} stroke="#0f172a" strokeWidth="2.5" />
-              <polygon points="92,162 120,138 166,154 150,182 104,188" fill={getZoneColor('frente')} stroke="#0f172a" strokeWidth="2.5" />
-
-              <polygon points="92,162 120,138 166,154 166,186 136,210 92,198" fill={getZoneColor('lateral_izq')} stroke="#0f172a" strokeWidth="2.5" />
-              <polygon points="368,162 340,138 292,154 292,186 324,210 368,198" fill={getZoneColor('lateral_der')} stroke="#0f172a" strokeWidth="2.5" />
-              <polygon points="166,154 166,186 214,198 214,168" fill={getZoneColor('puerta_izq')} stroke="#0f172a" strokeWidth="2.5" />
-              <polygon points="292,154 292,186 246,198 246,168" fill={getZoneColor('puerta_der')} stroke="#0f172a" strokeWidth="2.5" />
-
-              <polygon points="196,110 214,88 246,88 264,110 242,126 218,126" fill="url(#glass)" stroke="#1e3a8a" strokeWidth="1.5" />
-              <polygon points="172,154 188,142 214,152 214,168 186,172" fill="url(#glass)" stroke="#1e3a8a" strokeWidth="1.2" />
-              <polygon points="288,154 272,142 246,152 246,168 274,172" fill="url(#glass)" stroke="#1e3a8a" strokeWidth="1.2" />
-
-              <rect x="103" y="171" width="16" height="8" rx="3" fill="#fef08a" />
-              <rect x="341" y="171" width="16" height="8" rx="3" fill="#fca5a5" />
-
-              <path d="M106 186 L144 196" stroke="#0f172a" strokeWidth="1.8" />
-              <path d="M316 196 L354 186" stroke="#0f172a" strokeWidth="1.8" />
-              <path d="M188 188 L272 188" stroke="#0f172a" strokeWidth="1.6" />
-            </svg>
-          </div>
-        </div>
-      </div>
-      <p className="text-xs text-ink-300 mt-2">
-        Arrastra para rotar. Rojo = zona con dano. Azul/gris = zona sin dano.
-      </p>
-    </div>
-  );
-};
 
 const VehicleInspectionChecklist: React.FC = () => {
   const navigate = useNavigate();
@@ -659,7 +510,7 @@ const VehicleInspectionChecklist: React.FC = () => {
                 <p className="text-sm text-ink-200 mb-4">
                   Visual 3D rotable para inspeccionar danos por zona del vehiculo.
                 </p>
-                <VehicleDamage3DViewer damageZones={damageZones} />
+                <Vehicle3DModelViewer damageZones={damageZones} />
 
                 <div className="mt-4 space-y-3">
                   {damageZones.map((zone) => (
