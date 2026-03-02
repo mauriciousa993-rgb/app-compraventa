@@ -25,6 +25,8 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
   const controlsRef = useRef<OrbitControls | null>(null);
   const modelRef = useRef<THREE.Group | null>(null);
   const zoneMarkerGroupRef = useRef<THREE.Group | null>(null);
+  const orbitDistanceRef = useRef<number>(12);
+  const targetRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0.2, 0));
   const frameRef = useRef<number | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -46,15 +48,77 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
     callback(material as MaterialWithColor);
   };
 
-  const ZONE_LOCAL_COORDS: Record<string, [number, number, number]> = {
-    frente: [0, 0.42, -0.96],
-    capo: [0, 0.66, -0.52],
-    techo: [0, 0.95, 0],
-    trasera: [0, 0.46, 0.96],
-    lateral_izq: [-0.96, 0.58, 0],
-    lateral_der: [0.96, 0.58, 0],
-    puerta_izq: [-0.9, 0.45, 0.2],
-    puerta_der: [0.9, 0.45, 0.2],
+  const setCameraByDirection = (direction: THREE.Vector3) => {
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (!camera || !controls) return;
+
+    const target = targetRef.current.clone();
+    const dir = direction.clone().normalize();
+    camera.position.copy(target.add(dir.multiplyScalar(orbitDistanceRef.current)));
+    camera.lookAt(targetRef.current);
+    controls.target.copy(targetRef.current);
+    controls.update();
+  };
+
+  const ZONE_LOCAL_COORDS: Record<string, Array<[number, number, number]>> = {
+    frente: [
+      [0, 0.42, -0.98],
+      [-0.22, 0.44, -0.95],
+      [0.22, 0.44, -0.95],
+      [0, 0.32, -0.99],
+      [0, 0.52, -0.93],
+    ],
+    capo: [
+      [0, 0.66, -0.62],
+      [-0.24, 0.64, -0.6],
+      [0.24, 0.64, -0.6],
+      [-0.12, 0.72, -0.5],
+      [0.12, 0.72, -0.5],
+    ],
+    techo: [
+      [0, 0.94, 0],
+      [-0.2, 0.92, -0.04],
+      [0.2, 0.92, -0.04],
+      [-0.16, 0.9, 0.18],
+      [0.16, 0.9, 0.18],
+      [0, 0.88, 0.22],
+    ],
+    trasera: [
+      [0, 0.46, 0.98],
+      [-0.22, 0.46, 0.96],
+      [0.22, 0.46, 0.96],
+      [0, 0.34, 0.99],
+      [0, 0.56, 0.9],
+    ],
+    lateral_izq: [
+      [-0.98, 0.58, -0.34],
+      [-0.98, 0.56, -0.05],
+      [-0.98, 0.54, 0.24],
+      [-0.93, 0.44, -0.12],
+      [-0.93, 0.44, 0.18],
+    ],
+    lateral_der: [
+      [0.98, 0.58, -0.34],
+      [0.98, 0.56, -0.05],
+      [0.98, 0.54, 0.24],
+      [0.93, 0.44, -0.12],
+      [0.93, 0.44, 0.18],
+    ],
+    puerta_izq: [
+      [-0.92, 0.5, -0.02],
+      [-0.92, 0.48, 0.18],
+      [-0.92, 0.46, 0.34],
+      [-0.86, 0.58, 0.1],
+      [-0.86, 0.38, 0.14],
+    ],
+    puerta_der: [
+      [0.92, 0.5, -0.02],
+      [0.92, 0.48, 0.18],
+      [0.92, 0.46, 0.34],
+      [0.86, 0.58, 0.1],
+      [0.86, 0.38, 0.14],
+    ],
   };
 
   const clearZoneMarkers = () => {
@@ -89,33 +153,34 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
     const markerRadius = Math.max(Math.min(size.x, size.y, size.z) * 0.03, 0.08);
 
     zones.forEach((zone) => {
-      const coords = ZONE_LOCAL_COORDS[zone.key];
-      if (!coords) return;
-
-      const [nx, ny, nz] = coords;
-      const position = new THREE.Vector3(
-        center.x + nx * halfX * 0.95,
-        box.min.y + ny * size.y,
-        center.z + nz * halfZ * 0.95
-      );
+      const zonePoints = ZONE_LOCAL_COORDS[zone.key];
+      if (!zonePoints || zonePoints.length === 0) return;
 
       const isDamaged = zone.status === 'mal';
-      const marker = new THREE.Mesh(
-        new THREE.SphereGeometry(markerRadius, 18, 18),
-        new THREE.MeshStandardMaterial({
-          color: isDamaged ? '#ef4444' : '#22c55e',
-          emissive: isDamaged ? '#7f1d1d' : '#052e16',
-          emissiveIntensity: isDamaged ? 0.55 : 0.22,
-          roughness: 0.3,
-          metalness: 0.15,
-          transparent: true,
-          opacity: isDamaged ? 0.98 : 0.75,
-        })
-      );
-      marker.position.copy(position);
-      marker.castShadow = false;
-      marker.receiveShadow = false;
-      markerGroup.add(marker);
+      zonePoints.forEach(([nx, ny, nz]) => {
+        const position = new THREE.Vector3(
+          center.x + nx * halfX * 0.95,
+          box.min.y + ny * size.y,
+          center.z + nz * halfZ * 0.95
+        );
+
+        const marker = new THREE.Mesh(
+          new THREE.SphereGeometry(isDamaged ? markerRadius * 1.05 : markerRadius * 0.78, 16, 16),
+          new THREE.MeshStandardMaterial({
+            color: isDamaged ? '#ef4444' : '#22c55e',
+            emissive: isDamaged ? '#7f1d1d' : '#052e16',
+            emissiveIntensity: isDamaged ? 0.6 : 0.24,
+            roughness: 0.3,
+            metalness: 0.15,
+            transparent: true,
+            opacity: isDamaged ? 0.98 : 0.55,
+          })
+        );
+        marker.position.copy(position);
+        marker.castShadow = false;
+        marker.receiveShadow = false;
+        markerGroup.add(marker);
+      });
     });
   };
 
@@ -173,10 +238,11 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
     controls.enableDamping = true;
     controls.dampingFactor = 0.07;
     controls.enablePan = false;
-    controls.minDistance = 5;
-    controls.maxDistance = 25;
+    controls.enableZoom = false;
+    controls.minDistance = orbitDistanceRef.current;
+    controls.maxDistance = orbitDistanceRef.current;
     controls.maxPolarAngle = Math.PI * 0.49;
-    controls.target.set(0, 0.2, 0);
+    controls.target.copy(targetRef.current);
     controlsRef.current = controls;
 
     const loadingManager = new THREE.LoadingManager();
@@ -251,10 +317,17 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
         const yShift = -1.8 - fittedBox.min.y;
         fbx.position.y += yShift;
 
-        const radius = Math.max(fittedSphere.radius, 2);
-        camera.position.set(radius * 1.8, radius * 0.95, radius * 1.8);
-        controls.target.set(0, 0.2, 0);
-        camera.lookAt(controls.target);
+        const finalBox = new THREE.Box3().setFromObject(fbx);
+        const finalSize = finalBox.getSize(new THREE.Vector3());
+        const target = finalBox.getCenter(new THREE.Vector3());
+        target.y = finalBox.min.y + finalSize.y * 0.45;
+        targetRef.current.copy(target);
+
+        const radius = Math.max(fittedSphere.radius, 2.2);
+        orbitDistanceRef.current = Math.max(radius * 2.35, 8.5);
+        controls.minDistance = orbitDistanceRef.current;
+        controls.maxDistance = orbitDistanceRef.current;
+        setCameraByDirection(new THREE.Vector3(1, 0.5, 1));
         controls.update();
 
         scene.add(fbx);
@@ -340,17 +413,10 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
   }, [damageZones]);
 
   const setPresetView = (preset: 'front' | 'side' | 'top' | 'iso') => {
-    const camera = cameraRef.current;
-    const controls = controlsRef.current;
-    if (!camera || !controls) return;
-
-    if (preset === 'front') camera.position.set(0, 4, 13);
-    if (preset === 'side') camera.position.set(13, 3.5, 0.1);
-    if (preset === 'top') camera.position.set(0.1, 15, 0.1);
-    if (preset === 'iso') camera.position.set(11, 6, 11);
-    controls.target.set(0, 0.2, 0);
-    camera.lookAt(controls.target);
-    controls.update();
+    if (preset === 'front') setCameraByDirection(new THREE.Vector3(0, 0.15, 1));
+    if (preset === 'side') setCameraByDirection(new THREE.Vector3(1, 0.2, 0));
+    if (preset === 'top') setCameraByDirection(new THREE.Vector3(0.01, 1, 0.01));
+    if (preset === 'iso') setCameraByDirection(new THREE.Vector3(1, 0.5, 1));
   };
 
   const FallbackVehicle = () => (
@@ -410,7 +476,7 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
       {loadError && <p className="text-xs text-red-300 mt-2">{loadError}</p>}
 
       <p className="text-xs text-ink-300 mt-2">
-        Arrastra para rotar y usa el scroll para acercar/alejar.
+        Arrastra para rotar. La distancia esta fija para mantener escala constante.
       </p>
 
       {damagedZoneLabels.length > 0 ? (
