@@ -286,20 +286,6 @@ export const vehiclesAPI = {
     );
     return response.data;
   },
-
-  exportInspectionChecklist: async (id: string) => {
-    const response = await api.get(`/vehicles/${id}/inspection-checklist/export`, {
-      responseType: 'blob',
-    });
-
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `checklist-ingreso-${id}-${Date.now()}.xlsx`);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  },
 };
 
 // Fixed expenses API

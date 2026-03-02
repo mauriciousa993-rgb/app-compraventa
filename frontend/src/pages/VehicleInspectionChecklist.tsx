@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -6,11 +6,12 @@ import {
   Car,
   CheckCircle2,
   ClipboardCheck,
-  FileDown,
+  FileText,
   Save,
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 import Layout from '../components/Layout/Layout';
-import Vehicle3DModelViewer from '../components/Vehicle3DModelViewer';
+import Vehicle3DModelViewer, { Vehicle3DModelViewerHandle } from '../components/Vehicle3DModelViewer';
 import { vehiclesAPI } from '../services/api';
 import { Vehicle, VehicleDamageZone, VehicleInspectionItem } from '../types';
 
@@ -108,6 +109,8 @@ const VehicleInspectionChecklist: React.FC = () => {
   const [isLoadingVehicles, setIsLoadingVehicles] = useState(true);
   const [isLoadingChecklist, setIsLoadingChecklist] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const viewerRef = useRef<Vehicle3DModelViewerHandle | null>(null);
 
   const [inspectorName, setInspectorName] = useState('');
   const [inspectionDate, setInspectionDate] = useState(new Date().toISOString().split('T')[0]);
@@ -295,17 +298,78 @@ const VehicleInspectionChecklist: React.FC = () => {
     }
   };
 
-  const handleExportExcel = async () => {
-    if (!selectedVehicleId) {
+  const handleExportPdf = async () => {
+    if (!selectedVehicleId || !selectedVehicle) {
       alert('Selecciona un vehiculo para exportar');
       return;
     }
 
+    if (!viewerRef.current) {
+      alert('El visor 3D no esta disponible para capturar imagenes');
+      return;
+    }
+
+    setIsExportingPdf(true);
     try {
-      await vehiclesAPI.exportInspectionChecklist(selectedVehicleId);
+      const captures = await viewerRef.current.captureDamageViews();
+
+      const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      let y = 14;
+
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text('CHECKLIST DE INGRESO VEHICULAR', pageWidth / 2, y, { align: 'center' });
+      y += 8;
+
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+      doc.text(
+        `Vehiculo: ${selectedVehicle.marca} ${selectedVehicle.modelo} (${selectedVehicle.placa})`,
+        14,
+        y
+      );
+      y += 6;
+      doc.text(`Inspector: ${inspectorName || 'No especificado'} | Fecha: ${inspectionDate}`, 14, y);
+      y += 4;
+
+      const imageWidth = 87;
+      const imageHeight = 52;
+      const leftX = 14;
+      const rightX = 109;
+      const firstRowY = y + 4;
+      const secondRowY = firstRowY + imageHeight + 12;
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.text('Frente', leftX, firstRowY - 2);
+      doc.text('Trasera', rightX, firstRowY - 2);
+      doc.text('Lado izquierdo', leftX, secondRowY - 2);
+      doc.text('Lado derecho', rightX, secondRowY - 2);
+
+      doc.addImage(captures.frente, 'PNG', leftX, firstRowY, imageWidth, imageHeight);
+      doc.addImage(captures.trasera, 'PNG', rightX, firstRowY, imageWidth, imageHeight);
+      doc.addImage(captures.izquierda, 'PNG', leftX, secondRowY, imageWidth, imageHeight);
+      doc.addImage(captures.derecha, 'PNG', rightX, secondRowY, imageWidth, imageHeight);
+
+      y = secondRowY + imageHeight + 10;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.text('Resumen de danos y pendientes', 14, y);
+      y += 6;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      const summaryText = summaryLines || 'Sin observaciones registradas.';
+      const wrappedSummary = doc.splitTextToSize(summaryText, pageWidth - 28);
+      doc.text(wrappedSummary, 14, y);
+
+      doc.save(`checklist-${selectedVehicle.placa}-${Date.now()}.pdf`);
     } catch (error: any) {
-      console.error('Error al exportar checklist:', error);
-      alert(error?.response?.data?.message || 'No se pudo exportar el checklist');
+      console.error('Error al exportar PDF del checklist:', error);
+      alert(error?.message || 'No se pudo generar el PDF del checklist');
+    } finally {
+      setIsExportingPdf(false);
     }
   };
 
@@ -338,14 +402,19 @@ const VehicleInspectionChecklist: React.FC = () => {
               Checklist de Ingreso Vehicular
             </h1>
             <p className="text-ink-200 mt-2">
-              Evaluacion mecanica y estetica con mapa visual de danos y resumen exportable a Excel.
+              Evaluacion mecanica y estetica con mapa visual de danos y resumen exportable en PDF.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <button type="button" className="btn-secondary flex items-center gap-2" onClick={handleExportExcel}>
-              <FileDown className="h-4 w-4" />
-              Exportar Excel
+            <button
+              type="button"
+              className="btn-secondary flex items-center gap-2"
+              onClick={handleExportPdf}
+              disabled={isExportingPdf || isLoadingChecklist}
+            >
+              <FileText className="h-4 w-4" />
+              {isExportingPdf ? 'Generando PDF...' : 'Exportar PDF'}
             </button>
             <button
               type="button"
@@ -510,7 +579,7 @@ const VehicleInspectionChecklist: React.FC = () => {
                 <p className="text-sm text-ink-200 mb-4">
                   Visual 3D rotable para inspeccionar danos por zona del vehiculo.
                 </p>
-                <Vehicle3DModelViewer damageZones={damageZones} />
+                <Vehicle3DModelViewer ref={viewerRef} damageZones={damageZones} />
 
                 <div className="mt-4 space-y-3">
                   {damageZones.map((zone) => (

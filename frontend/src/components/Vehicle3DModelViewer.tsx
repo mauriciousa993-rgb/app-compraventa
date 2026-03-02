@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
@@ -9,6 +9,15 @@ const FALLBACK_TEXTURE_URL = '/models/kia-nq5-22my-wheel-small-17inch.png';
 
 interface Vehicle3DModelViewerProps {
   damageZones: VehicleDamageZone[];
+}
+
+export interface Vehicle3DModelViewerHandle {
+  captureDamageViews: () => Promise<{
+    izquierda: string;
+    derecha: string;
+    frente: string;
+    trasera: string;
+  }>;
 }
 
 type ZoneMarkerProfile = {
@@ -22,7 +31,7 @@ type MaterialWithColor = THREE.Material & {
   emissiveIntensity?: number;
 };
 
-const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones }) => {
+const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DModelViewerProps>(({ damageZones }, ref) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -414,12 +423,73 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
     renderZoneMarkers(damageZones);
   }, [damageZones]);
 
-  const setPresetView = (preset: 'front' | 'side' | 'top' | 'iso') => {
-    if (preset === 'front') setCameraByDirection(new THREE.Vector3(0, 0.15, 1));
-    if (preset === 'side') setCameraByDirection(new THREE.Vector3(1, 0.2, 0));
+  const applyCameraPreset = (preset: 'front' | 'rear' | 'left' | 'right' | 'top' | 'iso') => {
+    if (preset === 'front') setCameraByDirection(new THREE.Vector3(0, 0.16, 1));
+    if (preset === 'rear') setCameraByDirection(new THREE.Vector3(0, 0.16, -1));
+    if (preset === 'left') setCameraByDirection(new THREE.Vector3(-1, 0.2, 0));
+    if (preset === 'right') setCameraByDirection(new THREE.Vector3(1, 0.2, 0));
     if (preset === 'top') setCameraByDirection(new THREE.Vector3(0.01, 1, 0.01));
     if (preset === 'iso') setCameraByDirection(new THREE.Vector3(1, 0.5, 1));
   };
+
+  const waitFrames = (count: number = 2) =>
+    new Promise<void>((resolve) => {
+      const step = (pending: number) => {
+        if (pending <= 0) {
+          resolve();
+          return;
+        }
+        requestAnimationFrame(() => step(pending - 1));
+      };
+      step(count);
+    });
+
+  const capturePreset = async (
+    preset: 'front' | 'rear' | 'left' | 'right'
+  ): Promise<string> => {
+    const renderer = rendererRef.current;
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+    if (!renderer || !scene || !camera) {
+      throw new Error('El visor 3D no esta listo para capturar');
+    }
+
+    applyCameraPreset(preset);
+    await waitFrames(2);
+    renderer.render(scene, camera);
+    return renderer.domElement.toDataURL('image/png');
+  };
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      captureDamageViews: async () => {
+        if (isLoading) throw new Error('El modelo 3D aun esta cargando');
+        if (loadError) throw new Error('No se puede capturar porque el modelo 3D fallo al cargar');
+
+        const camera = cameraRef.current;
+        const controls = controlsRef.current;
+        if (!camera || !controls) throw new Error('Camara no disponible');
+
+        const previousPosition = camera.position.clone();
+        const previousTarget = controls.target.clone();
+
+        try {
+          const frente = await capturePreset('front');
+          const trasera = await capturePreset('rear');
+          const izquierda = await capturePreset('left');
+          const derecha = await capturePreset('right');
+          return { izquierda, derecha, frente, trasera };
+        } finally {
+          camera.position.copy(previousPosition);
+          controls.target.copy(previousTarget);
+          camera.lookAt(previousTarget);
+          controls.update();
+        }
+      },
+    }),
+    [isLoading, loadError]
+  );
 
   const FallbackVehicle = () => (
     <div className="h-72 w-full rounded-lg border border-[#2f3238] bg-[#111827] flex items-center justify-center">
@@ -437,28 +507,42 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <button
           type="button"
-          onClick={() => setPresetView('iso')}
+          onClick={() => applyCameraPreset('iso')}
           className="px-3 py-1 text-xs rounded-md border border-[#3b404a] text-ink-200 hover:text-white hover:border-primary-500"
         >
           Isometrica
         </button>
         <button
           type="button"
-          onClick={() => setPresetView('front')}
+          onClick={() => applyCameraPreset('front')}
           className="px-3 py-1 text-xs rounded-md border border-[#3b404a] text-ink-200 hover:text-white hover:border-primary-500"
         >
           Frente
         </button>
         <button
           type="button"
-          onClick={() => setPresetView('side')}
+          onClick={() => applyCameraPreset('right')}
           className="px-3 py-1 text-xs rounded-md border border-[#3b404a] text-ink-200 hover:text-white hover:border-primary-500"
         >
-          Lateral
+          Lateral der
         </button>
         <button
           type="button"
-          onClick={() => setPresetView('top')}
+          onClick={() => applyCameraPreset('left')}
+          className="px-3 py-1 text-xs rounded-md border border-[#3b404a] text-ink-200 hover:text-white hover:border-primary-500"
+        >
+          Lateral izq
+        </button>
+        <button
+          type="button"
+          onClick={() => applyCameraPreset('rear')}
+          className="px-3 py-1 text-xs rounded-md border border-[#3b404a] text-ink-200 hover:text-white hover:border-primary-500"
+        >
+          Trasera
+        </button>
+        <button
+          type="button"
+          onClick={() => applyCameraPreset('top')}
           className="px-3 py-1 text-xs rounded-md border border-[#3b404a] text-ink-200 hover:text-white hover:border-primary-500"
         >
           Superior
@@ -490,6 +574,8 @@ const Vehicle3DModelViewer: React.FC<Vehicle3DModelViewerProps> = ({ damageZones
       )}
     </div>
   );
-};
+});
+
+Vehicle3DModelViewer.displayName = 'Vehicle3DModelViewer';
 
 export default Vehicle3DModelViewer;

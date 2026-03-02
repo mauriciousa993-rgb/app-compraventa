@@ -21,7 +21,6 @@ import {
   consultarEstadoTramite,
 } from '../controllers/vehicle.controller';
 import {
-  exportVehicleInspectionChecklist,
   getVehicleInspectionChecklist,
   upsertVehicleInspectionChecklist,
 } from '../controllers/vehicleInspectionChecklist.controller';
@@ -51,7 +50,6 @@ router.get('/expiring-documents', getVehiclesWithExpiringDocuments);
 router.get('/export', exportToExcel);
 router.get('/:id/inspection-checklist', getVehicleInspectionChecklist);
 router.put('/:id/inspection-checklist', authorize('admin', 'vendedor'), upsertVehicleInspectionChecklist);
-router.get('/:id/inspection-checklist/export', exportVehicleInspectionChecklist);
 router.get('/:id', getVehicleById);
 router.get('/:id/export', exportVehicleReport);
 router.put('/:id', authorize('admin', 'vendedor'), updateVehicle);
