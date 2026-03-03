@@ -80,35 +80,65 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
   };
 
   const ZONE_MARKER_PROFILE: Record<string, ZoneMarkerProfile> = {
-    // frente ahora es lateral derecho
+    // Frente del vehiculo (parte frontal)
     frente: {
-      direction: [1, 0.08, 0],
-      seed: [0.98, 0.52, 0.04],
-    },
-    // capo ahora es techo
-    capo: {
-      direction: [0, 1, 0],
-      seed: [0, 0.93, 0.04],
-    },
-    // techo ya no se usa - eliminado
-    techo: {
-      direction: [0, 1, 0],
-      seed: [0, 0.93, 0.04],
-    },
-    // trasera ahora es lateral izquierdo
-    trasera: {
-      direction: [-1, 0.08, 0],
-      seed: [-0.98, 0.52, 0.04],
-    },
-    // lateral_izq ahora es frente
-    lateral_izq: {
       direction: [0, 0.07, -1],
       seed: [0, 0.38, -0.98],
     },
-    // lateral_der ahora es parte trasera
-    lateral_der: {
+    // Capo (parte superior frontal)
+    capo: {
+      direction: [0, 1, -0.5],
+      seed: [0, 0.85, -0.6],
+    },
+    // Techo (parte superior central)
+    techo: {
+      direction: [0, 1, 0],
+      seed: [0, 0.93, 0],
+    },
+    // Trasera del vehiculo (parte posterior)
+    trasera: {
       direction: [0, 0.05, 1],
       seed: [0, 0.36, 0.98],
+    },
+    // Lateral izquierdo del vehiculo
+    lateral_izq: {
+      direction: [-1, 0.08, 0],
+      seed: [-0.98, 0.52, 0],
+    },
+    // Lateral derecho del vehiculo
+    lateral_der: {
+      direction: [1, 0.08, 0],
+      seed: [0.98, 0.52, 0],
+    },
+    // Puerta delantera izquierda
+    puerta_delantera_izq: {
+      direction: [-1, 0.05, -0.4],
+      seed: [-0.98, 0.45, -0.4],
+    },
+    // Puerta trasera izquierda
+    puerta_trasera_izq: {
+      direction: [-1, 0.05, 0.4],
+      seed: [-0.98, 0.45, 0.4],
+    },
+    // Puerta delantera derecha
+    puerta_delantera_der: {
+      direction: [1, 0.05, -0.4],
+      seed: [0.98, 0.45, -0.4],
+    },
+    // Puerta trasera derecha
+    puerta_trasera_der: {
+      direction: [1, 0.05, 0.4],
+      seed: [0.98, 0.45, 0.4],
+    },
+    // Bumper delantero
+    bumper_delantero: {
+      direction: [0, -0.1, -1],
+      seed: [0, 0.25, -0.98],
+    },
+    // Bumper trasero
+    bumper_trasero: {
+      direction: [0, -0.1, 1],
+      seed: [0, 0.25, 0.98],
     },
   };
 
@@ -178,7 +208,7 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
         markerPosition = hit.point.clone().addScaledVector(hitNormal.normalize(), markerRadius * 0.55);
       }
 
-      const markerSize = isSelected ? markerRadius * 1.4 : (isDamaged ? markerRadius * 1.15 : markerRadius * 0.9);
+      const markerSize = isSelected ? markerRadius * 2.0 : (isDamaged ? markerRadius * 1.6 : markerRadius * 1.3);
       const marker = new THREE.Mesh(
         new THREE.SphereGeometry(markerSize, 18, 18),
         new THREE.MeshStandardMaterial({
@@ -428,7 +458,6 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
   }, [damageZones, selectedZone]);
 
   // Funcion para detectar la zona del vehiculo basada en la posicion del clic
-  // Ahora: frente=lateral der, capo=techo, lateral_izq=frente, lateral_der=trasera
   const detectZoneFromPosition = (point: THREE.Vector3): string | null => {
     const model = modelRef.current;
     if (!model) return null;
@@ -452,27 +481,54 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
 
     // Logica de deteccion de zonas
     // Techo: parte superior
-    if (normY > 0.7) {
-      return 'capo';
+    if (normY > 0.75) {
+      // Distinguir entre capo (frontal) y techo (central)
+      if (normZ < -0.3) {
+        return 'capo';
+      }
+      return 'techo';
     }
 
-    // Frente (lateral_izq en el modelo original): parte frontal
-    if (Math.abs(normZ) > 0.7) {
-      if (normZ < 0) {
-        return 'lateral_izq'; // Ahora es "frente"
-      } else {
-        return 'lateral_der'; // Ahora es "parte trasera"
-      }
+    // Bumper delantero: parte frontal inferior
+    if (normZ < -0.7 && normY < 0.3) {
+      return 'bumper_delantero';
     }
 
-    // Lateral der (frente en el modelo original): X positivo
-    // Lateral izq (trasera en el modelo original): X negativo
-    if (Math.abs(normX) > 0.6) {
-      if (normX < 0) {
-        return 'trasera'; // Ahora es "lateral izquierdo"
-      } else {
-        return 'frente'; // Ahora es "lateral derecho"
+    // Bumper trasero: parte posterior inferior
+    if (normZ > 0.7 && normY < 0.3) {
+      return 'bumper_trasero';
+    }
+
+    // Frente del vehiculo: Z negativo (parte frontal)
+    if (normZ < -0.6 && Math.abs(normX) < 0.5) {
+      return 'frente';
+    }
+
+    // Trasera del vehiculo: Z positivo (parte posterior)
+    if (normZ > 0.6 && Math.abs(normX) < 0.5) {
+      return 'trasera';
+    }
+
+    // Puertas en el lateral izquierdo (X negativo)
+    if (normX < -0.5) {
+      // Distinguir entre puerta delantera y trasera
+      if (normZ < -0.1) {
+        return 'puerta_delantera_izq';
+      } else if (normZ > 0.1) {
+        return 'puerta_trasera_izq';
       }
+      return 'lateral_izq';
+    }
+
+    // Puertas en el lateral derecho (X positivo)
+    if (normX > 0.5) {
+      // Distinguir entre puerta delantera y trasera
+      if (normZ < -0.1) {
+        return 'puerta_delantera_der';
+      } else if (normZ > 0.1) {
+        return 'puerta_trasera_der';
+      }
+      return 'lateral_der';
     }
 
     return null;
@@ -525,15 +581,11 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
   }, [onZoneClick]);
 
   const applyCameraPreset = (preset: 'front' | 'rear' | 'left' | 'right' | 'top' | 'iso') => {
-    // Corregir direcciones para el nuevo mapeo:
-    // frente (lateral der original) = X positivo
-    // trasera (lateral izq original) = X negativo
-    // left = Z negativo
-    // right = Z positivo
-    if (preset === 'front') setCameraByDirection(new THREE.Vector3(1, 0.2, 0)); // lateral derecho
-    if (preset === 'rear') setCameraByDirection(new THREE.Vector3(-1, 0.2, 0)); // lateral izquierdo
-    if (preset === 'left') setCameraByDirection(new THREE.Vector3(0, 0.16, -1)); // frente
-    if (preset === 'right') setCameraByDirection(new THREE.Vector3(0, 0.16, 1)); // trasera
+    // Direcciones corregidas para coincidir con los nombres de zonas
+    if (preset === 'front') setCameraByDirection(new THREE.Vector3(0, 0.16, -1)); // frente del vehiculo
+    if (preset === 'rear') setCameraByDirection(new THREE.Vector3(0, 0.16, 1)); // trasera del vehiculo
+    if (preset === 'left') setCameraByDirection(new THREE.Vector3(-1, 0.2, 0)); // lateral izquierdo
+    if (preset === 'right') setCameraByDirection(new THREE.Vector3(1, 0.2, 0)); // lateral derecho
     if (preset === 'top') setCameraByDirection(new THREE.Vector3(0.01, 1, 0.01));
     if (preset === 'iso') setCameraByDirection(new THREE.Vector3(1, 0.5, 1));
   };
