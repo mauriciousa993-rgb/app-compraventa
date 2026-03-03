@@ -2,17 +2,20 @@ import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, use
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VehicleDamageZone } from '../types';
 
 type VehicleModelType = 'suv' | 'pickup' | 'sedan' | 'hatchback';
 
 const DEFAULT_MODEL_FALLBACKS = ['/models/ren-car-v3.fbx', '/models/ren%20carV3.fbx'];
+const GLTF_URL_PATTERN = /\.gltf(\?|#|$)|\.glb(\?|#|$)/i;
+const EXTERNAL_OR_EMBEDDED_URL_PATTERN = /^(data:|blob:|https?:)/i;
 
 const MODEL_URL_CANDIDATES: Record<VehicleModelType, string[]> = {
-  suv: ['/models/suv.fbx', '/models/SUV.fbx', '/models/suv-model.fbx', ...DEFAULT_MODEL_FALLBACKS],
-  pickup: ['/models/pickup.fbx', '/models/Pickup.fbx', '/models/pickup-model.fbx', ...DEFAULT_MODEL_FALLBACKS],
-  sedan: ['/models/sedan.fbx', '/models/sedan-model.fbx', ...DEFAULT_MODEL_FALLBACKS],
-  hatchback: ['/models/hatchback.fbx', '/models/hatchback-model.fbx', ...DEFAULT_MODEL_FALLBACKS],
+  suv: ['/models/suv.gltf', '/models/suv.glb', '/models/suv.fbx', '/models/SUV.fbx', '/models/suv-model.fbx', ...DEFAULT_MODEL_FALLBACKS],
+  pickup: ['/models/pickup.gltf', '/models/pickup.glb', '/models/pickup.fbx', '/models/Pickup.fbx', '/models/pickup-model.fbx', ...DEFAULT_MODEL_FALLBACKS],
+  sedan: ['/models/sedan.gltf', '/models/sedan.glb', '/models/sedan.fbx', '/models/sedan-model.fbx', ...DEFAULT_MODEL_FALLBACKS],
+  hatchback: ['/models/hatchback.gltf', '/models/hatchback.glb', '/models/hatchback.fbx', '/models/hatchback-model.fbx', ...DEFAULT_MODEL_FALLBACKS],
 };
 const FALLBACK_TEXTURE_URL = '/models/kia-nq5-22my-wheel-small-17inch.png';
 
@@ -315,22 +318,31 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     const loadingManager = new THREE.LoadingManager();
     loadingManager.setURLModifier((url: string) => {
       const normalized = url.replace(/\\/g, '/');
-      const fileName = normalized.split('/').pop() || '';
+      if (!normalized || EXTERNAL_OR_EMBEDDED_URL_PATTERN.test(normalized)) return url;
+      const fileName = (normalized.split('/').pop() || '').split('?')[0].split('#')[0];
       if (!fileName) return url;
       if (fileName.toLowerCase().includes('wheel-small-17inch')) return FALLBACK_TEXTURE_URL;
+      if (normalized.startsWith('/models/')) return normalized;
       return `/models/${fileName}`;
     });
 
-    const loader = new FBXLoader(loadingManager);
+    const fbxLoader = new FBXLoader(loadingManager);
+    const gltfLoader = new GLTFLoader(loadingManager);
 
     const loadModelFromUrl = async (url: string): Promise<THREE.Group> => {
+      if (GLTF_URL_PATTERN.test(url)) {
+        const gltf = await gltfLoader.loadAsync(url);
+        if (gltf.scene) return gltf.scene;
+        if (gltf.scenes && gltf.scenes[0]) return gltf.scenes[0];
+        throw new Error(`El archivo GLTF no contiene escena: ${url}`);
+      }
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`No se pudo descargar el modelo: ${url}`);
       }
       const rawBuffer = await response.arrayBuffer();
       const patchedBuffer = patchUnsupportedEmbeddedTextureExtensions(rawBuffer);
-      return loader.parse(patchedBuffer, '/models/');
+      return fbxLoader.parse(patchedBuffer, '/models/');
     };
 
     const applyLoadedModel = (fbx: THREE.Group) => {
@@ -422,8 +434,8 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
       }
 
       try {
-        const fbx = await loadModelFromUrl(url);
-        applyLoadedModel(fbx);
+        const model = await loadModelFromUrl(url);
+        applyLoadedModel(model);
       } catch (error) {
         console.error(`Error al cargar modelo 3D (${url}):`, error);
         tryLoadModel(index + 1);
