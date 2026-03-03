@@ -480,20 +480,21 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     const normY = relY / size.y;
 
     // Logica de deteccion de zonas - ORDEN IMPORTANTE:
-    // Primero detectar frente/trasera (Z), luego laterales (X)
+    // Primero detectar areas superiores (capo/techo), luego frente/trasera, luego laterales
 
-    // Techo: parte superior
-    if (normY > 0.75) {
-      // Distinguir entre capo (frontal) y techo (central)
-      if (normZ < -0.3) {
-        return 'capo';
-      }
+    // Capo: parte superior frontal (donde va el motor) - Y alto y Z frontal negativo
+    if (normY > 0.72 && normZ < -0.25) {
+      return 'capo';
+    }
+
+    // Techo: parte superior central - Y alto y Z central
+    if (normY > 0.78 && Math.abs(normZ) < 0.35) {
       return 'techo';
     }
 
-    // Frente del vehiculo: Z negativo (parte frontal) - PRIORIDAD ALTA
-    // Ampliar rango de X para capturar toda la parte frontal
-    if (normZ < -0.55) {
+    // Frente del vehiculo: Z negativo (parte frontal) - excluyendo capo ya detectado
+    // Parte frontal media/baja (parrilla, faros)
+    if (normZ < -0.55 && normY < 0.72) {
       // Bumper delantero: parte frontal inferior
       if (normY < 0.25) {
         return 'bumper_delantero';
