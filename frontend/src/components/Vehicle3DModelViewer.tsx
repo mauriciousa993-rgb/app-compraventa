@@ -41,6 +41,36 @@ type MaterialWithColor = THREE.Material & {
   emissiveIntensity?: number;
 };
 
+const replaceAsciiBytes = (bytes: Uint8Array, from: string, to: string) => {
+  if (from.length !== to.length) return;
+  const fromBytes = new TextEncoder().encode(from);
+  const toBytes = new TextEncoder().encode(to);
+  const max = bytes.length - fromBytes.length;
+
+  for (let i = 0; i <= max; i += 1) {
+    let match = true;
+    for (let j = 0; j < fromBytes.length; j += 1) {
+      if (bytes[i + j] !== fromBytes[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (!match) continue;
+    for (let j = 0; j < toBytes.length; j += 1) {
+      bytes[i + j] = toBytes[j];
+    }
+  }
+};
+
+const patchUnsupportedEmbeddedTextureExtensions = (buffer: ArrayBuffer): ArrayBuffer => {
+  const bytes = new Uint8Array(buffer.slice(0));
+  // Algunos FBX traen textura PNG/JPEG embebida pero etiquetada como .dds.
+  // Reetiquetamos a .png para que FBXLoader pueda parsearla.
+  replaceAsciiBytes(bytes, '.dds', '.png');
+  replaceAsciiBytes(bytes, '.DDS', '.png');
+  return bytes.buffer;
+};
+
 const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DModelViewerProps>(
   ({ damageZones, tipoVehiculo = 'sedan' }, ref) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -293,6 +323,16 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
 
     const loader = new FBXLoader(loadingManager);
 
+    const loadModelFromUrl = async (url: string): Promise<THREE.Group> => {
+      const response = await fetch(url, { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error(`No se pudo descargar el modelo: ${url}`);
+      }
+      const rawBuffer = await response.arrayBuffer();
+      const patchedBuffer = patchUnsupportedEmbeddedTextureExtensions(rawBuffer);
+      return loader.parse(patchedBuffer, '/models/');
+    };
+
     const applyLoadedModel = (fbx: THREE.Group) => {
         // Normalizar orientacion: altura en eje Y y largo en eje Z
         const preBox = new THREE.Box3().setFromObject(fbx);
@@ -373,7 +413,7 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
         setIsLoading(false);
     };
 
-    const tryLoadModel = (index: number) => {
+    const tryLoadModel = async (index: number) => {
       const url = modelCandidates[index];
       if (!url) {
         setLoadError('No se pudo cargar el modelo 3D del vehiculo');
@@ -381,17 +421,13 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
         return;
       }
 
-      loader.load(
-        url,
-        (fbx) => {
-          applyLoadedModel(fbx);
-        },
-        undefined,
-        (error) => {
-          console.error(`Error al cargar modelo 3D (${url}):`, error);
-          tryLoadModel(index + 1);
-        }
-      );
+      try {
+        const fbx = await loadModelFromUrl(url);
+        applyLoadedModel(fbx);
+      } catch (error) {
+        console.error(`Error al cargar modelo 3D (${url}):`, error);
+        tryLoadModel(index + 1);
+      }
     };
 
     tryLoadModel(0);
