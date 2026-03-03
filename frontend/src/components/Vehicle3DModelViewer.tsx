@@ -474,12 +474,14 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     const halfX = size.x / 2;
     const halfZ = size.z / 2;
 
-    // Normalizar las coordenadas
+    // Normalizar las coordenadas (-1 a 1)
     const normX = relX / halfX;
     const normZ = relZ / halfZ;
     const normY = relY / size.y;
 
-    // Logica de deteccion de zonas
+    // Logica de deteccion de zonas - ORDEN IMPORTANTE:
+    // Primero detectar frente/trasera (Z), luego laterales (X)
+
     // Techo: parte superior
     if (normY > 0.75) {
       // Distinguir entre capo (frontal) y techo (central)
@@ -489,47 +491,53 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
       return 'techo';
     }
 
-    // Bumper delantero: parte frontal inferior
-    if (normZ < -0.7 && normY < 0.3) {
-      return 'bumper_delantero';
-    }
-
-    // Bumper trasero: parte posterior inferior
-    if (normZ > 0.7 && normY < 0.3) {
-      return 'bumper_trasero';
-    }
-
-    // Frente del vehiculo: Z negativo (parte frontal)
-    if (normZ < -0.6 && Math.abs(normX) < 0.5) {
+    // Frente del vehiculo: Z negativo (parte frontal) - PRIORIDAD ALTA
+    // Ampliar rango de X para capturar toda la parte frontal
+    if (normZ < -0.55) {
+      // Bumper delantero: parte frontal inferior
+      if (normY < 0.25) {
+        return 'bumper_delantero';
+      }
       return 'frente';
     }
 
-    // Trasera del vehiculo: Z positivo (parte posterior)
-    if (normZ > 0.6 && Math.abs(normX) < 0.5) {
+    // Trasera del vehiculo: Z positivo (parte posterior) - PRIORIDAD ALTA
+    // Ampliar rango de X para capturar toda la parte trasera
+    if (normZ > 0.55) {
+      // Bumper trasero: parte posterior inferior
+      if (normY < 0.25) {
+        return 'bumper_trasero';
+      }
       return 'trasera';
     }
 
-    // Puertas en el lateral izquierdo (X negativo)
-    if (normX < -0.5) {
+    // Puertas en el lateral izquierdo (X negativo) - solo si NO es frente/trasera
+    if (normX < -0.6) {
       // Distinguir entre puerta delantera y trasera
-      if (normZ < -0.1) {
+      if (normZ < -0.15) {
         return 'puerta_delantera_izq';
-      } else if (normZ > 0.1) {
+      } else if (normZ > 0.15) {
         return 'puerta_trasera_izq';
       }
       return 'lateral_izq';
     }
 
-    // Puertas en el lateral derecho (X positivo)
-    if (normX > 0.5) {
+    // Puertas en el lateral derecho (X positivo) - solo si NO es frente/trasera
+    if (normX > 0.6) {
       // Distinguir entre puerta delantera y trasera
-      if (normZ < -0.1) {
+      if (normZ < -0.15) {
         return 'puerta_delantera_der';
-      } else if (normZ > 0.1) {
+      } else if (normZ > 0.15) {
         return 'puerta_trasera_der';
       }
       return 'lateral_der';
     }
+
+    // Zona central por defecto segun posicion Z
+    if (normZ < -0.2) return 'frente';
+    if (normZ > 0.2) return 'trasera';
+    if (normX < 0) return 'lateral_izq';
+    if (normX > 0) return 'lateral_der';
 
     return null;
   };
