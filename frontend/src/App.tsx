@@ -1,20 +1,30 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useNotifications } from './hooks/useNotifications';
 import { PWAInstallButton } from './components/PWAInstallButton';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import VehicleList from './pages/VehicleList';
-import VehicleForm from './pages/VehicleForm';
-import Reports from './pages/Reports';
-import UserManagement from './pages/UserManagement';
-import Marketplace from './pages/Marketplace';
-import FixedExpenses from './pages/FixedExpenses';
-import Notifications from './pages/Notifications';
-import ConsultaTramite from './pages/ConsultaTramite';
-import CommissionLiquidation from './pages/CommissionLiquidation';
-import VehicleInspectionChecklist from './pages/VehicleInspectionChecklist';
+
+const Login = lazy(() => import('./pages/Login'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const VehicleList = lazy(() => import('./pages/VehicleList'));
+const VehicleForm = lazy(() => import('./pages/VehicleForm'));
+const Reports = lazy(() => import('./pages/Reports'));
+const UserManagement = lazy(() => import('./pages/UserManagement'));
+const Marketplace = lazy(() => import('./pages/Marketplace'));
+const FixedExpenses = lazy(() => import('./pages/FixedExpenses'));
+const Notifications = lazy(() => import('./pages/Notifications'));
+const ConsultaTramite = lazy(() => import('./pages/ConsultaTramite'));
+const CommissionLiquidation = lazy(() => import('./pages/CommissionLiquidation'));
+const VehicleInspectionChecklist = lazy(() => import('./pages/VehicleInspectionChecklist'));
+
+const PageLoader: React.FC = () => (
+  <div className="min-h-screen flex items-center justify-center">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+      <p className="mt-4 text-gray-600">Cargando modulo...</p>
+    </div>
+  </div>
+);
 
 // Componente para proteger rutas
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -135,7 +145,9 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <Suspense fallback={<PageLoader />}>
+          <AppRoutes />
+        </Suspense>
         <PWAInstallButton
           showInstall={showInstallButton}
           permission={permission}

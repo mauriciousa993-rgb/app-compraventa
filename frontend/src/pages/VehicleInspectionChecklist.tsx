@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -9,11 +9,12 @@ import {
   FileText,
   Save,
 } from 'lucide-react';
-import { jsPDF } from 'jspdf';
 import Layout from '../components/Layout/Layout';
-import Vehicle3DModelViewer, { Vehicle3DModelViewerHandle } from '../components/Vehicle3DModelViewer';
+import type { Vehicle3DModelViewerHandle } from '../components/Vehicle3DModelViewer';
 import { vehiclesAPI } from '../services/api';
 import { Vehicle, VehicleDamageZone, VehicleInspectionItem } from '../types';
+
+const Vehicle3DModelViewer = lazy(() => import('../components/Vehicle3DModelViewer'));
 
 type TemplateChecklistItem = Omit<
   VehicleInspectionItem,
@@ -311,6 +312,7 @@ const VehicleInspectionChecklist: React.FC = () => {
 
     setIsExportingPdf(true);
     try {
+      const { jsPDF } = await import('jspdf');
       const captures = await viewerRef.current.captureDamageViews();
 
       const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
@@ -579,11 +581,21 @@ const VehicleInspectionChecklist: React.FC = () => {
                 <p className="text-sm text-ink-200 mb-4">
                   Visual 3D rotable para inspeccionar danos por zona del vehiculo.
                 </p>
-                <Vehicle3DModelViewer
-                  ref={viewerRef}
-                  damageZones={damageZones}
-                  tipoVehiculo={selectedVehicle?.tipoVehiculo || 'sedan'}
-                />
+                <Suspense
+                  fallback={
+                    <div className="rounded-xl border border-[#2f3238] bg-[#0b1220] p-2">
+                      <div className="h-72 w-full rounded-lg overflow-hidden flex items-center justify-center text-ink-200">
+                        Cargando visor 3D...
+                      </div>
+                    </div>
+                  }
+                >
+                  <Vehicle3DModelViewer
+                    ref={viewerRef}
+                    damageZones={damageZones}
+                    tipoVehiculo={selectedVehicle?.tipoVehiculo || 'sedan'}
+                  />
+                </Suspense>
 
                 <div className="mt-4 space-y-3">
                   {damageZones.map((zone) => (
