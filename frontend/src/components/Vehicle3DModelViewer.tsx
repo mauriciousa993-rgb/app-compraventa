@@ -107,29 +107,24 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     const absX = Math.abs(x);
     const absZ = Math.abs(z);
 
-    // Capó (parte frontal superior)
+    // Configuración original de detección de zonas
     if (z > 0.3 && y > 0.3 && absX < 0.6) return 'capo';
-    // Techo (parte superior central)
     if (y > 0.5 && absX < 0.7 && z > -0.5 && z < 0.3) return 'techo';
-    // Frente (parte frontal)
     if (z > 0.8 && absX < 0.6) return 'frente';
-    // Trasera (parte trasera)
     if (z < -0.8 && absX < 0.6) return 'trasera';
-    // Lateral derecho
     if (x > 0.6 && absZ < 0.7) return 'lateral_der';
-    // Lateral izquierdo
     if (x < -0.6 && absZ < 0.7) return 'lateral_izq';
 
     return null;
   };
 
   const ZONE_MARKER_PROFILE: Record<string, ZoneMarkerProfile> = {
-    frente: { direction: [0, 0, 1], seed: [0.2, 0.35, 0.9] },
-    trasera: { direction: [0, 0, -1], seed: [0.2, 0.35, -0.9] },
-    lateral_der: { direction: [1, 0, 0], seed: [0.9, 0.35, 0.2] },
-    lateral_izq: { direction: [-1, 0, 0], seed: [-0.9, 0.35, 0.2] },
-    capo: { direction: [0, 1, 0.3], seed: [0.2, 0.6, 0.5] },
-    techo: { direction: [0, 1, 0], seed: [0.2, 0.7, 0.2] },
+    frente: { direction: [1, 0, 0], seed: [0.9, 0.35, 0.2] },
+    trasera: { direction: [-1, 0, 0], seed: [-0.9, 0.35, 0.2] },
+    lateral_der: { direction: [0, 0, 1], seed: [0.2, 0.35, 0.9] },
+    lateral_izq: { direction: [0, 0, -1], seed: [0.2, 0.35, -0.9] },
+    capo: { direction: [0, 1, 0], seed: [0.2, 0.7, 0.2] },
+    techo: { direction: [0, 1, 0.3], seed: [0.2, 0.6, 0.5] },
   };
 
   const buildZoneMarkers = () => {
