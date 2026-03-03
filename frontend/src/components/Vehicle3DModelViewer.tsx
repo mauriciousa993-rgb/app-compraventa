@@ -12,10 +12,10 @@ const GLTF_URL_PATTERN = /\.gltf(\?|#|$)|\.glb(\?|#|$)/i;
 const EXTERNAL_OR_EMBEDDED_URL_PATTERN = /^(data:|blob:|https?:)/i;
 
 const MODEL_URL_CANDIDATES: Record<VehicleModelType, string[]> = {
-  suv: ['/models/suv.gltf', '/models/suv.glb', '/models/suv.fbx', '/models/SUV.fbx', '/models/suv-model.fbx', ...DEFAULT_MODEL_FALLBACKS],
-  pickup: ['/models/pickup.gltf', '/models/pickup.glb', '/models/pickup.fbx', '/models/Pickup.fbx', '/models/pickup-model.fbx', ...DEFAULT_MODEL_FALLBACKS],
-  sedan: ['/models/sedan.gltf', '/models/sedan.glb', '/models/sedan.fbx', '/models/sedan-model.fbx', ...DEFAULT_MODEL_FALLBACKS],
-  hatchback: ['/models/hatchback.gltf', '/models/hatchback.glb', '/models/hatchback.fbx', '/models/hatchback-model.fbx', ...DEFAULT_MODEL_FALLBACKS],
+  suv: ['/models/suv/scene.gltf', '/models/suv.gltf', '/models/suv.glb', '/models/suv.fbx', '/models/SUV.fbx', '/models/suv-model.fbx', ...DEFAULT_MODEL_FALLBACKS],
+  pickup: ['/models/pickup/scene.gltf', '/models/pickup.gltf', '/models/pickup.glb', '/models/pickup.fbx', '/models/Pickup.fbx', '/models/pickup-model.fbx', ...DEFAULT_MODEL_FALLBACKS],
+  sedan: ['/models/sedan/scene.gltf', '/models/sedan.gltf', '/models/sedan.glb', '/models/sedan.fbx', '/models/sedan-model.fbx', ...DEFAULT_MODEL_FALLBACKS],
+  hatchback: ['/models/hatchback/scene.gltf', '/models/hatchback.gltf', '/models/hatchback.glb', '/models/hatchback.fbx', '/models/hatchback-model.fbx', ...DEFAULT_MODEL_FALLBACKS],
 };
 const FALLBACK_TEXTURE_URL = '/models/kia-nq5-22my-wheel-small-17inch.png';
 
@@ -315,19 +315,18 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     controls.target.copy(targetRef.current);
     controlsRef.current = controls;
 
-    const loadingManager = new THREE.LoadingManager();
-    loadingManager.setURLModifier((url: string) => {
+    const fbxLoadingManager = new THREE.LoadingManager();
+    fbxLoadingManager.setURLModifier((url: string) => {
       const normalized = url.replace(/\\/g, '/');
       if (!normalized || EXTERNAL_OR_EMBEDDED_URL_PATTERN.test(normalized)) return url;
       const fileName = (normalized.split('/').pop() || '').split('?')[0].split('#')[0];
       if (!fileName) return url;
       if (fileName.toLowerCase().includes('wheel-small-17inch')) return FALLBACK_TEXTURE_URL;
-      if (normalized.startsWith('/models/')) return normalized;
       return `/models/${fileName}`;
     });
 
-    const fbxLoader = new FBXLoader(loadingManager);
-    const gltfLoader = new GLTFLoader(loadingManager);
+    const fbxLoader = new FBXLoader(fbxLoadingManager);
+    const gltfLoader = new GLTFLoader();
 
     const loadModelFromUrl = async (url: string): Promise<THREE.Group> => {
       if (GLTF_URL_PATTERN.test(url)) {
