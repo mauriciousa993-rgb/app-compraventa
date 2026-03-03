@@ -68,7 +68,14 @@ export const getVehicleInspectionChecklist = async (req: AuthRequest, res: Respo
 
     const checklist = await VehicleInspectionChecklist.findOne({ vehicle: id }).lean();
     if (!checklist) {
-      res.status(404).json({ message: 'Checklist no encontrado para este vehiculo' });
+      res.json({
+        vehicle: id,
+        inspectorName: '',
+        inspectionDate: new Date().toISOString(),
+        items: [],
+        damageZones: [],
+        generalObservations: '',
+      });
       return;
     }
 
