@@ -8,6 +8,13 @@ import PDFDocument from 'pdfkit';
 import { ensureUploadsDir, getPhotoFileName, getUploadsDir } from '../utils/uploads';
 import { isUsingCloudinary } from '../middleware/upload.middleware';
 
+const VEHICLE_TYPES = new Set(['suv', 'pickup', 'sedan', 'hatchback']);
+
+const normalizeVehicleType = (value: any): 'suv' | 'pickup' | 'sedan' | 'hatchback' => {
+  const parsed = typeof value === 'string' ? value.toLowerCase().trim() : '';
+  return VEHICLE_TYPES.has(parsed) ? (parsed as 'suv' | 'pickup' | 'sedan' | 'hatchback') : 'sedan';
+};
+
 const calculateVehicleTotalExpenses = (vehicle: any): number => {
   const gastos = vehicle.gastos || {};
   const gastosGenerales =
@@ -30,7 +37,8 @@ const calculateVehicleTotalExpenses = (vehicle: any): number => {
 // Crear nuevo vehículo
 export const createVehicle = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const vehicleData = req.body;
+    const vehicleData = { ...req.body };
+    vehicleData.tipoVehiculo = normalizeVehicleType(vehicleData.tipoVehiculo);
     vehicleData.registradoPor = req.user?.userId;
 
     const vehicle = new Vehicle(vehicleData);
@@ -187,6 +195,9 @@ export const updateVehicle = async (req: AuthRequest, res: Response): Promise<vo
     // Usar una aproximación mixta: actualizar con findByIdAndUpdate pero mantener el documento
     // para campos complejos que requieren el hook pre-save
     const updateFields: any = { ...req.body };
+    if (Object.prototype.hasOwnProperty.call(updateFields, 'tipoVehiculo')) {
+      updateFields.tipoVehiculo = normalizeVehicleType(updateFields.tipoVehiculo);
+    }
     
     // Eliminar campos problemáticos del update
     delete updateFields._id;

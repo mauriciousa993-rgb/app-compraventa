@@ -220,7 +220,7 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#0f1720');
-    scene.fog = new THREE.Fog('#0f1720', 40, 140);
+    scene.fog = new THREE.Fog('#0f1720', 65, 220);
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 2000);
@@ -231,22 +231,32 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     rendererRef.current = renderer;
     container.appendChild(renderer.domElement);
 
-    const hemiLight = new THREE.HemisphereLight('#dbeafe', '#111827', 1.1);
+    const hemiLight = new THREE.HemisphereLight('#e5f2ff', '#1f2937', 1.35);
     scene.add(hemiLight);
 
-    const keyLight = new THREE.DirectionalLight('#ffffff', 1.0);
+    const keyLight = new THREE.DirectionalLight('#ffffff', 1.2);
     keyLight.position.set(10, 14, 8);
     keyLight.castShadow = true;
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight('#93c5fd', 0.6);
+    const fillLight = new THREE.DirectionalLight('#bfdbfe', 0.9);
     fillLight.position.set(-8, 5, -6);
     scene.add(fillLight);
+
+    const backLight = new THREE.DirectionalLight('#ffffff', 0.45);
+    backLight.position.set(-6, 6, 10);
+    scene.add(backLight);
+
+    const topLight = new THREE.DirectionalLight('#f8fafc', 0.55);
+    topLight.position.set(0, 16, 0);
+    scene.add(topLight);
 
     const floor = new THREE.Mesh(
       new THREE.CircleGeometry(18, 64),
@@ -351,7 +361,7 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
         targetRef.current.copy(target);
 
         const radius = Math.max(fittedSphere.radius, 2.2);
-        orbitDistanceRef.current = Math.max(radius * 2.35, 8.5);
+        orbitDistanceRef.current = Math.max(radius * 2.1, 7.8);
         controls.minDistance = orbitDistanceRef.current;
         controls.maxDistance = orbitDistanceRef.current;
         setCameraByDirection(new THREE.Vector3(1, 0.5, 1));

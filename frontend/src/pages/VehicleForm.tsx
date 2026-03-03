@@ -353,6 +353,15 @@ const VehicleForm: React.FC = () => {
           prenda: { ...prev.documentacion.prenda, detalles: value }
         }
       }));
+    } else if (name === 'tipoVehiculo') {
+      const normalizedType =
+        value === 'suv' || value === 'pickup' || value === 'hatchback' || value === 'sedan'
+          ? value
+          : 'sedan';
+      setFormData(prev => ({
+        ...prev,
+        tipoVehiculo: normalizedType
+      }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
@@ -541,6 +550,12 @@ const VehicleForm: React.FC = () => {
       let vehicleId = id;
       const payload = {
         ...formData,
+        tipoVehiculo:
+          formData.tipoVehiculo === 'suv' ||
+          formData.tipoVehiculo === 'pickup' ||
+          formData.tipoVehiculo === 'hatchback'
+            ? formData.tipoVehiculo
+            : 'sedan',
         estadoTramite:
           formData.estado === 'vendido' && formData.estadoTramite
             ? formData.estadoTramite

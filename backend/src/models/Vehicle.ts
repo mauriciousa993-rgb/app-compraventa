@@ -84,6 +84,7 @@ export interface IGastoDetalle {
 export interface IVehicleDocument extends Document {
   marca: string;
   modelo: string;
+  tipoVehiculo: 'suv' | 'pickup' | 'sedan' | 'hatchback';
   año: number;
   placa: string;
   vin: string;
@@ -190,6 +191,11 @@ const inversionistaSchema = new Schema<IInversionista>({
 const vehicleSchema = new Schema<IVehicleDocument>({
   marca: { type: String, required: true },
   modelo: { type: String, required: true },
+  tipoVehiculo: {
+    type: String,
+    enum: ['suv', 'pickup', 'sedan', 'hatchback'],
+    default: 'sedan',
+  },
   año: { type: Number, required: true },
   placa: { type: String, required: true, unique: true },
   vin: { type: String, required: false, unique: true },

@@ -172,6 +172,7 @@ export interface Vehicle {
   _id: string;
   marca: string;
   modelo: string;
+  tipoVehiculo: 'suv' | 'pickup' | 'sedan' | 'hatchback';
   año: number;
   placa: string;
   vin: string;
@@ -281,6 +282,7 @@ export interface Statistics {
 export interface VehicleFormData {
   marca: string;
   modelo: string;
+  tipoVehiculo: 'suv' | 'pickup' | 'sedan' | 'hatchback';
   año: number;
   placa: string;
   vin: string;
