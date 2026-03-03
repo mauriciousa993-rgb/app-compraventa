@@ -150,7 +150,7 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     const box = new THREE.Box3().setFromObject(model);
     const size = box.getSize(new THREE.Vector3());
     const maxDim = Math.max(size.x, size.y, size.z);
-    const markerRadius = maxDim * 0.08; // AUMENTADO: de 0.05 a 0.08 para puntos más grandes
+    const markerRadius = maxDim * 0.05;
 
     damageZones.forEach((zone) => {
       const profile = ZONE_MARKER_PROFILE[zone.key];
@@ -161,14 +161,14 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
 
       // Crear esfera como marcador
       const geometry = new THREE.SphereGeometry(
-        isSelected ? markerRadius * 2.0 : markerRadius * 1.5, // AUMENTADO: de 1.4/0.9 a 2.0/1.5
+        isSelected ? markerRadius * 1.4 : markerRadius * 0.9,
         32,
         32
       );
 
       const color = isDamaged ? 0xff4444 : 0x44ff44;
       const emissive = isDamaged ? 0xff0000 : 0x00ff00;
-      const emissiveIntensity = isSelected ? 0.8 : 0.4; // AUMENTADO: de 0.6/0.2 a 0.8/0.4
+      const emissiveIntensity = isSelected ? 0.6 : 0.2;
 
       const material = new THREE.MeshStandardMaterial({
         color,
