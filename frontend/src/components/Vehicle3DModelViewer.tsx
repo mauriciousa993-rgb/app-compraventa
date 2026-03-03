@@ -6,11 +6,13 @@ import { VehicleDamageZone } from '../types';
 
 type VehicleModelType = 'suv' | 'pickup' | 'sedan' | 'hatchback';
 
-const MODEL_URLS: Record<VehicleModelType, string> = {
-  suv: '/models/suv.fbx',
-  pickup: '/models/pickup.fbx',
-  sedan: '/models/sedan.fbx',
-  hatchback: '/models/hatchback.fbx',
+const DEFAULT_MODEL_FALLBACKS = ['/models/ren-car-v3.fbx', '/models/ren%20carV3.fbx'];
+
+const MODEL_URL_CANDIDATES: Record<VehicleModelType, string[]> = {
+  suv: ['/models/suv.fbx', '/models/SUV.fbx', '/models/suv-model.fbx', ...DEFAULT_MODEL_FALLBACKS],
+  pickup: ['/models/pickup.fbx', '/models/Pickup.fbx', '/models/pickup-model.fbx', ...DEFAULT_MODEL_FALLBACKS],
+  sedan: ['/models/sedan.fbx', '/models/sedan-model.fbx', ...DEFAULT_MODEL_FALLBACKS],
+  hatchback: ['/models/hatchback.fbx', '/models/hatchback-model.fbx', ...DEFAULT_MODEL_FALLBACKS],
 };
 const FALLBACK_TEXTURE_URL = '/models/kia-nq5-22my-wheel-small-17inch.png';
 
@@ -59,7 +61,10 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     () => damageZones.filter((zone) => zone.status === 'mal').map((zone) => zone.label),
     [damageZones]
   );
-  const modelUrl = MODEL_URLS[tipoVehiculo] || MODEL_URLS.sedan;
+  const modelCandidates = useMemo(
+    () => MODEL_URL_CANDIDATES[tipoVehiculo] || MODEL_URL_CANDIDATES.sedan,
+    [tipoVehiculo]
+  );
 
   const forEachMeshMaterial = (
     material: THREE.Material | THREE.Material[],
@@ -277,9 +282,8 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     });
 
     const loader = new FBXLoader(loadingManager);
-    loader.load(
-      modelUrl,
-      (fbx) => {
+
+    const applyLoadedModel = (fbx: THREE.Group) => {
         // Normalizar orientacion: altura en eje Y y largo en eje Z
         const preBox = new THREE.Box3().setFromObject(fbx);
         const preSize = preBox.getSize(new THREE.Vector3());
@@ -357,14 +361,30 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
         modelRef.current = fbx;
         renderZoneMarkers(damageZones);
         setIsLoading(false);
-      },
-      undefined,
-      (error) => {
-        console.error('Error al cargar modelo 3D:', error);
+    };
+
+    const tryLoadModel = (index: number) => {
+      const url = modelCandidates[index];
+      if (!url) {
         setLoadError('No se pudo cargar el modelo 3D del vehiculo');
         setIsLoading(false);
+        return;
       }
-    );
+
+      loader.load(
+        url,
+        (fbx) => {
+          applyLoadedModel(fbx);
+        },
+        undefined,
+        (error) => {
+          console.error(`Error al cargar modelo 3D (${url}):`, error);
+          tryLoadModel(index + 1);
+        }
+      );
+    };
+
+    tryLoadModel(0);
 
     const animate = () => {
       frameRef.current = requestAnimationFrame(animate);
@@ -403,7 +423,7 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
         container.removeChild(renderer.domElement);
       }
     };
-  }, [modelUrl]);
+  }, [modelCandidates]);
 
   useEffect(() => {
     const model = modelRef.current;
