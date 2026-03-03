@@ -4,21 +4,19 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { VehicleDamageZone } from '../types';
 
-// URLs de modelos 3D por tipo de vehículo
-const MODEL_URLS: Record<string, string> = {
-  sedan: '/models/ren-car-v3.fbx',
-  suv: '/models/suv-model.fbx',
-  pickup: '/models/pickup-model.fbx',
-  hatchback: '/models/hatchback-model.fbx',
-};
+type VehicleModelType = 'suv' | 'pickup' | 'sedan' | 'hatchback';
 
+const MODEL_URLS: Record<VehicleModelType, string> = {
+  suv: '/models/suv.fbx',
+  pickup: '/models/pickup.fbx',
+  sedan: '/models/sedan.fbx',
+  hatchback: '/models/hatchback.fbx',
+};
 const FALLBACK_TEXTURE_URL = '/models/kia-nq5-22my-wheel-small-17inch.png';
 
 interface Vehicle3DModelViewerProps {
   damageZones: VehicleDamageZone[];
-  onZoneClick?: (zoneKey: string) => void;
-  selectedZone?: string;
-  tipoVehiculo?: 'suv' | 'pickup' | 'sedan' | 'hatchback';
+  tipoVehiculo?: VehicleModelType;
 }
 
 export interface Vehicle3DModelViewerHandle {
@@ -41,12 +39,8 @@ type MaterialWithColor = THREE.Material & {
   emissiveIntensity?: number;
 };
 
-const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DModelViewerProps>(({ 
-  damageZones, 
-  onZoneClick, 
-  selectedZone,
-  tipoVehiculo = 'sedan'
-}, ref) => {
+const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DModelViewerProps>(
+  ({ damageZones, tipoVehiculo = 'sedan' }, ref) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -57,8 +51,6 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
   const orbitDistanceRef = useRef<number>(12);
   const targetRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0.2, 0));
   const frameRef = useRef<number | null>(null);
-  const raycasterRef = useRef<THREE.Raycaster>(new THREE.Raycaster());
-  const mouseRef = useRef<THREE.Vector2>(new THREE.Vector2());
 
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -67,6 +59,7 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     () => damageZones.filter((zone) => zone.status === 'mal').map((zone) => zone.label),
     [damageZones]
   );
+  const modelUrl = MODEL_URLS[tipoVehiculo] || MODEL_URLS.sedan;
 
   const forEachMeshMaterial = (
     material: THREE.Material | THREE.Material[],
@@ -81,300 +74,298 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
 
   const setCameraByDirection = (direction: THREE.Vector3) => {
     const camera = cameraRef.current;
-    if (!camera) return;
-    const distance = orbitDistanceRef.current;
-    camera.position.copy(direction.clone().multiplyScalar(distance).add(targetRef.current));
+    const controls = controlsRef.current;
+    if (!camera || !controls) return;
+
+    const target = targetRef.current.clone();
+    const dir = direction.clone().normalize();
+    camera.position.copy(target.add(dir.multiplyScalar(orbitDistanceRef.current)));
     camera.lookAt(targetRef.current);
-    controlsRef.current?.update();
-  };
-
-  const applyCameraPreset = (preset: 'iso' | 'front' | 'rear' | 'left' | 'right' | 'top') => {
-    const presets: Record<typeof preset, THREE.Vector3> = {
-      iso: new THREE.Vector3(1, 0.6, 1).normalize(),
-      front: new THREE.Vector3(0, 0, 1),
-      rear: new THREE.Vector3(0, 0, -1),
-      left: new THREE.Vector3(-1, 0, 0),
-      right: new THREE.Vector3(1, 0, 0),
-      top: new THREE.Vector3(0, 1, 0),
-    };
-    setCameraByDirection(presets[preset]);
-  };
-
-  const detectZoneFromPosition = (position: THREE.Vector3): string | null => {
-    const x = position.x;
-    const y = position.y;
-    const z = position.z;
-    const absX = Math.abs(x);
-    const absZ = Math.abs(z);
-
-    // Configuración original de detección de zonas
-    if (z > 0.3 && y > 0.3 && absX < 0.6) return 'capo';
-    if (y > 0.5 && absX < 0.7 && z > -0.5 && z < 0.3) return 'techo';
-    if (z > 0.8 && absX < 0.6) return 'frente';
-    if (z < -0.8 && absX < 0.6) return 'trasera';
-    if (x > 0.6 && absZ < 0.7) return 'lateral_der';
-    if (x < -0.6 && absZ < 0.7) return 'lateral_izq';
-
-    return null;
+    controls.target.copy(targetRef.current);
+    controls.update();
   };
 
   const ZONE_MARKER_PROFILE: Record<string, ZoneMarkerProfile> = {
-    frente: { direction: [1, 0, 0], seed: [0.9, 0.35, 0.2] },
-    trasera: { direction: [-1, 0, 0], seed: [-0.9, 0.35, 0.2] },
-    lateral_der: { direction: [0, 0, 1], seed: [0.2, 0.35, 0.9] },
-    lateral_izq: { direction: [0, 0, -1], seed: [0.2, 0.35, -0.9] },
-    capo: { direction: [0, 1, 0], seed: [0.2, 0.7, 0.2] },
-    techo: { direction: [0, 1, 0.3], seed: [0.2, 0.6, 0.5] },
+    frente: {
+      direction: [0, 0.05, -1],
+      seed: [0, 0.36, -0.98],
+    },
+    capo: {
+      direction: [0, 0.38, -1],
+      seed: [0, 0.66, -0.56],
+    },
+    techo: {
+      direction: [0, 1, 0],
+      seed: [0, 0.93, 0.04],
+    },
+    trasera: {
+      direction: [0, 0.07, 1],
+      seed: [0, 0.38, 0.98],
+    },
+    lateral_izq: {
+      direction: [-1, 0.08, 0],
+      seed: [-0.98, 0.52, 0.04],
+    },
+    lateral_der: {
+      direction: [1, 0.08, 0],
+      seed: [0.98, 0.52, 0.04],
+    },
+    puerta_izq: {
+      direction: [-1, 0.02, 0.02],
+      seed: [-0.9, 0.48, 0.24],
+    },
+    puerta_der: {
+      direction: [1, 0.02, 0.02],
+      seed: [0.9, 0.48, 0.24],
+    },
   };
 
-  const buildZoneMarkers = () => {
-    const group = zoneMarkerGroupRef.current;
-    const model = modelRef.current;
-    if (!group || !model) return;
-
-    // Limpiar marcadores existentes
-    while (group.children.length > 0) {
-      const child = group.children[0];
-      if (child instanceof THREE.Mesh) {
-        child.geometry.dispose();
+  const clearZoneMarkers = () => {
+    const markerGroup = zoneMarkerGroupRef.current;
+    if (!markerGroup) return;
+    while (markerGroup.children.length > 0) {
+      const child = markerGroup.children.pop() as THREE.Mesh | undefined;
+      if (!child) continue;
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
         if (Array.isArray(child.material)) {
-          child.material.forEach((m) => m.dispose());
+          child.material.forEach((mat) => mat.dispose());
         } else {
           child.material.dispose();
         }
       }
-      group.remove(child);
     }
+  };
 
-    // Calcular tamaño del modelo para escalar marcadores
+  const renderZoneMarkers = (zones: VehicleDamageZone[]) => {
+    const model = modelRef.current;
+    const markerGroup = zoneMarkerGroupRef.current;
+    if (!model || !markerGroup) return;
+
+    clearZoneMarkers();
+
+    const meshes: THREE.Mesh[] = [];
+    model.traverse((child: any) => {
+      if (child.isMesh) meshes.push(child as THREE.Mesh);
+    });
+    if (meshes.length === 0) return;
+
     const box = new THREE.Box3().setFromObject(model);
+    const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z);
-    const markerRadius = maxDim * 0.05;
+    const halfX = Math.max(size.x / 2, 0.1);
+    const halfZ = Math.max(size.z / 2, 0.1);
+    const markerRadius = Math.max(Math.min(size.x, size.y, size.z) * 0.03, 0.08);
+    const outsideDistance = Math.max(size.x, size.y, size.z) * 1.1;
+    const raycaster = new THREE.Raycaster();
 
-    damageZones.forEach((zone) => {
+    zones.forEach((zone) => {
       const profile = ZONE_MARKER_PROFILE[zone.key];
       if (!profile) return;
+      const rayOutDirection = new THREE.Vector3(...profile.direction).normalize();
 
       const isDamaged = zone.status === 'mal';
-      const isSelected = selectedZone === zone.key;
-
-      // Crear esfera como marcador
-      const geometry = new THREE.SphereGeometry(
-        isSelected ? markerRadius * 1.4 : markerRadius * 0.9,
-        32,
-        32
+      const [nx, ny, nz] = profile.seed;
+      const seed = new THREE.Vector3(
+        center.x + nx * halfX * 0.95,
+        box.min.y + ny * size.y,
+        center.z + nz * halfZ * 0.95
       );
 
-      const color = isDamaged ? 0xff4444 : 0x44ff44;
-      const emissive = isDamaged ? 0xff0000 : 0x00ff00;
-      const emissiveIntensity = isSelected ? 0.6 : 0.2;
+      const rayStart = seed.clone().addScaledVector(rayOutDirection, outsideDistance);
+      raycaster.set(rayStart, rayOutDirection.clone().multiplyScalar(-1));
+      const intersections = raycaster.intersectObjects(meshes, false);
 
-      const material = new THREE.MeshStandardMaterial({
-        color,
-        emissive,
-        emissiveIntensity,
-        roughness: 0.3,
-        metalness: 0.1,
-        transparent: true,
-        opacity: isSelected ? 1.0 : 0.9,
-      });
-
-      const mesh = new THREE.Mesh(geometry, material);
-
-      // Posicionar el marcador en la superficie del vehículo
-      const [sx, sy, sz] = profile.seed;
-      const position = new THREE.Vector3(
-        sx * size.x * 0.5,
-        sy * size.y * 0.5,
-        sz * size.z * 0.5
-      );
-
-      mesh.position.copy(position);
-      mesh.userData = { zoneKey: zone.key };
-      group.add(mesh);
-
-      // Añadir anillo exterior para marcadores seleccionados
-      if (isSelected) {
-        const ringGeometry = new THREE.RingGeometry(
-          markerRadius * 2.2,
-          markerRadius * 2.5,
-          32
-        );
-        const ringMaterial = new THREE.MeshBasicMaterial({
-          color: 0xffff00,
-          transparent: true,
-          opacity: 0.6,
-          side: THREE.DoubleSide,
-        });
-        const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-        ring.position.copy(position);
-        ring.lookAt(new THREE.Vector3(0, 0, 0));
-        group.add(ring);
+      let markerPosition = seed.clone();
+      if (intersections.length > 0) {
+        const hit = intersections[0];
+        const hitNormal = hit.face?.normal
+          ? hit.face.normal.clone().transformDirection((hit.object as THREE.Mesh).matrixWorld)
+          : rayOutDirection;
+        markerPosition = hit.point.clone().addScaledVector(hitNormal.normalize(), markerRadius * 0.55);
       }
+
+      const marker = new THREE.Mesh(
+        new THREE.SphereGeometry(isDamaged ? markerRadius * 1.15 : markerRadius * 0.9, 18, 18),
+        new THREE.MeshStandardMaterial({
+          color: isDamaged ? '#ef4444' : '#22c55e',
+          emissive: isDamaged ? '#7f1d1d' : '#052e16',
+          emissiveIntensity: isDamaged ? 0.64 : 0.26,
+          roughness: 0.3,
+          metalness: 0.15,
+          transparent: true,
+          opacity: isDamaged ? 0.99 : 0.62,
+        })
+      );
+      marker.position.copy(markerPosition);
+      marker.castShadow = false;
+      marker.receiveShadow = false;
+      markerGroup.add(marker);
     });
   };
 
-  const handleClick = (event: React.MouseEvent) => {
-    if (!containerRef.current || !cameraRef.current || !rendererRef.current) return;
-
-    const rect = containerRef.current.getBoundingClientRect();
-    mouseRef.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    mouseRef.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-    raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
-
-    const intersects = raycasterRef.current.intersectObjects(
-      zoneMarkerGroupRef.current?.children || [],
-      false
-    );
-
-    if (intersects.length > 0) {
-      const hit = intersects[0].object;
-      const zoneKey = hit.userData?.zoneKey;
-      if (zoneKey && onZoneClick) {
-        onZoneClick(zoneKey);
-      }
-    }
-  };
-
-  useImperativeHandle(ref, () => ({
-    captureDamageViews: async () => {
-      const views = {
-        izquierda: '',
-        derecha: '',
-        frente: '',
-        trasera: '',
-      };
-
-      const camera = cameraRef.current;
-      const renderer = rendererRef.current;
-      const scene = sceneRef.current;
-      if (!camera || !renderer || !scene) return views;
-
-      const originalPosition = camera.position.clone();
-      const originalTarget = targetRef.current.clone();
-
-      const captureView = (direction: THREE.Vector3, distance: number): string => {
-        camera.position.copy(direction.clone().multiplyScalar(distance).add(targetRef.current));
-        camera.lookAt(targetRef.current);
-        renderer.render(scene, camera);
-        return renderer.domElement.toDataURL('image/png');
-      };
-
-      const distance = orbitDistanceRef.current;
-
-      views.izquierda = captureView(new THREE.Vector3(-1, 0, 0), distance);
-      views.derecha = captureView(new THREE.Vector3(1, 0, 0), distance);
-      views.frente = captureView(new THREE.Vector3(0, 0, 1), distance);
-      views.trasera = captureView(new THREE.Vector3(0, 0, -1), distance);
-
-      camera.position.copy(originalPosition);
-      camera.lookAt(originalTarget);
-
-      return views;
-    },
-  }));
-
   useEffect(() => {
-    if (!containerRef.current) return;
-
     const container = containerRef.current;
+    if (!container) return;
+    setIsLoading(true);
+    setLoadError('');
 
-    // Escena
+    const width = Math.max(container.clientWidth, 280);
+    const height = Math.max(container.clientHeight, 280);
+
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0b1220);
+    scene.background = new THREE.Color('#0f1720');
+    scene.fog = new THREE.Fog('#0f1720', 40, 140);
     sceneRef.current = scene;
 
-    // Cámara
-    const camera = new THREE.PerspectiveCamera(
-      50,
-      container.clientWidth / container.clientHeight,
-      0.1,
-      100
-    );
-    camera.position.set(5, 3, 5);
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 2000);
+    camera.position.set(12, 6, 12);
     cameraRef.current = camera;
 
-    // Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
+    container.appendChild(renderer.domElement);
 
-    // Controles
+    const hemiLight = new THREE.HemisphereLight('#dbeafe', '#111827', 1.1);
+    scene.add(hemiLight);
+
+    const keyLight = new THREE.DirectionalLight('#ffffff', 1.0);
+    keyLight.position.set(10, 14, 8);
+    keyLight.castShadow = true;
+    scene.add(keyLight);
+
+    const fillLight = new THREE.DirectionalLight('#93c5fd', 0.6);
+    fillLight.position.set(-8, 5, -6);
+    scene.add(fillLight);
+
+    const floor = new THREE.Mesh(
+      new THREE.CircleGeometry(18, 64),
+      new THREE.MeshStandardMaterial({ color: '#0b1220', roughness: 0.95, metalness: 0.05 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -2.2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    const markerGroup = new THREE.Group();
+    zoneMarkerGroupRef.current = markerGroup;
+    scene.add(markerGroup);
+
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.enableZoom = false;
+    controls.dampingFactor = 0.07;
     controls.enablePan = false;
-    controls.minDistance = 8;
-    controls.maxDistance = 20;
+    controls.enableZoom = false;
+    controls.minDistance = orbitDistanceRef.current;
+    controls.maxDistance = orbitDistanceRef.current;
+    controls.maxPolarAngle = Math.PI * 0.49;
     controls.target.copy(targetRef.current);
     controlsRef.current = controls;
 
-    // Luces
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
+    const loadingManager = new THREE.LoadingManager();
+    loadingManager.setURLModifier((url: string) => {
+      const normalized = url.replace(/\\/g, '/');
+      const fileName = normalized.split('/').pop() || '';
+      if (!fileName) return url;
+      if (fileName.toLowerCase().includes('wheel-small-17inch')) return FALLBACK_TEXTURE_URL;
+      return `/models/${fileName}`;
+    });
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    dirLight.position.set(5, 10, 7);
-    dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 1024;
-    dirLight.shadow.mapSize.height = 1024;
-    scene.add(dirLight);
-
-    const fillLight = new THREE.DirectionalLight(0x88ccff, 0.4);
-    fillLight.position.set(-5, 5, -5);
-    scene.add(fillLight);
-
-    // Grupo para marcadores de zonas
-    const zoneMarkerGroup = new THREE.Group();
-    scene.add(zoneMarkerGroup);
-    zoneMarkerGroupRef.current = zoneMarkerGroup;
-
-    // Cargar modelo
-    const modelUrl = MODEL_URLS[tipoVehiculo] || MODEL_URLS.sedan;
-    const loader = new FBXLoader();
+    const loader = new FBXLoader(loadingManager);
     loader.load(
       modelUrl,
-      (object) => {
-        object.scale.set(0.01, 0.01, 0.01);
-        object.position.set(0, 0, 0);
+      (fbx) => {
+        // Normalizar orientacion: altura en eje Y y largo en eje Z
+        const preBox = new THREE.Box3().setFromObject(fbx);
+        const preSize = preBox.getSize(new THREE.Vector3());
+        const minAxis =
+          preSize.x <= preSize.y && preSize.x <= preSize.z
+            ? 'x'
+            : preSize.y <= preSize.x && preSize.y <= preSize.z
+              ? 'y'
+              : 'z';
+        if (minAxis === 'x') {
+          fbx.rotateZ(Math.PI / 2);
+        } else if (minAxis === 'z') {
+          fbx.rotateX(-Math.PI / 2);
+        }
 
-        object.traverse((child) => {
-          if ((child as THREE.Mesh).isMesh) {
-            const mesh = child as THREE.Mesh;
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
+        const alignedBox = new THREE.Box3().setFromObject(fbx);
+        const alignedSize = alignedBox.getSize(new THREE.Vector3());
+        if (alignedSize.x > alignedSize.z) {
+          fbx.rotateY(Math.PI / 2);
+        }
 
-            if (mesh.material) {
-              forEachMeshMaterial(mesh.material, (mat) => {
-                if (mat.color) {
-                  mat.color.setHex(0xffffff);
-                }
-              });
+        const box = new THREE.Box3().setFromObject(fbx);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+
+        // Centrar la geometria en el origen antes de escalar
+        fbx.position.set(-center.x, -center.y, -center.z);
+
+        const maxAxis = Math.max(size.x, size.y, size.z) || 1;
+        const scale = 8 / maxAxis;
+        fbx.scale.setScalar(scale);
+        // Sin rotacion adicional para mantener ejes de zonas consistentes
+        fbx.rotation.y = 0;
+
+        fbx.traverse((obj: any) => {
+          if (!obj.isMesh) return;
+          obj.castShadow = true;
+          obj.receiveShadow = true;
+          if (!obj.material) return;
+          forEachMeshMaterial(obj.material, (mat) => {
+            const standardMat = mat as THREE.MeshStandardMaterial;
+            if (typeof standardMat.metalness === 'number') {
+              standardMat.metalness = standardMat.metalness;
             }
-          }
+            if (typeof standardMat.roughness === 'number') {
+              standardMat.roughness = standardMat.roughness;
+            }
+            if (mat.color instanceof THREE.Color) {
+              mat.userData = { ...(mat.userData || {}), baseColor: mat.color.clone() };
+            }
+            mat.needsUpdate = true;
+          });
         });
 
-        scene.add(object);
-        modelRef.current = object;
+        // Ajustar la base del modelo al piso y encuadrar camara automaticamente
+        const fittedBox = new THREE.Box3().setFromObject(fbx);
+        const fittedSphere = fittedBox.getBoundingSphere(new THREE.Sphere());
+        const yShift = -1.8 - fittedBox.min.y;
+        fbx.position.y += yShift;
+
+        const finalBox = new THREE.Box3().setFromObject(fbx);
+        const finalSize = finalBox.getSize(new THREE.Vector3());
+        const target = finalBox.getCenter(new THREE.Vector3());
+        target.y = finalBox.min.y + finalSize.y * 0.45;
+        targetRef.current.copy(target);
+
+        const radius = Math.max(fittedSphere.radius, 2.2);
+        orbitDistanceRef.current = Math.max(radius * 2.35, 8.5);
+        controls.minDistance = orbitDistanceRef.current;
+        controls.maxDistance = orbitDistanceRef.current;
+        setCameraByDirection(new THREE.Vector3(1, 0.5, 1));
+        controls.update();
+
+        scene.add(fbx);
+        modelRef.current = fbx;
+        renderZoneMarkers(damageZones);
         setIsLoading(false);
-        buildZoneMarkers();
       },
       undefined,
       (error) => {
-        console.error('Error loading 3D model:', error);
-        setLoadError('No se pudo cargar el modelo 3D. Usando vista alternativa.');
+        console.error('Error al cargar modelo 3D:', error);
+        setLoadError('No se pudo cargar el modelo 3D del vehiculo');
         setIsLoading(false);
       }
     );
 
-    // Animación
     const animate = () => {
       frameRef.current = requestAnimationFrame(animate);
       controls.update();
@@ -382,47 +373,150 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     };
     animate();
 
-    // Resize handler
-    const handleResize = () => {
-      if (!container || !camera || !renderer) return;
-      const width = container.clientWidth;
-      const height = container.clientHeight;
-      camera.aspect = width / height;
+    const resizeObserver = new ResizeObserver(() => {
+      const nextWidth = Math.max(container.clientWidth, 280);
+      const nextHeight = Math.max(container.clientHeight, 280);
+      camera.aspect = nextWidth / nextHeight;
       camera.updateProjectionMatrix();
-      renderer.setSize(width, height);
-    };
-    window.addEventListener('resize', handleResize);
+      renderer.setSize(nextWidth, nextHeight);
+    });
+    resizeObserver.observe(container);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       if (frameRef.current) cancelAnimationFrame(frameRef.current);
       controls.dispose();
+      clearZoneMarkers();
+      scene.traverse((obj: any) => {
+        if (!obj.isMesh) return;
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) {
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((mat: any) => mat.dispose && mat.dispose());
+          } else {
+            obj.material.dispose && obj.material.dispose();
+          }
+        }
+      });
       renderer.dispose();
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
-      scene.clear();
     };
-  }, [tipoVehiculo]);
+  }, [modelUrl]);
 
-  // Reconstruir marcadores cuando cambian las zonas o la selección
   useEffect(() => {
-    buildZoneMarkers();
-  }, [damageZones, selectedZone]);
+    const model = modelRef.current;
+    if (!model) return;
+
+    model.traverse((obj: any) => {
+      if (!obj.isMesh || !obj.material) return;
+      forEachMeshMaterial(obj.material, (mat) => {
+        try {
+          const baseColor = mat.userData?.baseColor as THREE.Color | undefined;
+          if (baseColor && mat.color instanceof THREE.Color) {
+            mat.color.copy(baseColor);
+          }
+
+          // Restaurar emisión base para no teñir todo el carro
+          if (mat.emissive instanceof THREE.Color) {
+            mat.emissive.set('#000000');
+            mat.emissiveIntensity = 0;
+          }
+
+          mat.needsUpdate = true;
+        } catch (error) {
+          // Evitar que una variación de material rompa toda la app
+          console.error('Error aplicando estado visual al material 3D:', error);
+        }
+      });
+    });
+
+    renderZoneMarkers(damageZones);
+  }, [damageZones]);
+
+  const applyCameraPreset = (preset: 'front' | 'rear' | 'left' | 'right' | 'top' | 'iso') => {
+    if (preset === 'front') setCameraByDirection(new THREE.Vector3(0, 0.16, 1));
+    if (preset === 'rear') setCameraByDirection(new THREE.Vector3(0, 0.16, -1));
+    if (preset === 'left') setCameraByDirection(new THREE.Vector3(-1, 0.2, 0));
+    if (preset === 'right') setCameraByDirection(new THREE.Vector3(1, 0.2, 0));
+    if (preset === 'top') setCameraByDirection(new THREE.Vector3(0.01, 1, 0.01));
+    if (preset === 'iso') setCameraByDirection(new THREE.Vector3(1, 0.5, 1));
+  };
+
+  const waitFrames = (count: number = 2) =>
+    new Promise<void>((resolve) => {
+      const step = (pending: number) => {
+        if (pending <= 0) {
+          resolve();
+          return;
+        }
+        requestAnimationFrame(() => step(pending - 1));
+      };
+      step(count);
+    });
+
+  const capturePreset = async (
+    preset: 'front' | 'rear' | 'left' | 'right'
+  ): Promise<string> => {
+    const renderer = rendererRef.current;
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+    if (!renderer || !scene || !camera) {
+      throw new Error('El visor 3D no esta listo para capturar');
+    }
+
+    applyCameraPreset(preset);
+    await waitFrames(2);
+    renderer.render(scene, camera);
+    return renderer.domElement.toDataURL('image/png');
+  };
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      captureDamageViews: async () => {
+        if (isLoading) throw new Error('El modelo 3D aun esta cargando');
+        if (loadError) throw new Error('No se puede capturar porque el modelo 3D fallo al cargar');
+
+        const camera = cameraRef.current;
+        const controls = controlsRef.current;
+        if (!camera || !controls) throw new Error('Camara no disponible');
+
+        const previousPosition = camera.position.clone();
+        const previousTarget = controls.target.clone();
+
+        try {
+          const frente = await capturePreset('front');
+          const trasera = await capturePreset('rear');
+          const izquierda = await capturePreset('left');
+          const derecha = await capturePreset('right');
+          return { izquierda, derecha, frente, trasera };
+        } finally {
+          camera.position.copy(previousPosition);
+          controls.target.copy(previousTarget);
+          camera.lookAt(previousTarget);
+          controls.update();
+        }
+      },
+    }),
+    [isLoading, loadError]
+  );
 
   const FallbackVehicle = () => (
-    <div className="h-full w-full flex items-center justify-center bg-[#0b1220] rounded-lg">
-      <div className="text-center">
-        <div className="text-6xl mb-4">🚗</div>
-        <p className="text-ink-200 text-sm">Vista 3D no disponible</p>
-        <p className="text-ink-300 text-xs mt-2">Usa los botones de vista lateral</p>
-      </div>
+    <div className="h-72 w-full rounded-lg border border-[#2f3238] bg-[#111827] flex items-center justify-center">
+      <svg viewBox="0 0 420 220" className="w-[320px] h-[170px]">
+        <rect x="86" y="96" width="248" height="70" rx="26" fill="#1f2937" stroke="#4b5563" />
+        <rect x="140" y="68" width="142" height="44" rx="18" fill="#334155" stroke="#64748b" />
+        <circle cx="145" cy="170" r="24" fill="#0f172a" stroke="#6b7280" />
+        <circle cx="274" cy="170" r="24" fill="#0f172a" stroke="#6b7280" />
+      </svg>
     </div>
   );
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-2">
+    <div>
+      <div className="flex flex-wrap items-center gap-2 mb-3">
         <button
           type="button"
           onClick={() => applyCameraPreset('iso')}
@@ -468,7 +562,7 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
       </div>
 
       <div className="rounded-xl border border-[#2f3238] bg-[#0b1220] p-2 relative">
-        <div ref={containerRef} className="h-72 w-full rounded-lg overflow-hidden" onClick={handleClick} />
+        <div ref={containerRef} className="h-72 w-full rounded-lg overflow-hidden" />
         {loadError && (
           <div className="absolute inset-2">
             <FallbackVehicle />

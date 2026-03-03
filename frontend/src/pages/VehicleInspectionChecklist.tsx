@@ -50,13 +50,14 @@ const TRANSMISSION_ITEM_KEYS = new Set<string>(['transmision_tipo']);
 
 const DAMAGE_ZONE_TEMPLATE: TemplateDamageZone[] = [
   { key: 'frente', label: 'Frente' },
-  { key: 'trasera', label: 'Trasera' },
-  { key: 'lateral_der', label: 'Lateral derecho' },
-  { key: 'lateral_izq', label: 'Lateral izquierdo' },
-  { key: 'capo', label: 'Capó' },
+  { key: 'capo', label: 'Capo' },
   { key: 'techo', label: 'Techo' },
+  { key: 'trasera', label: 'Parte trasera' },
+  { key: 'lateral_izq', label: 'Lateral izquierdo' },
+  { key: 'lateral_der', label: 'Lateral derecho' },
+  { key: 'puerta_izq', label: 'Puertas izquierdas' },
+  { key: 'puerta_der', label: 'Puertas derechas' },
 ];
-
 
 const createDefaultItems = (): VehicleInspectionItem[] =>
   CHECKLIST_TEMPLATE.map((item) => ({
@@ -116,7 +117,6 @@ const VehicleInspectionChecklist: React.FC = () => {
   const [generalObservations, setGeneralObservations] = useState('');
   const [items, setItems] = useState<VehicleInspectionItem[]>(createDefaultItems());
   const [damageZones, setDamageZones] = useState<VehicleDamageZone[]>(createDefaultDamageZones());
-  const [selectedZone, setSelectedZone] = useState<string>('');
 
   useEffect(() => {
     loadVehicles();
@@ -149,7 +149,6 @@ const VehicleInspectionChecklist: React.FC = () => {
     setGeneralObservations('');
     setItems(createDefaultItems());
     setDamageZones(createDefaultDamageZones());
-    setSelectedZone('');
   };
 
   const loadChecklist = async (vehicleId: string) => {
@@ -212,36 +211,6 @@ const VehicleInspectionChecklist: React.FC = () => {
     rows.push(`Inspector: ${inspectorName || 'No especificado'}`);
     rows.push(`Fecha: ${inspectionDate}`);
     rows.push('');
-    
-    // Agrupar items por categoria
-    const itemsByCategory = items.reduce((acc, item) => {
-      if (!acc[item.category]) acc[item.category] = [];
-      acc[item.category].push(item);
-      return acc;
-    }, {} as Record<string, typeof items>);
-    
-    // Items en buen estado (bien)
-    const passingItems = items.filter((item) => item.status === 'bien');
-    rows.push(`Items en buen estado: ${passingItems.length}`);
-    
-    // Mostrar items en buen estado agrupados por categoria
-    Object.entries(itemsByCategory).forEach(([category, categoryItems]) => {
-      const passingInCategory = categoryItems.filter((item) => item.status === 'bien');
-      if (passingInCategory.length > 0) {
-        rows.push('');
-        rows.push(`${category} OK (${passingInCategory.length}):`);
-        passingInCategory.forEach((item) => {
-          const extras: string[] = [];
-          const value = getItemSpecificValue(item);
-          if (value) extras.push(value);
-          const meta = extras.length > 0 ? ` (${extras.join(' | ')})` : '';
-          rows.push(`  ✓ ${item.label}${meta}`);
-        });
-      }
-    });
-    
-    // Items con problemas (mal)
-    rows.push('');
     rows.push(`Pendientes mecanicos/esteticos: ${failingItems.length}`);
     failingItems.forEach((item) => {
       const extras: string[] = [];
@@ -252,18 +221,6 @@ const VehicleInspectionChecklist: React.FC = () => {
       const detail = item.observaciones ? ` - ${item.observaciones}` : '';
       rows.push(`- ${item.label}${meta}${detail}`);
     });
-    
-    // Zonas en buen estado
-    const passingZones = damageZones.filter((zone) => zone.status === 'bien');
-    rows.push('');
-    rows.push(`Zonas sin dano visual: ${passingZones.length}`);
-    if (passingZones.length > 0) {
-      passingZones.forEach((zone) => {
-        rows.push(`  ✓ ${zone.label}`);
-      });
-    }
-    
-    // Zonas con dano
     rows.push('');
     rows.push(`Zonas con dano visual: ${damagedZones.length}`);
     damagedZones.forEach((zone) => {
@@ -277,7 +234,7 @@ const VehicleInspectionChecklist: React.FC = () => {
       rows.push(generalObservations.trim());
     }
     return rows.join('\n');
-  }, [selectedVehicle, inspectorName, inspectionDate, failingItems, damagedZones, generalObservations, items, damageZones]);
+  }, [selectedVehicle, inspectorName, inspectionDate, failingItems, damagedZones, generalObservations]);
 
   const updateItemStatus = (key: string, status: 'bien' | 'mal') => {
     setItems((prev) => prev.map((item) => (item.key === key ? { ...item, status } : item)));
@@ -385,10 +342,10 @@ const VehicleInspectionChecklist: React.FC = () => {
 
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
-      doc.text('Lateral derecho', leftX, firstRowY - 2);
-      doc.text('Lateral izquierdo', rightX, firstRowY - 2);
-      doc.text('Frente', leftX, secondRowY - 2);
-      doc.text('Parte trasera', rightX, secondRowY - 2);
+      doc.text('Frente', leftX, firstRowY - 2);
+      doc.text('Trasera', rightX, firstRowY - 2);
+      doc.text('Lado izquierdo', leftX, secondRowY - 2);
+      doc.text('Lado derecho', rightX, secondRowY - 2);
 
       doc.addImage(captures.frente, 'PNG', leftX, firstRowY, imageWidth, imageHeight);
       doc.addImage(captures.trasera, 'PNG', rightX, firstRowY, imageWidth, imageHeight);
@@ -532,9 +489,9 @@ const VehicleInspectionChecklist: React.FC = () => {
                                 <button
                                   type="button"
                                   onClick={() => updateItemStatus(item.key, 'bien')}
-                                  className={`px-6 py-2 rounded-lg text-lg border-2 transition-colors font-semibold ${
+                                  className={`px-3 py-1 rounded-md text-sm border transition-colors ${
                                     item.status === 'bien'
-                                      ? 'bg-green-600/40 border-green-400 text-green-200'
+                                      ? 'bg-green-600/20 border-green-500 text-green-300'
                                       : 'bg-transparent border-[#3b404a] text-ink-200 hover:border-green-500/60'
                                   }`}
                                 >
@@ -543,9 +500,9 @@ const VehicleInspectionChecklist: React.FC = () => {
                                 <button
                                   type="button"
                                   onClick={() => updateItemStatus(item.key, 'mal')}
-                                  className={`px-6 py-2 rounded-lg text-lg border-2 transition-colors font-semibold ${
+                                  className={`px-3 py-1 rounded-md text-sm border transition-colors ${
                                     item.status === 'mal'
-                                      ? 'bg-red-600/40 border-red-400 text-red-200'
+                                      ? 'bg-red-600/20 border-red-500 text-red-300'
                                       : 'bg-transparent border-[#3b404a] text-ink-200 hover:border-red-500/60'
                                   }`}
                                 >
@@ -622,41 +579,24 @@ const VehicleInspectionChecklist: React.FC = () => {
                 <p className="text-sm text-ink-200 mb-4">
                   Visual 3D rotable para inspeccionar danos por zona del vehiculo.
                 </p>
-                <Vehicle3DModelViewer 
-                  ref={viewerRef} 
+                <Vehicle3DModelViewer
+                  ref={viewerRef}
                   damageZones={damageZones}
-                  onZoneClick={(zoneKey) => {
-                    setSelectedZone(zoneKey);
-                    // Enfocar la zona en la lista desplazandose hasta ella
-                    const zoneElement = document.getElementById(`zone-${zoneKey}`);
-                    if (zoneElement) {
-                      zoneElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
-                  }}
-                  selectedZone={selectedZone}
                   tipoVehiculo={selectedVehicle?.tipoVehiculo || 'sedan'}
                 />
 
                 <div className="mt-4 space-y-3">
                   {damageZones.map((zone) => (
-                    <div 
-                      key={zone.key} 
-                      id={`zone-${zone.key}`}
-                      className={`rounded-lg border p-3 bg-[#1a1d23] transition-all ${
-                        selectedZone === zone.key 
-                          ? 'border-primary-500 ring-1 ring-primary-500/50' 
-                          : 'border-[#2f3238]'
-                      }`}
-                    >
+                    <div key={zone.key} className="rounded-lg border border-[#2f3238] p-3 bg-[#1a1d23]">
                       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-2">
                         <p className="text-white font-medium">{zone.label}</p>
                         <div className="flex gap-2">
                           <button
                             type="button"
                             onClick={() => updateZoneStatus(zone.key, 'bien')}
-                            className={`px-6 py-2 rounded-lg text-lg border-2 transition-colors font-semibold ${
+                            className={`px-3 py-1 rounded-md text-sm border transition-colors ${
                               zone.status === 'bien'
-                                ? 'bg-green-600/40 border-green-400 text-green-200'
+                                ? 'bg-green-600/20 border-green-500 text-green-300'
                                 : 'bg-transparent border-[#3b404a] text-ink-200 hover:border-green-500/60'
                             }`}
                           >
@@ -665,9 +605,9 @@ const VehicleInspectionChecklist: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => updateZoneStatus(zone.key, 'mal')}
-                            className={`px-6 py-2 rounded-lg text-lg border-2 transition-colors font-semibold ${
+                            className={`px-3 py-1 rounded-md text-sm border transition-colors ${
                               zone.status === 'mal'
-                                ? 'bg-red-600/40 border-red-400 text-red-200'
+                                ? 'bg-red-600/20 border-red-500 text-red-300'
                                 : 'bg-transparent border-[#3b404a] text-ink-200 hover:border-red-500/60'
                             }`}
                           >
