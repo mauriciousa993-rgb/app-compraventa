@@ -19,7 +19,9 @@ const VehicleForm: React.FC = () => {
     // Datos básicos
     marca: '',
     modelo: '',
+    tipoVehiculo: 'sedan' as 'suv' | 'pickup' | 'sedan' | 'hatchback',
     año: new Date().getFullYear(),
+
     placa: '',
     vin: '',
     color: '',
@@ -216,7 +218,9 @@ const VehicleForm: React.FC = () => {
       setFormData({
         marca: vehicle.marca || '',
         modelo: vehicle.modelo || '',
+        tipoVehiculo: vehicle.tipoVehiculo || 'sedan',
         año: vehicle.año || new Date().getFullYear(),
+
         placa: vehicle.placa || '',
         vin: vehicle.vin || '',
         color: vehicle.color || '',
@@ -704,8 +708,29 @@ const VehicleForm: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tipo de Vehículo
+                </label>
+                <select
+                  name="tipoVehiculo"
+                  value={formData.tipoVehiculo}
+                  onChange={handleChange}
+                  className="input-field"
+                >
+                  <option value="sedan">Sedán</option>
+                  <option value="suv">SUV</option>
+                  <option value="pickup">Pickup</option>
+                  <option value="hatchback">Hatchback</option>
+                </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  Tipo de carrocería para el modelo 3D
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Año *
                 </label>
+
                 <input
                   type="number"
                   name="año"
@@ -1597,7 +1622,6 @@ const VehicleForm: React.FC = () => {
                       <option value="radicacion">Radicación</option>
                       <option value="recepcion_tarjeta">Recepción de Tarjeta de Propiedad</option>
                       <option value="entrega_cliente">Entrega de Tarjeta al Cliente</option>
-                      <option value="completado">Completado</option>
                     </select>
                     <p className="mt-2 text-xs text-green-600">
                       Seguimiento del proceso de traspaso del vehículo

@@ -50,18 +50,13 @@ const TRANSMISSION_ITEM_KEYS = new Set<string>(['transmision_tipo']);
 
 const DAMAGE_ZONE_TEMPLATE: TemplateDamageZone[] = [
   { key: 'frente', label: 'Frente' },
+  { key: 'trasera', label: 'Trasera' },
+  { key: 'lateral_der', label: 'Lateral derecho' },
+  { key: 'lateral_izq', label: 'Lateral izquierdo' },
   { key: 'capo', label: 'Capó' },
   { key: 'techo', label: 'Techo' },
-  { key: 'trasera', label: 'Trasera' },
-  { key: 'lateral_izq', label: 'Lateral izquierdo' },
-  { key: 'lateral_der', label: 'Lateral derecho' },
-  { key: 'puerta_delantera_izq', label: 'Puerta delantera izquierda' },
-  { key: 'puerta_trasera_izq', label: 'Puerta trasera izquierda' },
-  { key: 'puerta_delantera_der', label: 'Puerta delantera derecha' },
-  { key: 'puerta_trasera_der', label: 'Puerta trasera derecha' },
-  { key: 'bumper_delantero', label: 'Bumper delantero' },
-  { key: 'bumper_trasero', label: 'Bumper trasero' },
 ];
+
 
 const createDefaultItems = (): VehicleInspectionItem[] =>
   CHECKLIST_TEMPLATE.map((item) => ({
@@ -639,6 +634,7 @@ const VehicleInspectionChecklist: React.FC = () => {
                     }
                   }}
                   selectedZone={selectedZone}
+                  tipoVehiculo={selectedVehicle?.tipoVehiculo || 'sedan'}
                 />
 
                 <div className="mt-4 space-y-3">
