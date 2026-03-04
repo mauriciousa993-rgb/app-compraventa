@@ -22,6 +22,11 @@ interface DamageZoneInputRow {
   status?: InspectionStatus;
   observaciones?: string;
   responsable?: string;
+  markerPosition?: {
+    x?: number | string | null;
+    y?: number | string | null;
+    z?: number | string | null;
+  } | null;
 }
 
 const normalizeStatus = (value: any): InspectionStatus => (value === 'mal' ? 'mal' : 'bien');
@@ -35,6 +40,17 @@ const normalizePercentage = (value: any): number | null => {
   if (parsed < 0) return 0;
   if (parsed > 100) return 100;
   return parsed;
+};
+
+const normalizeMarkerPosition = (
+  value: DamageZoneInputRow['markerPosition']
+): { x: number; y: number; z: number } | null => {
+  if (!value || typeof value !== 'object') return null;
+  const x = Number(value.x);
+  const y = Number(value.y);
+  const z = Number(value.z);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
+  return { x, y, z };
 };
 
 const sanitizeChecklistItem = (row: ChecklistInputRow) => ({
@@ -54,6 +70,7 @@ const sanitizeDamageZone = (row: DamageZoneInputRow) => ({
   status: normalizeStatus(row.status),
   observaciones: (row.observaciones || '').toString().trim(),
   responsable: (row.responsable || '').toString().trim(),
+  markerPosition: normalizeMarkerPosition(row.markerPosition),
 });
 
 export const getVehicleInspectionChecklist = async (req: AuthRequest, res: Response): Promise<void> => {

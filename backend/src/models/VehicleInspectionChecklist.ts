@@ -13,12 +13,19 @@ export interface IInspectionItem {
   tipoTransmision?: '' | 'mecanica' | 'automatica';
 }
 
+export interface IZoneMarkerPosition {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export interface IDamageZone {
   key: string;
   label: string;
   status: InspectionStatus;
   observaciones: string;
   responsable: string;
+  markerPosition?: IZoneMarkerPosition | null;
 }
 
 export interface IVehicleInspectionChecklistDocument extends Document {
@@ -48,6 +55,15 @@ const inspectionItemSchema = new Schema<IInspectionItem>(
   { _id: false }
 );
 
+const zoneMarkerPositionSchema = new Schema<IZoneMarkerPosition>(
+  {
+    x: { type: Number, required: true },
+    y: { type: Number, required: true },
+    z: { type: Number, required: true },
+  },
+  { _id: false }
+);
+
 const damageZoneSchema = new Schema<IDamageZone>(
   {
     key: { type: String, required: true, trim: true },
@@ -55,6 +71,7 @@ const damageZoneSchema = new Schema<IDamageZone>(
     status: { type: String, enum: ['bien', 'mal'], required: true },
     observaciones: { type: String, default: '', trim: true },
     responsable: { type: String, default: '', trim: true },
+    markerPosition: { type: zoneMarkerPositionSchema, default: null },
   },
   { _id: false }
 );

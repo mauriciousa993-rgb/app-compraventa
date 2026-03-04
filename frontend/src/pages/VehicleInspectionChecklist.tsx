@@ -12,7 +12,12 @@ import {
 import Layout from '../components/Layout/Layout';
 import type { Vehicle3DModelViewerHandle } from '../components/Vehicle3DModelViewer';
 import { vehiclesAPI } from '../services/api';
-import { Vehicle, VehicleDamageZone, VehicleInspectionItem } from '../types';
+import {
+  Vehicle,
+  VehicleDamageZone,
+  VehicleDamageZoneMarkerPosition,
+  VehicleInspectionItem,
+} from '../types';
 
 const Vehicle3DModelViewer = lazy(() => import('../components/Vehicle3DModelViewer'));
 
@@ -71,7 +76,22 @@ const createDefaultItems = (): VehicleInspectionItem[] =>
   }));
 
 const createDefaultDamageZones = (): VehicleDamageZone[] =>
-  DAMAGE_ZONE_TEMPLATE.map((zone) => ({ ...zone, status: 'bien', observaciones: '', responsable: '' }));
+  DAMAGE_ZONE_TEMPLATE.map((zone) => ({
+    ...zone,
+    status: 'bien',
+    observaciones: '',
+    responsable: '',
+    markerPosition: null,
+  }));
+
+const normalizeMarkerPosition = (value: any): VehicleDamageZoneMarkerPosition | null => {
+  if (!value || typeof value !== 'object') return null;
+  const x = Number(value.x);
+  const y = Number(value.y);
+  const z = Number(value.z);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
+  return { x, y, z };
+};
 
 const mergeItems = (savedItems: any[] | undefined): VehicleInspectionItem[] =>
   CHECKLIST_TEMPLATE.map((template) => {
@@ -97,6 +117,7 @@ const mergeDamageZones = (savedZones: any[] | undefined): VehicleDamageZone[] =>
       status: saved?.status === 'mal' ? 'mal' : 'bien',
       observaciones: saved?.observaciones || '',
       responsable: saved?.responsable || '',
+      markerPosition: normalizeMarkerPosition(saved?.markerPosition),
     };
   });
 
@@ -273,6 +294,26 @@ const VehicleInspectionChecklist: React.FC = () => {
 
   const updateZoneResponsable = (key: string, responsable: string) => {
     setDamageZones((prev) => prev.map((zone) => (zone.key === key ? { ...zone, responsable } : zone)));
+  };
+
+  const assignZoneMarker = (key: string, markerPosition: VehicleDamageZoneMarkerPosition) => {
+    setDamageZones((prev) =>
+      prev.map((zone) =>
+        zone.key === key
+          ? {
+              ...zone,
+              status: 'mal',
+              markerPosition,
+            }
+          : zone
+      )
+    );
+  };
+
+  const clearZoneMarker = (key: string) => {
+    setDamageZones((prev) =>
+      prev.map((zone) => (zone.key === key ? { ...zone, markerPosition: null } : zone))
+    );
   };
 
   const handleSaveChecklist = async () => {
@@ -579,7 +620,7 @@ const VehicleInspectionChecklist: React.FC = () => {
               <div className="card">
                 <h2 className="text-lg font-semibold text-white mb-3">Mapa visual de danos</h2>
                 <p className="text-sm text-ink-200 mb-4">
-                  Visual 3D rotable para inspeccionar danos por zona del vehiculo.
+                  Visual 3D rotable para inspeccionar danos por zona del vehiculo. Puedes activar el modo manual y tocar el modelo para ubicar cada punto.
                 </p>
                 <Suspense
                   fallback={
@@ -594,6 +635,7 @@ const VehicleInspectionChecklist: React.FC = () => {
                     ref={viewerRef}
                     damageZones={damageZones}
                     tipoVehiculo={selectedVehicle?.tipoVehiculo || 'sedan'}
+                    onAssignZoneMarker={assignZoneMarker}
                   />
                 </Suspense>
 
@@ -625,8 +667,22 @@ const VehicleInspectionChecklist: React.FC = () => {
                           >
                             Mal
                           </button>
+                          {zone.markerPosition && (
+                            <button
+                              type="button"
+                              onClick={() => clearZoneMarker(zone.key)}
+                              className="px-3 py-1 rounded-md text-sm border border-[#3b404a] text-ink-200 hover:border-yellow-400/60"
+                            >
+                              Quitar punto
+                            </button>
+                          )}
                         </div>
                       </div>
+                      <p className="text-xs text-ink-300 mb-2">
+                        {zone.markerPosition
+                          ? 'Punto manual asignado en el modelo.'
+                          : 'Sin punto manual. Se usara posicion automatica.'}
+                      </p>
                       <textarea
                         value={zone.observaciones}
                         onChange={(e) => updateZoneObservation(zone.key, e.target.value)}

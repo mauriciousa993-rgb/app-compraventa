@@ -140,12 +140,19 @@ export interface VehicleInspectionItem {
   tipoTransmision?: TransmissionType;
 }
 
+export interface VehicleDamageZoneMarkerPosition {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export interface VehicleDamageZone {
   key: string;
   label: string;
   status: InspectionStatus;
   observaciones: string;
   responsable: string;
+  markerPosition?: VehicleDamageZoneMarkerPosition | null;
 }
 
 export interface VehicleInspectionChecklist {

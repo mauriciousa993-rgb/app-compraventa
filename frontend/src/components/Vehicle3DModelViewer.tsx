@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { VehicleDamageZone } from '../types';
+import { VehicleDamageZone, VehicleDamageZoneMarkerPosition } from '../types';
 
 type VehicleModelType = 'suv' | 'pickup' | 'sedan' | 'hatchback';
 
@@ -22,6 +22,7 @@ const FALLBACK_TEXTURE_URL = '/models/kia-nq5-22my-wheel-small-17inch.png';
 interface Vehicle3DModelViewerProps {
   damageZones: VehicleDamageZone[];
   tipoVehiculo?: VehicleModelType;
+  onAssignZoneMarker?: (zoneKey: string, markerPosition: VehicleDamageZoneMarkerPosition) => void;
 }
 
 export interface Vehicle3DModelViewerHandle {
@@ -75,7 +76,7 @@ const patchUnsupportedEmbeddedTextureExtensions = (buffer: ArrayBuffer): ArrayBu
 };
 
 const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DModelViewerProps>(
-  ({ damageZones, tipoVehiculo = 'sedan' }, ref) => {
+  ({ damageZones, tipoVehiculo = 'sedan', onAssignZoneMarker }, ref) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -89,15 +90,55 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
 
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [isManualPlacementEnabled, setIsManualPlacementEnabled] = useState(false);
+  const [pendingMarkerPosition, setPendingMarkerPosition] =
+    useState<VehicleDamageZoneMarkerPosition | null>(null);
+  const [selectedZoneForPendingMarker, setSelectedZoneForPendingMarker] = useState('');
+  const [movingZoneKey, setMovingZoneKey] = useState('');
+  const [isDraggingMarker, setIsDraggingMarker] = useState(false);
+  const dragPointerIdRef = useRef<number | null>(null);
+  const lastDragPositionRef = useRef<VehicleDamageZoneMarkerPosition | null>(null);
 
   const damagedZoneLabels = useMemo(
     () => damageZones.filter((zone) => zone.status === 'mal').map((zone) => zone.label),
     [damageZones]
   );
+  const movingZoneLabel = useMemo(
+    () => damageZones.find((zone) => zone.key === movingZoneKey)?.label || '',
+    [damageZones, movingZoneKey]
+  );
+  const canAssignZones = typeof onAssignZoneMarker === 'function';
   const modelCandidates = useMemo(
     () => MODEL_URL_CANDIDATES[tipoVehiculo] || MODEL_URL_CANDIDATES.sedan,
     [tipoVehiculo]
   );
+
+  const getDefaultZoneForSelection = () =>
+    damageZones.find((zone) => zone.status !== 'mal')?.key || damageZones[0]?.key || '';
+
+  useEffect(() => {
+    if (!selectedZoneForPendingMarker || !damageZones.some((zone) => zone.key === selectedZoneForPendingMarker)) {
+      setSelectedZoneForPendingMarker(getDefaultZoneForSelection());
+    }
+  }, [damageZones, selectedZoneForPendingMarker]);
+
+  useEffect(() => {
+    if (!movingZoneKey) return;
+    if (!damageZones.some((zone) => zone.key === movingZoneKey && zone.status === 'mal')) {
+      setMovingZoneKey('');
+      setIsDraggingMarker(false);
+      dragPointerIdRef.current = null;
+      lastDragPositionRef.current = null;
+    }
+  }, [damageZones, movingZoneKey]);
+
+  useEffect(() => {
+    if (isManualPlacementEnabled) return;
+    setIsDraggingMarker(false);
+    setMovingZoneKey('');
+    dragPointerIdRef.current = null;
+    lastDragPositionRef.current = null;
+  }, [isManualPlacementEnabled]);
 
   const forEachMeshMaterial = (
     material: THREE.Material | THREE.Material[],
@@ -108,6 +149,36 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
       return;
     }
     callback(material as MaterialWithColor);
+  };
+
+  const getModelMeshes = (model: THREE.Object3D) => {
+    const meshes: THREE.Mesh[] = [];
+    model.traverse((child: any) => {
+      if (child.isMesh) meshes.push(child as THREE.Mesh);
+    });
+    return meshes;
+  };
+
+  const isValidMarkerPosition = (position: VehicleDamageZoneMarkerPosition | null | undefined) => {
+    if (!position) return false;
+    return Number.isFinite(position.x) && Number.isFinite(position.y) && Number.isFinite(position.z);
+  };
+
+  const getMarkerRadiusFromModel = (model: THREE.Object3D) => {
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3());
+    return Math.max(Math.min(size.x, size.y, size.z) * 0.03, 0.08);
+  };
+
+  const hasMeaningfulPositionChange = (
+    previous: VehicleDamageZoneMarkerPosition | null,
+    next: VehicleDamageZoneMarkerPosition
+  ) => {
+    if (!previous) return true;
+    const dx = next.x - previous.x;
+    const dy = next.y - previous.y;
+    const dz = next.z - previous.z;
+    return dx * dx + dy * dy + dz * dz > 0.0001;
   };
 
   const setCameraByDirection = (direction: THREE.Vector3) => {
@@ -181,11 +252,10 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     if (!model || !markerGroup) return;
 
     clearZoneMarkers();
+    const damagedZones = zones.filter((zone) => zone.status === 'mal');
+    if (damagedZones.length === 0) return;
 
-    const meshes: THREE.Mesh[] = [];
-    model.traverse((child: any) => {
-      if (child.isMesh) meshes.push(child as THREE.Mesh);
-    });
+    const meshes = getModelMeshes(model);
     if (meshes.length === 0) return;
 
     const box = new THREE.Box3().setFromObject(model);
@@ -197,45 +267,58 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     const outsideDistance = Math.max(size.x, size.y, size.z) * 1.1;
     const raycaster = new THREE.Raycaster();
 
-    zones.forEach((zone) => {
+    damagedZones.forEach((zone) => {
       const profile = ZONE_MARKER_PROFILE[zone.key];
-      if (!profile) return;
-      const rayOutDirection = new THREE.Vector3(...profile.direction).normalize();
+      let markerPosition: THREE.Vector3 | null = null;
+      const isMovingTarget = zone.key === movingZoneKey;
 
-      const isDamaged = zone.status === 'mal';
-      const [nx, ny, nz] = profile.seed;
-      const seed = new THREE.Vector3(
-        center.x + nx * halfX * 0.95,
-        box.min.y + ny * size.y,
-        center.z + nz * halfZ * 0.95
-      );
+      if (isValidMarkerPosition(zone.markerPosition)) {
+        markerPosition = new THREE.Vector3(
+          zone.markerPosition.x,
+          zone.markerPosition.y,
+          zone.markerPosition.z
+        );
+      } else if (profile) {
+        const rayOutDirection = new THREE.Vector3(...profile.direction).normalize();
+        const [nx, ny, nz] = profile.seed;
+        const seed = new THREE.Vector3(
+          center.x + nx * halfX * 0.95,
+          box.min.y + ny * size.y,
+          center.z + nz * halfZ * 0.95
+        );
 
-      const rayStart = seed.clone().addScaledVector(rayOutDirection, outsideDistance);
-      raycaster.set(rayStart, rayOutDirection.clone().multiplyScalar(-1));
-      const intersections = raycaster.intersectObjects(meshes, false);
+        const rayStart = seed.clone().addScaledVector(rayOutDirection, outsideDistance);
+        raycaster.set(rayStart, rayOutDirection.clone().multiplyScalar(-1));
+        const intersections = raycaster.intersectObjects(meshes, false);
 
-      let markerPosition = seed.clone();
-      if (intersections.length > 0) {
-        const hit = intersections[0];
-        const hitNormal = hit.face?.normal
-          ? hit.face.normal.clone().transformDirection((hit.object as THREE.Mesh).matrixWorld)
-          : rayOutDirection;
-        markerPosition = hit.point.clone().addScaledVector(hitNormal.normalize(), markerRadius * 0.55);
+        markerPosition = seed.clone();
+        if (intersections.length > 0) {
+          const hit = intersections[0];
+          const hitNormal = hit.face?.normal
+            ? hit.face.normal.clone().transformDirection((hit.object as THREE.Mesh).matrixWorld)
+            : rayOutDirection;
+          markerPosition = hit.point.clone().addScaledVector(hitNormal.normalize(), markerRadius * 0.55);
+        }
       }
+      if (!markerPosition) return;
 
       const marker = new THREE.Mesh(
-        new THREE.SphereGeometry(isDamaged ? markerRadius * 1.15 : markerRadius * 0.9, 18, 18),
+        new THREE.SphereGeometry(isMovingTarget ? markerRadius * 1.35 : markerRadius * 1.15, 18, 18),
         new THREE.MeshStandardMaterial({
-          color: isDamaged ? '#ef4444' : '#22c55e',
-          emissive: isDamaged ? '#7f1d1d' : '#052e16',
-          emissiveIntensity: isDamaged ? 0.64 : 0.26,
+          color: isMovingTarget ? '#f59e0b' : '#ef4444',
+          emissive: isMovingTarget ? '#78350f' : '#7f1d1d',
+          emissiveIntensity: isMovingTarget ? 0.82 : 0.64,
           roughness: 0.3,
           metalness: 0.15,
           transparent: true,
-          opacity: isDamaged ? 0.99 : 0.62,
+          opacity: 0.99,
         })
       );
       marker.position.copy(markerPosition);
+      marker.userData = {
+        ...(marker.userData || {}),
+        zoneKey: zone.key,
+      };
       marker.castShadow = false;
       marker.receiveShadow = false;
       markerGroup.add(marker);
@@ -510,7 +593,7 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     });
 
     renderZoneMarkers(damageZones);
-  }, [damageZones]);
+  }, [damageZones, movingZoneKey]);
 
   const applyCameraPreset = (preset: 'front' | 'rear' | 'left' | 'right' | 'top' | 'iso') => {
     if (preset === 'front') setCameraByDirection(new THREE.Vector3(0, 0.16, 1));
@@ -519,6 +602,133 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     if (preset === 'right') setCameraByDirection(new THREE.Vector3(1, 0.2, 0));
     if (preset === 'top') setCameraByDirection(new THREE.Vector3(0.01, 1, 0.01));
     if (preset === 'iso') setCameraByDirection(new THREE.Vector3(1, 0.5, 1));
+  };
+
+  useEffect(() => {
+    const controls = controlsRef.current;
+    if (!controls) return;
+    controls.enabled = !isManualPlacementEnabled;
+    return () => {
+      controls.enabled = true;
+    };
+  }, [isManualPlacementEnabled]);
+
+  const getRaycasterFromClientPosition = (clientX: number, clientY: number): THREE.Raycaster | null => {
+    const renderer = rendererRef.current;
+    const camera = cameraRef.current;
+    if (!renderer || !camera) return null;
+
+    const rect = renderer.domElement.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+
+    const pointer = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1
+    );
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(pointer, camera);
+    return raycaster;
+  };
+
+  const captureMarkerZoneFromPointer = (clientX: number, clientY: number): string | null => {
+    const markerGroup = zoneMarkerGroupRef.current;
+    if (!markerGroup || markerGroup.children.length === 0) return null;
+
+    const raycaster = getRaycasterFromClientPosition(clientX, clientY);
+    if (!raycaster) return null;
+
+    const intersections = raycaster.intersectObjects(markerGroup.children, false);
+    if (intersections.length === 0) return null;
+
+    const zoneKey = intersections[0].object.userData?.zoneKey;
+    return typeof zoneKey === 'string' && zoneKey ? zoneKey : null;
+  };
+
+  const captureMarkerFromPointer = (clientX: number, clientY: number): VehicleDamageZoneMarkerPosition | null => {
+    const model = modelRef.current;
+    const camera = cameraRef.current;
+    if (!model || !camera) return null;
+
+    const meshes = getModelMeshes(model);
+    if (meshes.length === 0) return null;
+
+    const raycaster = getRaycasterFromClientPosition(clientX, clientY);
+    if (!raycaster) return null;
+
+    const intersections = raycaster.intersectObjects(meshes, false);
+    if (intersections.length === 0) return null;
+
+    const hit = intersections[0];
+    const normal = hit.face?.normal
+      ? hit.face.normal.clone().transformDirection((hit.object as THREE.Mesh).matrixWorld)
+      : camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(-1);
+    const markerRadius = getMarkerRadiusFromModel(model);
+    const markerPosition = hit.point.clone().addScaledVector(normal.normalize(), markerRadius * 0.55);
+    return { x: markerPosition.x, y: markerPosition.y, z: markerPosition.z };
+  };
+
+  const handleViewerPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isManualPlacementEnabled || !canAssignZones) return;
+    event.preventDefault();
+
+    const markerZoneKey = captureMarkerZoneFromPointer(event.clientX, event.clientY);
+    if (markerZoneKey) {
+      setMovingZoneKey(markerZoneKey);
+      setSelectedZoneForPendingMarker(markerZoneKey);
+      setPendingMarkerPosition(null);
+      setIsDraggingMarker(true);
+      dragPointerIdRef.current = event.pointerId;
+      lastDragPositionRef.current = null;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      return;
+    }
+
+    if (isDraggingMarker) return;
+
+    const markerPosition = captureMarkerFromPointer(event.clientX, event.clientY);
+    if (!markerPosition) return;
+
+    if (movingZoneKey) {
+      onAssignZoneMarker?.(movingZoneKey, markerPosition);
+      setMovingZoneKey('');
+      return;
+    }
+
+    setPendingMarkerPosition(markerPosition);
+    if (!selectedZoneForPendingMarker || !damageZones.some((zone) => zone.key === selectedZoneForPendingMarker)) {
+      setSelectedZoneForPendingMarker(getDefaultZoneForSelection());
+    }
+  };
+
+  const handleViewerPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isManualPlacementEnabled || !canAssignZones || !isDraggingMarker || !movingZoneKey) return;
+    if (dragPointerIdRef.current !== null && event.pointerId !== dragPointerIdRef.current) return;
+
+    const markerPosition = captureMarkerFromPointer(event.clientX, event.clientY);
+    if (!markerPosition) return;
+    if (!hasMeaningfulPositionChange(lastDragPositionRef.current, markerPosition)) return;
+
+    onAssignZoneMarker?.(movingZoneKey, markerPosition);
+    lastDragPositionRef.current = markerPosition;
+  };
+
+  const stopMarkerDragging = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingMarker) return;
+    if (dragPointerIdRef.current !== null && event.pointerId !== dragPointerIdRef.current) return;
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    setIsDraggingMarker(false);
+    setMovingZoneKey('');
+    dragPointerIdRef.current = null;
+    lastDragPositionRef.current = null;
+  };
+
+  const handleAssignPendingMarker = () => {
+    if (!pendingMarkerPosition || !selectedZoneForPendingMarker) return;
+    onAssignZoneMarker?.(selectedZoneForPendingMarker, pendingMarkerPosition);
+    setPendingMarkerPosition(null);
   };
 
   const waitFrames = (count: number = 2) =>
@@ -636,10 +846,42 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
         >
           Superior
         </button>
+        {canAssignZones && (
+          <button
+            type="button"
+            onClick={() => {
+              const nextState = !isManualPlacementEnabled;
+              setIsManualPlacementEnabled(nextState);
+              if (!nextState) {
+                setPendingMarkerPosition(null);
+                setMovingZoneKey('');
+                setIsDraggingMarker(false);
+                dragPointerIdRef.current = null;
+                lastDragPositionRef.current = null;
+              }
+            }}
+            className={`px-3 py-1 text-xs rounded-md border ${
+              isManualPlacementEnabled
+                ? 'border-yellow-500 text-yellow-200 bg-yellow-500/10'
+                : 'border-[#3b404a] text-ink-200 hover:text-white hover:border-yellow-500'
+            }`}
+          >
+            {isManualPlacementEnabled ? 'Modo manual activo' : 'Agregar punto manual'}
+          </button>
+        )}
       </div>
 
       <div className="rounded-xl border border-[#2f3238] bg-[#0b1220] p-2 relative">
-        <div ref={containerRef} className="h-72 w-full rounded-lg overflow-hidden" />
+        <div
+          ref={containerRef}
+          onPointerDown={handleViewerPointerDown}
+          onPointerMove={handleViewerPointerMove}
+          onPointerUp={stopMarkerDragging}
+          onPointerCancel={stopMarkerDragging}
+          className={`h-72 w-full rounded-lg overflow-hidden ${
+            isManualPlacementEnabled && canAssignZones ? 'cursor-crosshair' : 'cursor-grab'
+          }`}
+        />
         {loadError && (
           <div className="absolute inset-2">
             <FallbackVehicle />
@@ -649,9 +891,71 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
 
       {isLoading && <p className="text-xs text-ink-300 mt-2">Cargando modelo 3D...</p>}
       {loadError && <p className="text-xs text-red-300 mt-2">{loadError}</p>}
+      {isManualPlacementEnabled && canAssignZones && (
+        <p className="text-xs text-yellow-200 mt-2">
+          {movingZoneKey
+            ? `Mover punto activo: arrastra el marcador de "${movingZoneLabel || movingZoneKey}" a la nueva posicion.`
+            : 'Modo manual activo: toca/clic sobre el vehiculo para capturar un punto nuevo o arrastra un marcador para moverlo.'}
+        </p>
+      )}
+      {movingZoneKey && canAssignZones && (
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => {
+              setMovingZoneKey('');
+              setIsDraggingMarker(false);
+              dragPointerIdRef.current = null;
+              lastDragPositionRef.current = null;
+            }}
+            className="px-3 py-1 text-xs rounded-md border border-[#3b404a] text-ink-200 hover:border-yellow-500/60"
+          >
+            Cancelar mover punto
+          </button>
+        </div>
+      )}
+
+      {pendingMarkerPosition && canAssignZones && (
+        <div className="mt-3 rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-3">
+          <p className="text-xs text-yellow-100 mb-2">
+            Punto capturado. Selecciona la parte del vehiculo para asignarlo.
+          </p>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <select
+              value={selectedZoneForPendingMarker}
+              onChange={(event) => setSelectedZoneForPendingMarker(event.target.value)}
+              className="input-field text-sm"
+            >
+              {damageZones.map((zone) => (
+                <option key={zone.key} value={zone.key}>
+                  {zone.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleAssignPendingMarker}
+              className="px-3 py-2 rounded-md text-sm border border-yellow-400 text-yellow-100 hover:bg-yellow-400/20"
+            >
+              Asignar punto
+            </button>
+            <button
+              type="button"
+              onClick={() => setPendingMarkerPosition(null)}
+              className="px-3 py-2 rounded-md text-sm border border-[#3b404a] text-ink-200 hover:border-yellow-500/60"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       <p className="text-xs text-ink-300 mt-2">
-        Arrastra para rotar. La distancia esta fija para mantener escala constante.
+        {isManualPlacementEnabled
+          ? movingZoneKey
+            ? 'Paso actual: manten presionado el marcador y arrastralo sobre el carro para reubicarlo.'
+            : 'Toca para ubicar puntos nuevos o arrastra un marcador existente para moverlo. Desactiva el modo manual para volver a rotar.'
+          : 'Arrastra para rotar. La distancia esta fija para mantener escala constante.'}
       </p>
 
       {damagedZoneLabels.length > 0 ? (
