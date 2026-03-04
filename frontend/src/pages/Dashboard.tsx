@@ -141,7 +141,44 @@ const Dashboard: React.FC = () => {
       valueColor: 'text-white',
       clickable: false,
     },
-    ...(isAdmin ? [{
+    ...(isAdmin ? [
+      {
+        title: 'Inventario Invitados (No Admin)',
+        value: `$${(stats?.inventarioInversionistasInvitados || 0).toLocaleString('es-CO')}`,
+        icon: Users,
+        iconColor: 'text-[#f4c26b]',
+        iconBg: 'bg-[#2b2116]',
+        valueColor: 'text-white',
+        clickable: false,
+      },
+      {
+        title: 'Rentabilidad Esperada Invitados',
+        value: `$${(stats?.rentabilidadEsperadaInversionistasInvitados || 0).toLocaleString('es-CO')}`,
+        icon: DollarSign,
+        iconColor: 'text-[#f4c26b]',
+        iconBg: 'bg-[#2b2116]',
+        valueColor: 'text-white',
+        clickable: false,
+      },
+      {
+        title: 'Inventario Inversiones Admin',
+        value: `$${(stats?.inventarioInversionistasAdmin || 0).toLocaleString('es-CO')}`,
+        icon: Package,
+        iconColor: 'text-[#83b3e5]',
+        iconBg: 'bg-[#17212f]',
+        valueColor: 'text-white',
+        clickable: false,
+      },
+      {
+        title: 'Rentabilidad Esperada Admin',
+        value: `$${(stats?.rentabilidadEsperadaInversionistasAdmin || 0).toLocaleString('es-CO')}`,
+        icon: DollarSign,
+        iconColor: 'text-[#83b3e5]',
+        iconBg: 'bg-[#17212f]',
+        valueColor: 'text-white',
+        clickable: false,
+      },
+      {
       title: 'Total de Gastos Sistema',
       value: `$${(stats?.totalGastos || 0).toLocaleString('es-CO')}`,
       icon: AlertTriangle,
@@ -149,7 +186,8 @@ const Dashboard: React.FC = () => {
       iconBg: 'bg-[#2c1b14]',
       valueColor: 'text-white',
       clickable: false,
-    }] : []),
+      },
+    ] : []),
     {
       title: isAdmin ? 'Ganancias Estimadas Sistema' : 'Mi Utilidad Estimada',
       value: `$${(stats?.gananciasEstimadas || 0).toLocaleString('es-CO')}`,
@@ -303,10 +341,28 @@ const Dashboard: React.FC = () => {
                 <span className="font-bold text-[#83b3e5]">${(stats?.valorInventario || 0).toLocaleString('es-CO')}</span>
               </div>
               {isAdmin && (
-                <div className="flex items-center justify-between p-3 rounded-lg border border-[#2c1b14] bg-[#1a1512]">
-                  <span className="text-ink-200">Total de Gastos Sistema</span>
-                  <span className="font-bold text-[#ff8b4a]">${(stats?.totalGastos || 0).toLocaleString('es-CO')}</span>
-                </div>
+                <>
+                  <div className="flex items-center justify-between p-3 rounded-lg border border-[#2c1b14] bg-[#1a1512]">
+                    <span className="text-ink-200">Total de Gastos Sistema</span>
+                    <span className="font-bold text-[#ff8b4a]">${(stats?.totalGastos || 0).toLocaleString('es-CO')}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-lg border border-[#4a3a20] bg-[#2a2215]">
+                    <span className="text-ink-200">Inventario Invitados (No Admin)</span>
+                    <span className="font-bold text-[#f4c26b]">${(stats?.inventarioInversionistasInvitados || 0).toLocaleString('es-CO')}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-lg border border-[#4a3a20] bg-[#2a2215]">
+                    <span className="text-ink-200">Rentabilidad Esperada Invitados</span>
+                    <span className="font-bold text-[#f4c26b]">${(stats?.rentabilidadEsperadaInversionistasInvitados || 0).toLocaleString('es-CO')}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-lg border border-[#27354a] bg-[#121f2d]">
+                    <span className="text-ink-200">Inventario Inversiones Admin</span>
+                    <span className="font-bold text-[#83b3e5]">${(stats?.inventarioInversionistasAdmin || 0).toLocaleString('es-CO')}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-lg border border-[#27354a] bg-[#121f2d]">
+                    <span className="text-ink-200">Rentabilidad Esperada Admin</span>
+                    <span className="font-bold text-[#83b3e5]">${(stats?.rentabilidadEsperadaInversionistasAdmin || 0).toLocaleString('es-CO')}</span>
+                  </div>
+                </>
               )}
               <div className="flex items-center justify-between p-3 rounded-lg border border-[#214333] bg-[#10261d]">
                 <span className="text-ink-200">

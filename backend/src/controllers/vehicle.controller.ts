@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import Vehicle from '../models/Vehicle';
+import User from '../models/User';
 import { AuthRequest } from '../types';
 import ExcelJS from 'exceljs';
 import path from 'path';
@@ -32,6 +33,30 @@ const calculateVehicleTotalExpenses = (vehicle: any): number => {
   }, 0);
 
   return gastosGenerales + gastosInversionistas;
+};
+
+const calculateInvestorExpenses = (inversionista: any): number => {
+  return (inversionista?.gastos || []).reduce((sum: number, gasto: any) => {
+    return sum + (gasto?.monto || 0);
+  }, 0);
+};
+
+const getInvestorUserId = (inversionista: any): string | undefined => {
+  if (!inversionista?.usuario) return undefined;
+
+  if (typeof inversionista.usuario === 'string') {
+    return inversionista.usuario;
+  }
+
+  if (inversionista.usuario?._id) {
+    return inversionista.usuario._id.toString();
+  }
+
+  if (typeof inversionista.usuario.toString === 'function') {
+    return inversionista.usuario.toString();
+  }
+
+  return undefined;
 };
 
 // Crear nuevo vehículo
@@ -385,6 +410,65 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
       0
     );
 
+    const inversionistaIds = new Set<string>();
+    vehiculosEnStock.forEach((vehicle) => {
+      (vehicle.inversionistas || []).forEach((inv: any) => {
+        const inversionistaId = getInvestorUserId(inv);
+        if (inversionistaId) inversionistaIds.add(inversionistaId);
+      });
+    });
+
+    const inversionistaRoles = new Map<string, string>();
+    if (inversionistaIds.size > 0) {
+      const inversionistasUsuarios = await User.find({
+        _id: { $in: Array.from(inversionistaIds) },
+      }).select('_id rol');
+
+      inversionistasUsuarios.forEach((usuario: any) => {
+        inversionistaRoles.set(usuario._id.toString(), usuario.rol);
+      });
+    }
+
+    let inventarioInversionistasInvitados = 0;
+    let rentabilidadEsperadaInversionistasInvitados = 0;
+    let inventarioInversionistasAdmin = 0;
+    let rentabilidadEsperadaInversionistasAdmin = 0;
+
+    vehiculosEnStock.forEach((vehicle) => {
+      const inversionistas = vehicle.inversionistas || [];
+      if (inversionistas.length === 0) return;
+
+      const totalInversionVehiculo = inversionistas.reduce(
+        (sum, inv) => sum + (inv?.montoInversion || 0),
+        0
+      );
+      const utilidadVehiculo =
+        (vehicle.precioVenta || 0) -
+        (vehicle.precioCompra || 0) -
+        calculateVehicleTotalExpenses(vehicle);
+
+      inversionistas.forEach((inv: any) => {
+        const montoInversion = inv?.montoInversion || 0;
+        const gastosInversionista = calculateInvestorExpenses(inv);
+        const inventarioInversionista = montoInversion + gastosInversionista;
+        const porcentajeParticipacion =
+          totalInversionVehiculo > 0 ? montoInversion / totalInversionVehiculo : 0;
+        const rentabilidadEsperada = utilidadVehiculo * porcentajeParticipacion;
+
+        const inversionistaId = getInvestorUserId(inv);
+        const rolInversionista = inversionistaId ? inversionistaRoles.get(inversionistaId) : undefined;
+        const esAdmin = rolInversionista === 'admin';
+
+        if (esAdmin) {
+          inventarioInversionistasAdmin += inventarioInversionista;
+          rentabilidadEsperadaInversionistasAdmin += rentabilidadEsperada;
+        } else {
+          inventarioInversionistasInvitados += inventarioInversionista;
+          rentabilidadEsperadaInversionistasInvitados += rentabilidadEsperada;
+        }
+      });
+    });
+
     let miInversion = 0;
     let misGastos = 0;
     let miUtilidadEstimada = 0;
@@ -399,14 +483,14 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
     if (userId) {
       vehiculosEnStock.forEach(vehicle => {
         const inversionista = vehicle.inversionistas?.find(
-          inv => inv.usuario?.toString() === userId
+          inv => getInvestorUserId(inv) === userId
         );
         
         if (inversionista) {
           const totalInversion = vehicle.inversionistas.reduce((sum, inv) => sum + inv.montoInversion, 0);
           const porcentaje = totalInversion > 0 ? (inversionista.montoInversion / totalInversion) : 0;
           
-          const gastosInv = inversionista.gastos?.reduce((sum, g) => sum + (g.monto || 0), 0) || 0;
+          const gastosInv = calculateInvestorExpenses(inversionista);
           miInversion += inversionista.montoInversion + gastosInv;
           misGastos += gastosInv;
           
@@ -417,7 +501,7 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
 
       vehiculosVendidosData.forEach(vehicle => {
         const inversionista = vehicle.inversionistas?.find(
-          inv => inv.usuario?.toString() === userId
+          inv => getInvestorUserId(inv) === userId
         );
         
         if (inversionista) {
@@ -436,10 +520,10 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
           
           // Inversión del usuario actual en este vehículo
           const miInversionEnVehiculo = vehicle.inversionistas?.find(
-            inv => inv.usuario?.toString() === userId
+            inv => getInvestorUserId(inv) === userId
           );
           const miMontoEnVehiculo = miInversionEnVehiculo 
-            ? miInversionEnVehiculo.montoInversion + (miInversionEnVehiculo.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0)
+            ? miInversionEnVehiculo.montoInversion + calculateInvestorExpenses(miInversionEnVehiculo)
             : 0;
           
           // Inversión de otros = total - mío
@@ -447,7 +531,9 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
           inversionOtros += inversionOtrosEnVehiculo > 0 ? inversionOtrosEnVehiculo : 0;
           
           // Gastos de otros
-          const misGastosEnVehiculo = miInversionEnVehiculo?.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0;
+          const misGastosEnVehiculo = miInversionEnVehiculo
+            ? calculateInvestorExpenses(miInversionEnVehiculo)
+            : 0;
           const gastosOtrosEnVehiculo = totalGastosInvVehiculo - misGastosEnVehiculo;
           gastosOtros += gastosOtrosEnVehiculo > 0 ? gastosOtrosEnVehiculo : 0;
           
@@ -464,7 +550,7 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
         vehiculosVendidosData.forEach(vehicle => {
           const totalUtilidadReal = vehicle.inversionistas?.reduce((sum, inv) => sum + (inv.utilidadCorrespondiente || 0), 0) || 0;
           const miUtilidadEnVehiculo = vehicle.inversionistas?.find(
-            inv => inv.usuario?.toString() === userId
+            inv => getInvestorUserId(inv) === userId
           )?.utilidadCorrespondiente || 0;
           
           utilidadRealOtros += totalUtilidadReal - miUtilidadEnVehiculo;
@@ -492,6 +578,14 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
       gastosOtros: userRole === 'admin' ? gastosOtros : undefined,
       utilidadEstimadaOtros: userRole === 'admin' ? utilidadEstimadaOtros : undefined,
       utilidadRealOtros: userRole === 'admin' ? utilidadRealOtros : undefined,
+      inventarioInversionistasInvitados:
+        userRole === 'admin' ? inventarioInversionistasInvitados : undefined,
+      rentabilidadEsperadaInversionistasInvitados:
+        userRole === 'admin' ? rentabilidadEsperadaInversionistasInvitados : undefined,
+      inventarioInversionistasAdmin:
+        userRole === 'admin' ? inventarioInversionistasAdmin : undefined,
+      rentabilidadEsperadaInversionistasAdmin:
+        userRole === 'admin' ? rentabilidadEsperadaInversionistasAdmin : undefined,
       // Valores compatibles (retrocompatibilidad)
       valorInventario: userRole === 'admin' ? valorInventarioTotal : miInversion,
       totalGastos: userRole === 'admin' ? totalGastosSistema : misGastos,

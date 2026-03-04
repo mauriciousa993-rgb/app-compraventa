@@ -285,6 +285,11 @@ export interface Statistics {
   misGastos?: number;
   miUtilidadEstimada?: number;
   miUtilidadReal?: number;
+  // Nuevos totales por tipo de inversionista (solo admin)
+  inventarioInversionistasInvitados?: number;
+  rentabilidadEsperadaInversionistasInvitados?: number;
+  inventarioInversionistasAdmin?: number;
+  rentabilidadEsperadaInversionistasAdmin?: number;
 }
 
 export interface VehicleFormData {
