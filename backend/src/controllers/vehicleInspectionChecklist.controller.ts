@@ -22,6 +22,11 @@ interface DamageZoneInputRow {
   status?: InspectionStatus;
   observaciones?: string;
   responsable?: string;
+  markerPositions?: Array<{
+    x?: number | string | null;
+    y?: number | string | null;
+    z?: number | string | null;
+  }> | null;
   markerPosition?: {
     x?: number | string | null;
     y?: number | string | null;
@@ -53,6 +58,15 @@ const normalizeMarkerPosition = (
   return { x, y, z };
 };
 
+const normalizeMarkerPositions = (
+  values: DamageZoneInputRow['markerPositions']
+): { x: number; y: number; z: number }[] => {
+  if (!Array.isArray(values)) return [];
+  return values
+    .map((value) => normalizeMarkerPosition(value))
+    .filter((value): value is { x: number; y: number; z: number } => value !== null);
+};
+
 const sanitizeChecklistItem = (row: ChecklistInputRow) => ({
   key: (row.key || '').toString().trim(),
   label: (row.label || '').toString().trim(),
@@ -64,14 +78,22 @@ const sanitizeChecklistItem = (row: ChecklistInputRow) => ({
   tipoTransmision: normalizeTransmissionType(row.tipoTransmision),
 });
 
-const sanitizeDamageZone = (row: DamageZoneInputRow) => ({
-  key: (row.key || '').toString().trim(),
-  label: (row.label || '').toString().trim(),
-  status: normalizeStatus(row.status),
-  observaciones: (row.observaciones || '').toString().trim(),
-  responsable: (row.responsable || '').toString().trim(),
-  markerPosition: normalizeMarkerPosition(row.markerPosition),
-});
+const sanitizeDamageZone = (row: DamageZoneInputRow) => {
+  const normalizedMarkers = normalizeMarkerPositions(row.markerPositions);
+  const fallbackMarker = normalizeMarkerPosition(row.markerPosition);
+  const markers = normalizedMarkers.length > 0 ? normalizedMarkers : fallbackMarker ? [fallbackMarker] : [];
+
+  return {
+    key: (row.key || '').toString().trim(),
+    label: (row.label || '').toString().trim(),
+    status: normalizeStatus(row.status),
+    observaciones: (row.observaciones || '').toString().trim(),
+    responsable: (row.responsable || '').toString().trim(),
+    markerPositions: markers,
+    // Compatibilidad temporal con checklists previos.
+    markerPosition: markers[0] || null,
+  };
+};
 
 export const getVehicleInspectionChecklist = async (req: AuthRequest, res: Response): Promise<void> => {
   try {

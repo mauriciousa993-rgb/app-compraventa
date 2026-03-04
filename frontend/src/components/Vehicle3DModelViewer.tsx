@@ -22,7 +22,11 @@ const FALLBACK_TEXTURE_URL = '/models/kia-nq5-22my-wheel-small-17inch.png';
 interface Vehicle3DModelViewerProps {
   damageZones: VehicleDamageZone[];
   tipoVehiculo?: VehicleModelType;
-  onAssignZoneMarker?: (zoneKey: string, markerPosition: VehicleDamageZoneMarkerPosition) => void;
+  onAssignZoneMarker?: (
+    zoneKey: string,
+    markerPosition: VehicleDamageZoneMarkerPosition,
+    markerIndex?: number
+  ) => void;
 }
 
 export interface Vehicle3DModelViewerHandle {
@@ -38,6 +42,11 @@ type ZoneMarkerProfile = {
   direction: [number, number, number];
   seed: [number, number, number];
 };
+
+type MovingMarkerTarget = {
+  zoneKey: string;
+  markerIndex: number;
+} | null;
 
 type MaterialWithColor = THREE.Material & {
   color?: THREE.Color;
@@ -94,7 +103,7 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
   const [pendingMarkerPosition, setPendingMarkerPosition] =
     useState<VehicleDamageZoneMarkerPosition | null>(null);
   const [selectedZoneForPendingMarker, setSelectedZoneForPendingMarker] = useState('');
-  const [movingZoneKey, setMovingZoneKey] = useState('');
+  const [movingMarkerTarget, setMovingMarkerTarget] = useState<MovingMarkerTarget>(null);
   const [isDraggingMarker, setIsDraggingMarker] = useState(false);
   const dragPointerIdRef = useRef<number | null>(null);
   const lastDragPositionRef = useRef<VehicleDamageZoneMarkerPosition | null>(null);
@@ -103,10 +112,10 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     () => damageZones.filter((zone) => zone.status === 'mal').map((zone) => zone.label),
     [damageZones]
   );
-  const movingZoneLabel = useMemo(
-    () => damageZones.find((zone) => zone.key === movingZoneKey)?.label || '',
-    [damageZones, movingZoneKey]
-  );
+  const movingZoneLabel = useMemo(() => {
+    if (!movingMarkerTarget?.zoneKey) return '';
+    return damageZones.find((zone) => zone.key === movingMarkerTarget.zoneKey)?.label || '';
+  }, [damageZones, movingMarkerTarget]);
   const canAssignZones = typeof onAssignZoneMarker === 'function';
   const modelCandidates = useMemo(
     () => MODEL_URL_CANDIDATES[tipoVehiculo] || MODEL_URL_CANDIDATES.sedan,
@@ -123,19 +132,21 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
   }, [damageZones, selectedZoneForPendingMarker]);
 
   useEffect(() => {
-    if (!movingZoneKey) return;
-    if (!damageZones.some((zone) => zone.key === movingZoneKey && zone.status === 'mal')) {
-      setMovingZoneKey('');
+    if (!movingMarkerTarget) return;
+    const zone = damageZones.find((item) => item.key === movingMarkerTarget.zoneKey);
+    const markerCount = (zone?.markerPositions || []).length;
+    if (!zone || zone.status !== 'mal' || movingMarkerTarget.markerIndex < 0 || movingMarkerTarget.markerIndex >= markerCount) {
+      setMovingMarkerTarget(null);
       setIsDraggingMarker(false);
       dragPointerIdRef.current = null;
       lastDragPositionRef.current = null;
     }
-  }, [damageZones, movingZoneKey]);
+  }, [damageZones, movingMarkerTarget]);
 
   useEffect(() => {
     if (isManualPlacementEnabled) return;
     setIsDraggingMarker(false);
-    setMovingZoneKey('');
+    setMovingMarkerTarget(null);
     dragPointerIdRef.current = null;
     lastDragPositionRef.current = null;
   }, [isManualPlacementEnabled]);
@@ -269,16 +280,20 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
 
     damagedZones.forEach((zone) => {
       const profile = ZONE_MARKER_PROFILE[zone.key];
-      let markerPosition: THREE.Vector3 | null = null;
-      const isMovingTarget = zone.key === movingZoneKey;
+      const manualPositions = (zone.markerPositions || []).filter((position) => isValidMarkerPosition(position));
+      const legacyPosition = isValidMarkerPosition(zone.markerPosition) ? [zone.markerPosition] : [];
+      const sourcePositions =
+        manualPositions.length > 0
+          ? manualPositions
+          : legacyPosition.length > 0
+            ? legacyPosition
+            : [];
 
-      if (isValidMarkerPosition(zone.markerPosition)) {
-        markerPosition = new THREE.Vector3(
-          zone.markerPosition.x,
-          zone.markerPosition.y,
-          zone.markerPosition.z
-        );
-      } else if (profile) {
+      const zoneMarkerPositions: THREE.Vector3[] = sourcePositions.map(
+        (position) => new THREE.Vector3(position.x, position.y, position.z)
+      );
+
+      if (zoneMarkerPositions.length === 0 && profile) {
         const rayOutDirection = new THREE.Vector3(...profile.direction).normalize();
         const [nx, ny, nz] = profile.seed;
         const seed = new THREE.Vector3(
@@ -291,37 +306,43 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
         raycaster.set(rayStart, rayOutDirection.clone().multiplyScalar(-1));
         const intersections = raycaster.intersectObjects(meshes, false);
 
-        markerPosition = seed.clone();
+        let fallbackPosition = seed.clone();
         if (intersections.length > 0) {
           const hit = intersections[0];
           const hitNormal = hit.face?.normal
             ? hit.face.normal.clone().transformDirection((hit.object as THREE.Mesh).matrixWorld)
             : rayOutDirection;
-          markerPosition = hit.point.clone().addScaledVector(hitNormal.normalize(), markerRadius * 0.55);
+          fallbackPosition = hit.point.clone().addScaledVector(hitNormal.normalize(), markerRadius * 0.55);
         }
+        zoneMarkerPositions.push(fallbackPosition);
       }
-      if (!markerPosition) return;
 
-      const marker = new THREE.Mesh(
-        new THREE.SphereGeometry(isMovingTarget ? markerRadius * 1.35 : markerRadius * 1.15, 18, 18),
-        new THREE.MeshStandardMaterial({
-          color: isMovingTarget ? '#f59e0b' : '#ef4444',
-          emissive: isMovingTarget ? '#78350f' : '#7f1d1d',
-          emissiveIntensity: isMovingTarget ? 0.82 : 0.64,
-          roughness: 0.3,
-          metalness: 0.15,
-          transparent: true,
-          opacity: 0.99,
-        })
-      );
-      marker.position.copy(markerPosition);
-      marker.userData = {
-        ...(marker.userData || {}),
-        zoneKey: zone.key,
-      };
-      marker.castShadow = false;
-      marker.receiveShadow = false;
-      markerGroup.add(marker);
+      zoneMarkerPositions.forEach((markerPosition, markerIndex) => {
+        const isMovingTarget =
+          movingMarkerTarget?.zoneKey === zone.key && movingMarkerTarget?.markerIndex === markerIndex;
+
+        const marker = new THREE.Mesh(
+          new THREE.SphereGeometry(isMovingTarget ? markerRadius * 1.35 : markerRadius * 1.15, 18, 18),
+          new THREE.MeshStandardMaterial({
+            color: isMovingTarget ? '#f59e0b' : '#ef4444',
+            emissive: isMovingTarget ? '#78350f' : '#7f1d1d',
+            emissiveIntensity: isMovingTarget ? 0.82 : 0.64,
+            roughness: 0.3,
+            metalness: 0.15,
+            transparent: true,
+            opacity: 0.99,
+          })
+        );
+        marker.position.copy(markerPosition);
+        marker.userData = {
+          ...(marker.userData || {}),
+          zoneKey: zone.key,
+          markerIndex,
+        };
+        marker.castShadow = false;
+        marker.receiveShadow = false;
+        markerGroup.add(marker);
+      });
     });
   };
 
@@ -593,7 +614,7 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     });
 
     renderZoneMarkers(damageZones);
-  }, [damageZones, movingZoneKey]);
+  }, [damageZones, movingMarkerTarget]);
 
   const applyCameraPreset = (preset: 'front' | 'rear' | 'left' | 'right' | 'top' | 'iso') => {
     if (preset === 'front') setCameraByDirection(new THREE.Vector3(0, 0.16, 1));
@@ -630,7 +651,10 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     return raycaster;
   };
 
-  const captureMarkerZoneFromPointer = (clientX: number, clientY: number): string | null => {
+  const captureMarkerZoneFromPointer = (
+    clientX: number,
+    clientY: number
+  ): { zoneKey: string; markerIndex: number } | null => {
     const markerGroup = zoneMarkerGroupRef.current;
     if (!markerGroup || markerGroup.children.length === 0) return null;
 
@@ -641,7 +665,10 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     if (intersections.length === 0) return null;
 
     const zoneKey = intersections[0].object.userData?.zoneKey;
-    return typeof zoneKey === 'string' && zoneKey ? zoneKey : null;
+    const markerIndex = Number(intersections[0].object.userData?.markerIndex);
+    if (typeof zoneKey !== 'string' || !zoneKey) return null;
+    if (!Number.isInteger(markerIndex) || markerIndex < 0) return null;
+    return { zoneKey, markerIndex };
   };
 
   const captureMarkerFromPointer = (clientX: number, clientY: number): VehicleDamageZoneMarkerPosition | null => {
@@ -671,10 +698,10 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     if (!isManualPlacementEnabled || !canAssignZones) return;
     event.preventDefault();
 
-    const markerZoneKey = captureMarkerZoneFromPointer(event.clientX, event.clientY);
-    if (markerZoneKey) {
-      setMovingZoneKey(markerZoneKey);
-      setSelectedZoneForPendingMarker(markerZoneKey);
+    const markerTarget = captureMarkerZoneFromPointer(event.clientX, event.clientY);
+    if (markerTarget) {
+      setMovingMarkerTarget(markerTarget);
+      setSelectedZoneForPendingMarker(markerTarget.zoneKey);
       setPendingMarkerPosition(null);
       setIsDraggingMarker(true);
       dragPointerIdRef.current = event.pointerId;
@@ -688,9 +715,9 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
     const markerPosition = captureMarkerFromPointer(event.clientX, event.clientY);
     if (!markerPosition) return;
 
-    if (movingZoneKey) {
-      onAssignZoneMarker?.(movingZoneKey, markerPosition);
-      setMovingZoneKey('');
+    if (movingMarkerTarget) {
+      onAssignZoneMarker?.(movingMarkerTarget.zoneKey, markerPosition, movingMarkerTarget.markerIndex);
+      setMovingMarkerTarget(null);
       return;
     }
 
@@ -701,14 +728,18 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
   };
 
   const handleViewerPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!isManualPlacementEnabled || !canAssignZones || !isDraggingMarker || !movingZoneKey) return;
+    if (!isManualPlacementEnabled || !canAssignZones || !isDraggingMarker || !movingMarkerTarget) return;
     if (dragPointerIdRef.current !== null && event.pointerId !== dragPointerIdRef.current) return;
 
     const markerPosition = captureMarkerFromPointer(event.clientX, event.clientY);
     if (!markerPosition) return;
     if (!hasMeaningfulPositionChange(lastDragPositionRef.current, markerPosition)) return;
 
-    onAssignZoneMarker?.(movingZoneKey, markerPosition);
+    onAssignZoneMarker?.(
+      movingMarkerTarget.zoneKey,
+      markerPosition,
+      movingMarkerTarget.markerIndex
+    );
     lastDragPositionRef.current = markerPosition;
   };
 
@@ -720,7 +751,7 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     setIsDraggingMarker(false);
-    setMovingZoneKey('');
+    setMovingMarkerTarget(null);
     dragPointerIdRef.current = null;
     lastDragPositionRef.current = null;
   };
@@ -854,7 +885,7 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
               setIsManualPlacementEnabled(nextState);
               if (!nextState) {
                 setPendingMarkerPosition(null);
-                setMovingZoneKey('');
+                setMovingMarkerTarget(null);
                 setIsDraggingMarker(false);
                 dragPointerIdRef.current = null;
                 lastDragPositionRef.current = null;
@@ -893,17 +924,17 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
       {loadError && <p className="text-xs text-red-300 mt-2">{loadError}</p>}
       {isManualPlacementEnabled && canAssignZones && (
         <p className="text-xs text-yellow-200 mt-2">
-          {movingZoneKey
-            ? `Mover punto activo: arrastra el marcador de "${movingZoneLabel || movingZoneKey}" a la nueva posicion.`
+          {movingMarkerTarget
+            ? `Mover punto activo: arrastra el marcador de "${movingZoneLabel || movingMarkerTarget.zoneKey}" a la nueva posicion.`
             : 'Modo manual activo: toca/clic sobre el vehiculo para capturar un punto nuevo o arrastra un marcador para moverlo.'}
         </p>
       )}
-      {movingZoneKey && canAssignZones && (
+      {movingMarkerTarget && canAssignZones && (
         <div className="mt-2">
           <button
             type="button"
             onClick={() => {
-              setMovingZoneKey('');
+              setMovingMarkerTarget(null);
               setIsDraggingMarker(false);
               dragPointerIdRef.current = null;
               lastDragPositionRef.current = null;
@@ -952,7 +983,7 @@ const Vehicle3DModelViewer = forwardRef<Vehicle3DModelViewerHandle, Vehicle3DMod
 
       <p className="text-xs text-ink-300 mt-2">
         {isManualPlacementEnabled
-          ? movingZoneKey
+          ? movingMarkerTarget
             ? 'Paso actual: manten presionado el marcador y arrastralo sobre el carro para reubicarlo.'
             : 'Toca para ubicar puntos nuevos o arrastra un marcador existente para moverlo. Desactiva el modo manual para volver a rotar.'
           : 'Arrastra para rotar. La distancia esta fija para mantener escala constante.'}

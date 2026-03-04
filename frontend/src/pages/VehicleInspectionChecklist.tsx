@@ -81,6 +81,7 @@ const createDefaultDamageZones = (): VehicleDamageZone[] =>
     status: 'bien',
     observaciones: '',
     responsable: '',
+    markerPositions: [],
     markerPosition: null,
   }));
 
@@ -91,6 +92,13 @@ const normalizeMarkerPosition = (value: any): VehicleDamageZoneMarkerPosition | 
   const z = Number(value.z);
   if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
   return { x, y, z };
+};
+
+const normalizeMarkerPositions = (value: any): VehicleDamageZoneMarkerPosition[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => normalizeMarkerPosition(item))
+    .filter((item): item is VehicleDamageZoneMarkerPosition => item !== null);
 };
 
 const mergeItems = (savedItems: any[] | undefined): VehicleInspectionItem[] =>
@@ -117,6 +125,12 @@ const mergeDamageZones = (savedZones: any[] | undefined): VehicleDamageZone[] =>
       status: saved?.status === 'mal' ? 'mal' : 'bien',
       observaciones: saved?.observaciones || '',
       responsable: saved?.responsable || '',
+      markerPositions: (() => {
+        const parsed = normalizeMarkerPositions(saved?.markerPositions);
+        if (parsed.length > 0) return parsed;
+        const single = normalizeMarkerPosition(saved?.markerPosition);
+        return single ? [single] : [];
+      })(),
       markerPosition: normalizeMarkerPosition(saved?.markerPosition),
     };
   });
@@ -285,7 +299,18 @@ const VehicleInspectionChecklist: React.FC = () => {
   };
 
   const updateZoneStatus = (key: string, status: 'bien' | 'mal') => {
-    setDamageZones((prev) => prev.map((zone) => (zone.key === key ? { ...zone, status } : zone)));
+    setDamageZones((prev) =>
+      prev.map((zone) =>
+        zone.key === key
+          ? {
+              ...zone,
+              status,
+              markerPositions: status === 'bien' ? [] : zone.markerPositions || [],
+              markerPosition: status === 'bien' ? null : zone.markerPosition || null,
+            }
+          : zone
+      )
+    );
   };
 
   const updateZoneObservation = (key: string, observaciones: string) => {
@@ -296,13 +321,28 @@ const VehicleInspectionChecklist: React.FC = () => {
     setDamageZones((prev) => prev.map((zone) => (zone.key === key ? { ...zone, responsable } : zone)));
   };
 
-  const assignZoneMarker = (key: string, markerPosition: VehicleDamageZoneMarkerPosition) => {
+  const assignZoneMarker = (
+    key: string,
+    markerPosition: VehicleDamageZoneMarkerPosition,
+    markerIndex?: number
+  ) => {
     setDamageZones((prev) =>
       prev.map((zone) =>
         zone.key === key
           ? {
               ...zone,
               status: 'mal',
+              markerPositions: (() => {
+                const current = [...(zone.markerPositions || [])];
+                if (typeof markerIndex === 'number' && markerIndex >= 0) {
+                  while (current.length <= markerIndex) {
+                    current.push(markerPosition);
+                  }
+                  current[markerIndex] = markerPosition;
+                  return current;
+                }
+                return [...current, markerPosition];
+              })(),
               markerPosition,
             }
           : zone
@@ -312,7 +352,9 @@ const VehicleInspectionChecklist: React.FC = () => {
 
   const clearZoneMarker = (key: string) => {
     setDamageZones((prev) =>
-      prev.map((zone) => (zone.key === key ? { ...zone, markerPosition: null } : zone))
+      prev.map((zone) =>
+        zone.key === key ? { ...zone, markerPosition: null, markerPositions: [] } : zone
+      )
     );
   };
 
@@ -640,7 +682,9 @@ const VehicleInspectionChecklist: React.FC = () => {
                 </Suspense>
 
                 <div className="mt-4 space-y-3">
-                  {damageZones.map((zone) => (
+                  {damageZones.map((zone) => {
+                    const markerCount = (zone.markerPositions || []).length;
+                    return (
                     <div key={zone.key} className="rounded-lg border border-[#2f3238] p-3 bg-[#1a1d23]">
                       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-2">
                         <p className="text-white font-medium">{zone.label}</p>
@@ -667,20 +711,20 @@ const VehicleInspectionChecklist: React.FC = () => {
                           >
                             Mal
                           </button>
-                          {zone.markerPosition && (
+                          {markerCount > 0 && (
                             <button
                               type="button"
                               onClick={() => clearZoneMarker(zone.key)}
                               className="px-3 py-1 rounded-md text-sm border border-[#3b404a] text-ink-200 hover:border-yellow-400/60"
                             >
-                              Quitar punto
+                              Quitar puntos
                             </button>
                           )}
                         </div>
                       </div>
                       <p className="text-xs text-ink-300 mb-2">
-                        {zone.markerPosition
-                          ? 'Punto manual asignado en el modelo.'
+                        {markerCount > 0
+                          ? `${markerCount} punto(s) manual(es) asignado(s) en el modelo.`
                           : 'Sin punto manual. Se usara posicion automatica.'}
                       </p>
                       <textarea
@@ -690,15 +734,16 @@ const VehicleInspectionChecklist: React.FC = () => {
                         className="input-field text-sm"
                         placeholder="Detalle de dano en esta zona"
                       />
-                      <input
-                        type="text"
-                        value={zone.responsable}
-                        onChange={(e) => updateZoneResponsable(zone.key, e.target.value)}
-                        className="input-field text-sm mt-2"
-                        placeholder="Responsable de reparacion"
-                      />
+                    <input
+                      type="text"
+                      value={zone.responsable}
+                      onChange={(e) => updateZoneResponsable(zone.key, e.target.value)}
+                      className="input-field text-sm mt-2"
+                      placeholder="Responsable de reparacion"
+                    />
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 

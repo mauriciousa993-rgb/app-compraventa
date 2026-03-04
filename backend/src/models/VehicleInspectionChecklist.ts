@@ -25,6 +25,7 @@ export interface IDamageZone {
   status: InspectionStatus;
   observaciones: string;
   responsable: string;
+  markerPositions?: IZoneMarkerPosition[];
   markerPosition?: IZoneMarkerPosition | null;
 }
 
@@ -71,6 +72,7 @@ const damageZoneSchema = new Schema<IDamageZone>(
     status: { type: String, enum: ['bien', 'mal'], required: true },
     observaciones: { type: String, default: '', trim: true },
     responsable: { type: String, default: '', trim: true },
+    markerPositions: { type: [zoneMarkerPositionSchema], default: [] },
     markerPosition: { type: zoneMarkerPositionSchema, default: null },
   },
   { _id: false }

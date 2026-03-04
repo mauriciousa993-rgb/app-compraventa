@@ -152,6 +152,7 @@ export interface VehicleDamageZone {
   status: InspectionStatus;
   observaciones: string;
   responsable: string;
+  markerPositions?: VehicleDamageZoneMarkerPosition[];
   markerPosition?: VehicleDamageZoneMarkerPosition | null;
 }
 
