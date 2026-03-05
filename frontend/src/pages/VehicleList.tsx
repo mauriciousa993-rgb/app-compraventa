@@ -45,11 +45,22 @@ const VehicleList: React.FC = () => {
     }
   };
 
+  const normalizeEstado = (estado?: string) => (estado || '').trim().toLowerCase();
+
+  const isListoParaVenta = (estado?: string) => {
+    const estadoNormalizado = normalizeEstado(estado);
+    return estadoNormalizado === 'listo_venta' || estadoNormalizado === 'en_negociacion';
+  };
+
   const filterVehicles = () => {
     let filtered = vehicles;
 
     if (filterEstado !== 'todos') {
-      filtered = filtered.filter(v => v.estado === filterEstado);
+      if (filterEstado === 'listo_venta') {
+        filtered = filtered.filter(v => isListoParaVenta(v.estado));
+      } else {
+        filtered = filtered.filter(v => normalizeEstado(v.estado) === filterEstado);
+      }
     }
 
     if (searchTerm) {
@@ -236,9 +247,9 @@ const VehicleList: React.FC = () => {
       en_negociacion: { class: 'badge-info', text: 'En Negociación' },
       separado: { class: 'badge-warning', text: 'Separado' },
       vendido: { class: 'badge-gray', text: 'Vendido' },
-      retrasado: { class: 'badge-danger', text: 'Retirado' }
+      retirado: { class: 'badge-danger', text: 'Retirado' }
     };
-    const badge = badges[estado] || badges.en_proceso;
+    const badge = badges[normalizeEstado(estado)] || badges.en_proceso;
     return <span className={`badge ${badge.class}`}>{badge.text}</span>;
   };
 
@@ -363,7 +374,7 @@ const VehicleList: React.FC = () => {
           >
             <p className="text-sm text-ink-200 font-medium">Listos para Venta</p>
             <p className="text-2xl font-bold text-silver">
-              {vehicles.filter(v => v.estado === 'listo_venta').length}
+              {vehicles.filter(v => isListoParaVenta(v.estado)).length}
             </p>
           </button>
           <button
