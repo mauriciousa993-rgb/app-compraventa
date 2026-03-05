@@ -228,7 +228,9 @@ const VehicleInspectionChecklist: React.FC = () => {
   }, [items]);
 
   const failingItems = useMemo(() => items.filter((item) => item.status === 'mal'), [items]);
+  const passingItems = useMemo(() => items.filter((item) => item.status === 'bien'), [items]);
   const damagedZones = useMemo(() => damageZones.filter((zone) => zone.status === 'mal'), [damageZones]);
+  const healthyZones = useMemo(() => damageZones.filter((zone) => zone.status === 'bien'), [damageZones]);
 
   const getItemSpecificValue = (item: VehicleInspectionItem): string => {
     if (PERCENTAGE_ITEM_KEYS.has(item.key) && typeof item.porcentajeEstado === 'number') {
@@ -241,36 +243,80 @@ const VehicleInspectionChecklist: React.FC = () => {
     return '';
   };
 
+  const formatItemSummaryLine = (item: VehicleInspectionItem): string => {
+    const extras: string[] = [];
+    const value = getItemSpecificValue(item);
+    if (value) extras.push(value);
+    if (item.responsable.trim()) extras.push(`Responsable: ${item.responsable.trim()}`);
+    const meta = extras.length > 0 ? ` (${extras.join(' | ')})` : '';
+    const detail = item.observaciones ? ` - ${item.observaciones}` : '';
+    return `- ${item.label}${meta}${detail}`;
+  };
+
+  const formatZoneSummaryLine = (zone: VehicleDamageZone): string => {
+    const owner = zone.responsable.trim() ? ` (Responsable: ${zone.responsable.trim()})` : '';
+    const detail = zone.observaciones ? ` - ${zone.observaciones}` : '';
+    return `- ${zone.label}${owner}${detail}`;
+  };
+
   const summaryLines = useMemo(() => {
     const rows: string[] = [];
     rows.push(`Vehiculo: ${selectedVehicle?.marca || ''} ${selectedVehicle?.modelo || ''} (${selectedVehicle?.placa || ''})`);
     rows.push(`Inspector: ${inspectorName || 'No especificado'}`);
     rows.push(`Fecha: ${inspectionDate}`);
     rows.push('');
-    rows.push(`Pendientes mecanicos/esteticos: ${failingItems.length}`);
-    failingItems.forEach((item) => {
-      const extras: string[] = [];
-      const value = getItemSpecificValue(item);
-      if (value) extras.push(value);
-      if (item.responsable.trim()) extras.push(`Responsable: ${item.responsable.trim()}`);
-      const meta = extras.length > 0 ? ` (${extras.join(' | ')})` : '';
-      const detail = item.observaciones ? ` - ${item.observaciones}` : '';
-      rows.push(`- ${item.label}${meta}${detail}`);
-    });
+    rows.push(
+      `Componentes evaluados: ${items.length} (Bien: ${passingItems.length} | Pendiente: ${failingItems.length})`
+    );
+    rows.push(
+      `Zonas visuales evaluadas: ${damageZones.length} (Bien: ${healthyZones.length} | Con dano: ${damagedZones.length})`
+    );
     rows.push('');
-    rows.push(`Zonas con dano visual: ${damagedZones.length}`);
-    damagedZones.forEach((zone) => {
-      const owner = zone.responsable.trim() ? ` (Responsable: ${zone.responsable.trim()})` : '';
-      const detail = zone.observaciones ? ` - ${zone.observaciones}` : '';
-      rows.push(`- ${zone.label}${owner}${detail}`);
-    });
+    rows.push('Componentes pendientes:');
+    if (failingItems.length === 0) {
+      rows.push('- Ninguno');
+    } else {
+      failingItems.forEach((item) => rows.push(formatItemSummaryLine(item)));
+    }
+    rows.push('');
+    rows.push('Componentes en buen estado:');
+    if (passingItems.length === 0) {
+      rows.push('- Ninguno');
+    } else {
+      passingItems.forEach((item) => rows.push(formatItemSummaryLine(item)));
+    }
+    rows.push('');
+    rows.push('Zonas con dano visual:');
+    if (damagedZones.length === 0) {
+      rows.push('- Ninguna');
+    } else {
+      damagedZones.forEach((zone) => rows.push(formatZoneSummaryLine(zone)));
+    }
+    rows.push('');
+    rows.push('Zonas en buen estado:');
+    if (healthyZones.length === 0) {
+      rows.push('- Ninguna');
+    } else {
+      healthyZones.forEach((zone) => rows.push(formatZoneSummaryLine(zone)));
+    }
     if (generalObservations.trim()) {
       rows.push('');
       rows.push('Observaciones generales:');
       rows.push(generalObservations.trim());
     }
     return rows.join('\n');
-  }, [selectedVehicle, inspectorName, inspectionDate, failingItems, damagedZones, generalObservations]);
+  }, [
+    selectedVehicle,
+    inspectorName,
+    inspectionDate,
+    items.length,
+    damageZones.length,
+    failingItems,
+    passingItems,
+    damagedZones,
+    healthyZones,
+    generalObservations,
+  ]);
 
   const updateItemStatus = (key: string, status: 'bien' | 'mal') => {
     setItems((prev) => prev.map((item) => (item.key === key ? { ...item, status } : item)));
@@ -440,14 +486,39 @@ const VehicleInspectionChecklist: React.FC = () => {
       y = secondRowY + imageHeight + 10;
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(11);
-      doc.text('Resumen de danos y pendientes', 14, y);
+      doc.text('Resumen completo del checklist', 14, y);
       y += 6;
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
       const summaryText = summaryLines || 'Sin observaciones registradas.';
-      const wrappedSummary = doc.splitTextToSize(summaryText, pageWidth - 28);
-      doc.text(wrappedSummary, 14, y);
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const lineHeight = 5;
+      const topMargin = 14;
+      const bottomMargin = 14;
+
+      const ensureLineSpace = () => {
+        if (y + lineHeight > pageHeight - bottomMargin) {
+          doc.addPage();
+          y = topMargin;
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(10);
+        }
+      };
+
+      summaryText.split('\n').forEach((line) => {
+        if (!line.trim()) {
+          ensureLineSpace();
+          y += lineHeight / 2;
+          return;
+        }
+        const wrappedLines = doc.splitTextToSize(line, pageWidth - 28) as string[];
+        wrappedLines.forEach((wrappedLine) => {
+          ensureLineSpace();
+          doc.text(wrappedLine, 14, y);
+          y += lineHeight;
+        });
+      });
 
       doc.save(`checklist-${selectedVehicle.placa}-${Date.now()}.pdf`);
     } catch (error: any) {
