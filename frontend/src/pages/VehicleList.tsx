@@ -27,9 +27,7 @@ const VehicleList: React.FC = () => {
 
   useEffect(() => {
     const estadoParam = searchParams.get('estado');
-    if (estadoParam) {
-      setFilterEstado(estadoParam);
-    }
+    setFilterEstado(estadoParam || 'todos');
   }, [searchParams]);
 
   useEffect(() => {
