@@ -59,10 +59,10 @@ const DAMAGE_ZONE_TEMPLATE: TemplateDamageZone[] = [
   { key: 'capo', label: 'Capo' },
   { key: 'techo', label: 'Techo' },
   { key: 'trasera', label: 'Parte trasera' },
-  { key: 'lateral_izq', label: 'Lateral izquierdo' },
-  { key: 'lateral_der', label: 'Lateral derecho' },
-  { key: 'puerta_izq', label: 'Puertas izquierdas' },
-  { key: 'puerta_der', label: 'Puertas derechas' },
+  { key: 'lateral_izq', label: 'Lateral derecho' },
+  { key: 'lateral_der', label: 'Lateral izquierdo' },
+  { key: 'puerta_izq', label: 'Puertas derechas' },
+  { key: 'puerta_der', label: 'Puertas izquierdas' },
 ];
 
 const createDefaultItems = (): VehicleInspectionItem[] =>
@@ -475,13 +475,13 @@ const VehicleInspectionChecklist: React.FC = () => {
       doc.setFontSize(10);
       doc.text('Frente', leftX, firstRowY - 2);
       doc.text('Trasera', rightX, firstRowY - 2);
-      doc.text('Lado izquierdo', leftX, secondRowY - 2);
-      doc.text('Lado derecho', rightX, secondRowY - 2);
+      doc.text('Lado derecho', leftX, secondRowY - 2);
+      doc.text('Lado izquierdo', rightX, secondRowY - 2);
 
       doc.addImage(captures.frente, 'PNG', leftX, firstRowY, imageWidth, imageHeight);
       doc.addImage(captures.trasera, 'PNG', rightX, firstRowY, imageWidth, imageHeight);
-      doc.addImage(captures.izquierda, 'PNG', leftX, secondRowY, imageWidth, imageHeight);
-      doc.addImage(captures.derecha, 'PNG', rightX, secondRowY, imageWidth, imageHeight);
+      doc.addImage(captures.derecha, 'PNG', leftX, secondRowY, imageWidth, imageHeight);
+      doc.addImage(captures.izquierda, 'PNG', rightX, secondRowY, imageWidth, imageHeight);
 
       y = secondRowY + imageHeight + 10;
       doc.setFont('helvetica', 'bold');
