@@ -82,6 +82,16 @@ const Dashboard: React.FC = () => {
       estado: 'listo_venta',
     },
     {
+      title: 'En Negociacion',
+      value: stats?.vehiculosEnNegociacion || 0,
+      icon: Users,
+      iconColor: 'text-[#8fd5e5]',
+      iconBg: 'bg-[#152027]',
+      valueColor: 'text-white',
+      clickable: true,
+      estado: 'en_negociacion',
+    },
+    {
       title: 'En Proceso',
       value: stats?.vehiculosPendientes || 0,
       icon: Clock,
@@ -264,6 +274,17 @@ const Dashboard: React.FC = () => {
                   <span className="font-medium text-ink-100">Ver Vehiculos Listos</span>
                 </div>
                 <span className="text-silver font-bold">{stats?.vehiculosListos || 0}</span>
+              </Link>
+
+              <Link
+                to="/vehicles?estado=en_negociacion"
+                className="flex items-center justify-between p-3 rounded-lg border border-[#2d3f47] bg-[#152027] hover:border-[#4e8896] transition-colors"
+              >
+                <div className="flex items-center space-x-3">
+                  <Users className="h-5 w-5 text-[#8fd5e5]" />
+                  <span className="font-medium text-ink-100">Ver Vehiculos en Negociacion</span>
+                </div>
+                <span className="font-bold text-[#8fd5e5]">{stats?.vehiculosEnNegociacion || 0}</span>
               </Link>
 
               <Link

@@ -37,7 +37,19 @@ export interface IVehicle {
   precioVenta: number;
   
   // Estado
-  estado: 'en_proceso' | 'listo_venta' | 'en_negociacion' | 'vendido' | 'retirado';
+  estado: 'en_proceso' | 'listo_venta' | 'en_negociacion' | 'separado' | 'vendido' | 'retirado';
+  datosTarjetaPropiedad?: {
+    linea: string;
+    cilindrada: string;
+    claseVehiculo: string;
+    servicio: string;
+    tipoCarroceria: string;
+    numeroMotor: string;
+    capacidad: string;
+    numeroChasis: string;
+    propietario: string;
+    identificacionPropietario: string;
+  };
   
   // Documentación
   documentacion: {
@@ -106,6 +118,7 @@ export interface IChecklistItem {
 export interface IEstadisticas {
   totalVehiculos: number;
   vehiculosListos: number;
+  vehiculosEnNegociacion: number;
   vehiculosPendientes: number;
   vehiculosVendidos: number;
   valorInventario: number;

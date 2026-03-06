@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
-import { DatosVenta } from '../types';
+import { DatosVenta, Vehicle } from '../types';
 import { useAuth } from '../context/AuthContext';
 
 interface SaleDataModalProps {
@@ -8,85 +8,158 @@ interface SaleDataModalProps {
   onClose: () => void;
   onSubmit: (data: DatosVenta) => void;
   vehiclePlaca: string;
-  initialData?: DatosVenta; // Datos iniciales para modo edición
-  isEditMode?: boolean; // Indica si es modo edición
+  vehicleData?: Vehicle | null;
+  initialData?: DatosVenta;
+  isEditMode?: boolean;
 }
+
+type PartialSaleData = {
+  vendedor?: Partial<DatosVenta['vendedor']>;
+  comprador?: Partial<DatosVenta['comprador']>;
+  vehiculoAdicional?: Partial<DatosVenta['vehiculoAdicional']>;
+  transaccion?: Partial<DatosVenta['transaccion']>;
+  comision?: Partial<DatosVenta['comision']>;
+};
+
+const stripDiacritics = (value: string) =>
+  value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+const normalizeTipoServicio = (value?: string) => {
+  const text = (value || '').trim();
+  if (!text) return 'PARTICULAR';
+
+  const normalized = stripDiacritics(text).toUpperCase();
+
+  if (normalized.includes('PUBLIC')) return 'PUBLICO';
+  if (normalized.includes('OFICIAL')) return 'OFICIAL';
+  if (normalized.includes('DIPLO')) return 'DIPLOMATICO';
+  if (normalized.includes('PARTIC')) return 'PARTICULAR';
+
+  return normalized;
+};
+
+const createBaseSaleData = (sellerName: string): DatosVenta => ({
+  vendedor: {
+    nombre: sellerName,
+    identificacion: '',
+    direccion: '',
+    telefono: '',
+  },
+  comprador: {
+    nombre: '',
+    identificacion: '',
+    direccion: '',
+    telefono: '',
+    email: '',
+  },
+  vehiculoAdicional: {
+    tipoCarroceria: '',
+    capacidad: '',
+    cilindrada: '',
+    claseVehiculo: '',
+    numeroPuertas: 4,
+    numeroMotor: '',
+    numeroChasis: '',
+    linea: '',
+    actaManifiesto: '',
+    sitioMatricula: '',
+    tipoServicio: 'PARTICULAR',
+  },
+  transaccion: {
+    lugarCelebracion: '',
+    fechaCelebracion: new Date().toISOString().split('T')[0],
+    precioLetras: '',
+    formaPago: '',
+    vendedorAnterior: '',
+    cedulaVendedorAnterior: '',
+    diasTraspaso: 30,
+    fechaEntrega: new Date().toISOString().split('T')[0],
+    horaEntrega: '',
+    domicilioContractual: '',
+    clausulasAdicionales: '',
+  },
+  comision: {
+    monto: 0,
+    porcentaje: 0,
+    descripcion: '',
+  },
+});
+
+const mergeSaleData = (base: DatosVenta, override?: PartialSaleData): DatosVenta => ({
+  ...base,
+  ...override,
+  vendedor: {
+    ...base.vendedor,
+    ...(override?.vendedor || {}),
+  },
+  comprador: {
+    ...base.comprador,
+    ...(override?.comprador || {}),
+  },
+  vehiculoAdicional: {
+    ...base.vehiculoAdicional,
+    ...(override?.vehiculoAdicional || {}),
+  },
+  transaccion: {
+    ...base.transaccion,
+    ...(override?.transaccion || {}),
+  },
+  comision: {
+    ...base.comision,
+    ...(override?.comision || {}),
+  },
+});
+
+const buildSaleFormData = (
+  sellerName: string,
+  vehicleData?: Vehicle | null,
+  initialData?: DatosVenta
+): DatosVenta => {
+  const baseData = createBaseSaleData(sellerName);
+  const cardData = vehicleData?.datosTarjetaPropiedad;
+
+  const cardDefaults: PartialSaleData = {
+    vehiculoAdicional: {
+      tipoCarroceria: cardData?.tipoCarroceria || '',
+      capacidad: cardData?.capacidad || '',
+      cilindrada: cardData?.cilindrada || '',
+      claseVehiculo: cardData?.claseVehiculo || '',
+      numeroPuertas: baseData.vehiculoAdicional.numeroPuertas,
+      numeroMotor: cardData?.numeroMotor || '',
+      numeroChasis: cardData?.numeroChasis || vehicleData?.vin || '',
+      linea: cardData?.linea || '',
+      actaManifiesto: '',
+      sitioMatricula: '',
+      tipoServicio: normalizeTipoServicio(cardData?.servicio),
+    },
+    transaccion: {
+      vendedorAnterior: cardData?.propietario || '',
+      cedulaVendedorAnterior: cardData?.identificacionPropietario || '',
+    },
+  };
+
+  return mergeSaleData(mergeSaleData(baseData, cardDefaults), initialData);
+};
 
 const SaleDataModal: React.FC<SaleDataModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
   vehiclePlaca,
+  vehicleData,
   initialData,
   isEditMode = false,
 }) => {
   const { user } = useAuth();
-  
-  // Inicializar el formulario con datos iniciales o valores por defecto
-  const getInitialData = () => {
-    if (initialData) return initialData;
-    
-    // Si es una nueva venta (no modo edición), autocompletar con el usuario actual
-    return {
-      vendedor: {
-        nombre: user?.nombre || user?.email || '',
-        identificacion: '',
-        direccion: '',
-        telefono: '',
-      },
-      comprador: {
-        nombre: '',
-        identificacion: '',
-        direccion: '',
-        telefono: '',
-        email: '',
-      },
-      vehiculoAdicional: {
-        tipoCarroceria: '',
-        capacidad: '',
-        numeroPuertas: 4,
-        numeroMotor: '',
-        linea: '',
-        actaManifiesto: '',
-        sitioMatricula: '',
-        tipoServicio: 'PARTICULAR',
-      },
-      transaccion: {
-        lugarCelebracion: '',
-        fechaCelebracion: new Date().toISOString().split('T')[0],
-        precioLetras: '',
-        formaPago: '',
-        vendedorAnterior: '',
-        cedulaVendedorAnterior: '',
-        diasTraspaso: 30,
-        fechaEntrega: new Date().toISOString().split('T')[0],
-        horaEntrega: '',
-        domicilioContractual: '',
-        clausulasAdicionales: '',
-      },
-      comision: {
-        monto: 0,
-        porcentaje: 0,
-        descripcion: '',
-      },
-    };
-  };
+  const sellerName = user?.nombre || user?.email || '';
+  const [formData, setFormData] = useState<DatosVenta>(() =>
+    buildSaleFormData(sellerName, vehicleData, initialData)
+  );
 
-  const [formData, setFormData] = useState<DatosVenta>(getInitialData());
-
-  // Actualizar el formulario cuando cambia el modo o el usuario
   useEffect(() => {
-    if (!isEditMode && user) {
-      // Solo autocompletar si es modo creación y tenemos el usuario
-      setFormData(prev => ({
-        ...prev,
-        vendedor: {
-          ...prev.vendedor,
-          nombre: prev.vendedor.nombre || user.nombre || user.email || ''
-        }
-      }));
-    }
-  }, [user, isEditMode]);
+    if (!isOpen) return;
+    setFormData(buildSaleFormData(sellerName, vehicleData, initialData));
+  }, [initialData, isOpen, sellerName, vehicleData]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,6 +168,7 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
       ...formData,
       vehiculoAdicional: {
         ...formData.vehiculoAdicional,
+        tipoServicio: normalizeTipoServicio(formData.vehiculoAdicional.tipoServicio),
         numeroPuertas: Number.isFinite(formData.vehiculoAdicional.numeroPuertas)
           ? formData.vehiculoAdicional.numeroPuertas
           : 4,
@@ -110,44 +184,45 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
     onSubmit(normalizedData);
   };
 
-  const updateVendedor = (field: string, value: string) => {
-    setFormData({
-      ...formData,
-      vendedor: { ...formData.vendedor, [field]: value },
-    });
+  const updateVendedor = (field: keyof DatosVenta['vendedor'], value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      vendedor: { ...prev.vendedor, [field]: value },
+    }));
   };
 
-  const updateComprador = (field: string, value: string) => {
-    setFormData({
-      ...formData,
-      comprador: { ...formData.comprador, [field]: value },
-    });
+  const updateComprador = (field: keyof DatosVenta['comprador'], value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      comprador: { ...prev.comprador, [field]: value },
+    }));
   };
 
-  const updateVehiculoAdicional = (field: string, value: string | number) => {
-    setFormData({
-      ...formData,
-      vehiculoAdicional: { ...formData.vehiculoAdicional, [field]: value },
-    });
+  const updateVehiculoAdicional = (
+    field: keyof DatosVenta['vehiculoAdicional'],
+    value: string | number
+  ) => {
+    setFormData((prev) => ({
+      ...prev,
+      vehiculoAdicional: { ...prev.vehiculoAdicional, [field]: value },
+    }));
   };
 
-  const updateTransaccion = (field: string, value: string | number) => {
-    setFormData({
-      ...formData,
-      transaccion: { ...formData.transaccion, [field]: value },
-    });
+  const updateTransaccion = (
+    field: keyof DatosVenta['transaccion'],
+    value: string | number
+  ) => {
+    setFormData((prev) => ({
+      ...prev,
+      transaccion: { ...prev.transaccion, [field]: value },
+    }));
   };
 
-  const updateComision = (field: string, value: string | number) => {
-    setFormData({
-      ...formData,
-      comision: { ...formData.comision, [field]: value },
-    });
-  };
-
-  // Función para calcular monto de comisión basado en porcentaje
-  const calcularMontoComision = (porcentaje: number, precioVenta: number) => {
-    return (porcentaje / 100) * precioVenta;
+  const updateComision = (field: keyof DatosVenta['comision'], value: string | number) => {
+    setFormData((prev) => ({
+      ...prev,
+      comision: { ...prev.comision, [field]: value },
+    }));
   };
 
   if (!isOpen) return null;
@@ -155,11 +230,17 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-gray-900">
-            {isEditMode ? 'Editar' : 'Registrar'} Datos de Venta - {vehiclePlaca}
-          </h2>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">
+              {isEditMode ? 'Editar' : 'Registrar'} Datos de Venta - {vehiclePlaca}
+            </h2>
+            {vehicleData?.datosTarjetaPropiedad && (
+              <p className="text-sm text-gray-500 mt-1">
+                Se precargaron datos de tarjeta de propiedad para evitar diligenciarlos de nuevo.
+              </p>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -169,7 +250,6 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-8">
-          {/* DATOS DEL VENDEDOR */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
               Datos del Vendedor
@@ -185,12 +265,12 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
                   value={formData.vendedor.nombre}
                   onChange={(e) => updateVendedor('nombre', e.target.value)}
                   className="input"
-                  placeholder="Ej: Juan Pérez García"
+                  placeholder="Ej: Juan Perez Garcia"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Cédula/NIT *
+                  Cedula/NIT *
                 </label>
                 <input
                   type="text"
@@ -203,7 +283,7 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Dirección *
+                  Direccion *
                 </label>
                 <input
                   type="text"
@@ -216,7 +296,7 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Teléfono *
+                  Telefono *
                 </label>
                 <input
                   type="tel"
@@ -230,15 +310,14 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
             </div>
           </div>
 
-          {/* COMISIÓN DEL VENDEDOR */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
-              Comisión del Vendedor
+              Comision del Vendedor
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Monto de Comisión ($)
+                  Monto de Comision ($)
                 </label>
                 <input
                   type="number"
@@ -249,11 +328,11 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
                   className="input"
                   placeholder="Ej: 500000"
                 />
-                <p className="text-xs text-gray-500 mt-1">Monto fijo a pagar al vendedor</p>
+                <p className="text-xs text-gray-500 mt-1">Monto fijo a pagar al vendedor.</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Porcentaje de Comisión (%)
+                  Porcentaje de Comision (%)
                 </label>
                 <input
                   type="number"
@@ -265,34 +344,31 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
                   className="input"
                   placeholder="Ej: 5"
                 />
-                <p className="text-xs text-gray-500 mt-1">% del precio de venta</p>
+                <p className="text-xs text-gray-500 mt-1">% del precio de venta.</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Descripción
+                  Descripcion
                 </label>
                 <input
                   type="text"
                   value={formData.comision.descripcion}
                   onChange={(e) => updateComision('descripcion', e.target.value)}
                   className="input"
-                  placeholder="Ej: Comisión por cierre de venta"
+                  placeholder="Ej: Comision por cierre de venta"
                 />
-                <p className="text-xs text-gray-500 mt-1">Concepto o nota adicional</p>
+                <p className="text-xs text-gray-500 mt-1">Concepto o nota adicional.</p>
               </div>
             </div>
-            {/* Mostrar cálculo automático si hay porcentaje */}
             {formData.comision.porcentaje > 0 && (
               <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-800">
-                  <strong>Nota:</strong> Si ingresa tanto monto como porcentaje, se utilizará el monto fijo. 
-                  El porcentaje es solo referencial para cálculo automático.
+                  <strong>Nota:</strong> si ingresas monto y porcentaje, se usara el monto fijo.
                 </p>
               </div>
             )}
           </div>
 
-          {/* DATOS DEL COMPRADOR */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
               Datos del Comprador
@@ -308,12 +384,12 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
                   value={formData.comprador.nombre}
                   onChange={(e) => updateComprador('nombre', e.target.value)}
                   className="input"
-                  placeholder="Ej: María López Rodríguez"
+                  placeholder="Ej: Maria Lopez Rodriguez"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Cédula/NIT *
+                  Cedula/NIT *
                 </label>
                 <input
                   type="text"
@@ -326,7 +402,7 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Dirección *
+                  Direccion *
                 </label>
                 <input
                   type="text"
@@ -339,7 +415,7 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Teléfono *
+                  Telefono *
                 </label>
                 <input
                   type="tel"
@@ -352,7 +428,7 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
               </div>
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Correo Electrónico *
+                  Correo Electronico *
                 </label>
                 <input
                   type="email"
@@ -366,22 +442,21 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
             </div>
           </div>
 
-          {/* DATOS ADICIONALES DEL VEHÍCULO */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
-              Datos Adicionales del Vehículo
+              Datos Adicionales del Vehiculo
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tipo de Carrocería
+                  Tipo de Carroceria
                 </label>
                 <input
                   type="text"
                   value={formData.vehiculoAdicional.tipoCarroceria}
                   onChange={(e) => updateVehiculoAdicional('tipoCarroceria', e.target.value)}
                   className="input"
-                  placeholder="Ej: Sedán, SUV, Camioneta"
+                  placeholder="Ej: Sedan, SUV, Camioneta"
                 />
               </div>
               <div>
@@ -398,7 +473,31 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Número de Puertas
+                  Cilindrada
+                </label>
+                <input
+                  type="text"
+                  value={formData.vehiculoAdicional.cilindrada}
+                  onChange={(e) => updateVehiculoAdicional('cilindrada', e.target.value)}
+                  className="input"
+                  placeholder="Ej: 1600"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Clase de Vehiculo
+                </label>
+                <input
+                  type="text"
+                  value={formData.vehiculoAdicional.claseVehiculo}
+                  onChange={(e) => updateVehiculoAdicional('claseVehiculo', e.target.value)}
+                  className="input"
+                  placeholder="Ej: Automovil"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Numero de Puertas
                 </label>
                 <input
                   type="number"
@@ -414,7 +513,7 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Número de Motor
+                  Numero de Motor
                 </label>
                 <input
                   type="text"
@@ -426,7 +525,19 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Línea
+                  Numero de Chasis
+                </label>
+                <input
+                  type="text"
+                  value={formData.vehiculoAdicional.numeroChasis}
+                  onChange={(e) => updateVehiculoAdicional('numeroChasis', e.target.value)}
+                  className="input"
+                  placeholder="Ej: 9BWZZZ377VT004251"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Linea
                 </label>
                 <input
                   type="text"
@@ -450,14 +561,14 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Sitio de Matrícula
+                  Sitio de Matricula
                 </label>
                 <input
                   type="text"
                   value={formData.vehiculoAdicional.sitioMatricula}
                   onChange={(e) => updateVehiculoAdicional('sitioMatricula', e.target.value)}
                   className="input"
-                  placeholder="Ej: Bogotá"
+                  placeholder="Ej: Bogota"
                 />
               </div>
               <div>
@@ -465,28 +576,27 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
                   Tipo de Servicio
                 </label>
                 <select
-                  value={formData.vehiculoAdicional.tipoServicio}
+                  value={normalizeTipoServicio(formData.vehiculoAdicional.tipoServicio)}
                   onChange={(e) => updateVehiculoAdicional('tipoServicio', e.target.value)}
                   className="input"
                 >
                   <option value="PARTICULAR">Particular</option>
-                  <option value="PUBLICO">Público</option>
+                  <option value="PUBLICO">Publico</option>
                   <option value="OFICIAL">Oficial</option>
-                  <option value="DIPLOMATICO">Diplomático</option>
+                  <option value="DIPLOMATICO">Diplomatico</option>
                 </select>
               </div>
             </div>
           </div>
 
-          {/* DATOS DE LA TRANSACCIÓN */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
-              Datos de la Transacción
+              Datos de la Transaccion
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Lugar de Celebración *
+                  Lugar de Celebracion *
                 </label>
                 <input
                   type="text"
@@ -494,12 +604,12 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
                   value={formData.transaccion.lugarCelebracion}
                   onChange={(e) => updateTransaccion('lugarCelebracion', e.target.value)}
                   className="input"
-                  placeholder="Ej: Bogotá D.C."
+                  placeholder="Ej: Bogota D.C."
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Fecha de Celebración *
+                  Fecha de Celebracion *
                 </label>
                 <input
                   type="date"
@@ -521,9 +631,6 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
                   className="input"
                   placeholder="Ej: CINCUENTA MILLONES DE PESOS COLOMBIANOS"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Escribe el precio en letras mayúsculas
-                </p>
               </div>
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -535,36 +642,36 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
                   onChange={(e) => updateTransaccion('formaPago', e.target.value)}
                   className="input"
                   rows={3}
-                  placeholder="Ej: Pago de contado en efectivo / Transferencia bancaria / Cuotas mensuales de..."
+                  placeholder="Ej: Pago de contado / Transferencia bancaria / Cuotas..."
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Vendedor Anterior
+                  Propietario / Vendedor Anterior
                 </label>
                 <input
                   type="text"
                   value={formData.transaccion.vendedorAnterior}
                   onChange={(e) => updateTransaccion('vendedorAnterior', e.target.value)}
                   className="input"
-                  placeholder="De quien se compró el vehículo"
+                  placeholder="Se precarga desde la tarjeta de propiedad"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Cédula Vendedor Anterior
+                  Identificacion del Propietario
                 </label>
                 <input
                   type="text"
                   value={formData.transaccion.cedulaVendedorAnterior}
                   onChange={(e) => updateTransaccion('cedulaVendedorAnterior', e.target.value)}
                   className="input"
-                  placeholder="Ej: 1234567890"
+                  placeholder="Se precarga desde la tarjeta de propiedad"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Días para Traspaso *
+                  Dias para Traspaso *
                 </label>
                 <input
                   type="number"
@@ -612,37 +719,29 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
                   value={formData.transaccion.domicilioContractual}
                   onChange={(e) => updateTransaccion('domicilioContractual', e.target.value)}
                   className="input"
-                  placeholder="Ej: Bogotá D.C."
+                  placeholder="Ej: Bogota D.C."
                 />
               </div>
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Cláusulas Adicionales
+                  Clausulas Adicionales
                 </label>
                 <textarea
                   value={formData.transaccion.clausulasAdicionales}
                   onChange={(e) => updateTransaccion('clausulasAdicionales', e.target.value)}
                   className="input"
                   rows={4}
-                  placeholder="Cláusulas adicionales del contrato (opcional)"
+                  placeholder="Clausulas adicionales del contrato (opcional)"
                 />
               </div>
             </div>
           </div>
 
-          {/* Botones */}
           <div className="flex justify-end space-x-3 pt-4 border-t">
-            <button
-              type="button"
-              onClick={onClose}
-              className="btn-secondary"
-            >
+            <button type="button" onClick={onClose} className="btn-secondary">
               Cancelar
             </button>
-            <button
-              type="submit"
-              className="btn-primary"
-            >
+            <button type="submit" className="btn-primary">
               {isEditMode ? 'Actualizar Datos de Venta' : 'Guardar, Vender y Generar Documentos'}
             </button>
           </div>

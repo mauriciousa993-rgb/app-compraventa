@@ -98,8 +98,11 @@ export interface DatosVenta {
   vehiculoAdicional: {
     tipoCarroceria: string;
     capacidad: string;
+    cilindrada: string;
+    claseVehiculo: string;
     numeroPuertas: number;
     numeroMotor: string;
+    numeroChasis: string;
     linea: string;
     actaManifiesto: string;
     sitioMatricula: string;
@@ -124,6 +127,19 @@ export interface DatosVenta {
     porcentaje: number;
     descripcion: string;
   };
+}
+
+export interface DatosTarjetaPropiedad {
+  linea: string;
+  cilindrada: string;
+  claseVehiculo: string;
+  servicio: string;
+  tipoCarroceria: string;
+  numeroMotor: string;
+  capacidad: string;
+  numeroChasis: string;
+  propietario: string;
+  identificacionPropietario: string;
 }
 
 export type InspectionStatus = 'bien' | 'mal';
@@ -211,6 +227,7 @@ export interface Vehicle {
   tieneInversionistas: boolean;
   estado: 'en_proceso' | 'listo_venta' | 'en_negociacion' | 'separado' | 'vendido' | 'retirado';
   estadoTramite?: 'firma_documentos' | 'radicacion' | 'recepcion_tarjeta' | 'entrega_cliente' | 'completado';
+  datosTarjetaPropiedad?: DatosTarjetaPropiedad;
   documentacion: {
     prenda: {
       tiene: boolean;
@@ -268,6 +285,7 @@ export interface Vehicle {
 export interface Statistics {
   totalVehiculos: number;
   vehiculosListos: number;
+  vehiculosEnNegociacion?: number;
   vehiculosPendientes: number;
   vehiculosVendidos: number;
   // Valores del sistema (totales)

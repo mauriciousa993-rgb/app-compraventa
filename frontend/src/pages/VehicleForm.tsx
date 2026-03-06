@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Upload, Save, Image, X, Plus, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, Upload, Save, Image, X, Plus, Trash2, Users, FileText } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
 import api, { buildVehiclePhotoUrl, vehiclesAPI } from '../services/api';
-import { DatosVenta } from '../types';
+import { readVehicleCard, VehicleCardReaderResult } from '../utils/vehicleCardReader';
 
 const VehicleForm: React.FC = () => {
   const navigate = useNavigate();
@@ -66,6 +66,18 @@ const VehicleForm: React.FC = () => {
     estado: 'en_proceso',
     estadoTramite: '',
     fechaVenta: '',
+    datosTarjetaPropiedad: {
+      linea: '',
+      cilindrada: '',
+      claseVehiculo: '',
+      servicio: '',
+      tipoCarroceria: '',
+      numeroMotor: '',
+      capacidad: '',
+      numeroChasis: '',
+      propietario: '',
+      identificacionPropietario: ''
+    },
     
     // Documentación
     documentacion: {
@@ -115,14 +127,31 @@ const VehicleForm: React.FC = () => {
   const [photoPreview, setPhotoPreview] = useState<string>('');
   const [usuarios, setUsuarios] = useState<Array<{ id: string; nombre: string; email: string }>>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const propertyCardInputRef = useRef<HTMLInputElement | null>(null);
+  const [propertyCardFile, setPropertyCardFile] = useState<File | null>(null);
+  const [propertyCardPreview, setPropertyCardPreview] = useState('');
+  const [isReadingPropertyCard, setIsReadingPropertyCard] = useState(false);
+  const [propertyCardProgress, setPropertyCardProgress] = useState(0);
+  const [propertyCardError, setPropertyCardError] = useState('');
+  const [propertyCardResult, setPropertyCardResult] = useState<VehicleCardReaderResult | null>(null);
 
   const getLastPhoto = (photos?: string[]): string => {
     if (!photos || photos.length === 0) return '';
     return photos[photos.length - 1];
   };
+
+  const detectedCardData = propertyCardResult?.extracted;
+
+  const readFileAsDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve((reader.result as string) || '');
+      reader.onerror = () => reject(new Error('No se pudo leer el archivo seleccionado.'));
+      reader.readAsDataURL(file);
+    });
   
   // Estado para datos de venta
-  const [datosVenta, setDatosVenta] = useState<DatosVenta>({
+  useState({
     vendedor: {
       nombre: '',
       identificacion: '',
@@ -247,6 +276,18 @@ const VehicleForm: React.FC = () => {
         fechaVenta: vehicle.fechaVenta 
           ? new Date(vehicle.fechaVenta).toISOString().split('T')[0]
           : '',
+        datosTarjetaPropiedad: {
+          linea: vehicle.datosTarjetaPropiedad?.linea || '',
+          cilindrada: vehicle.datosTarjetaPropiedad?.cilindrada || '',
+          claseVehiculo: vehicle.datosTarjetaPropiedad?.claseVehiculo || '',
+          servicio: vehicle.datosTarjetaPropiedad?.servicio || '',
+          tipoCarroceria: vehicle.datosTarjetaPropiedad?.tipoCarroceria || '',
+          numeroMotor: vehicle.datosTarjetaPropiedad?.numeroMotor || '',
+          capacidad: vehicle.datosTarjetaPropiedad?.capacidad || '',
+          numeroChasis: vehicle.datosTarjetaPropiedad?.numeroChasis || '',
+          propietario: vehicle.datosTarjetaPropiedad?.propietario || '',
+          identificacionPropietario: vehicle.datosTarjetaPropiedad?.identificacionPropietario || ''
+        },
         documentacion: {
           prenda: {
             tiene: vehicle.documentacion?.prenda?.tiene || false,
@@ -294,6 +335,11 @@ const VehicleForm: React.FC = () => {
         '';
       setSelectedFile(null);
       setPhotoPreview(mainPhoto ? buildVehiclePhotoUrl(mainPhoto) : '');
+      setPropertyCardFile(null);
+      setPropertyCardPreview('');
+      setPropertyCardResult(null);
+      setPropertyCardError('');
+      setPropertyCardProgress(0);
     } catch (err: any) {
       console.error('Error al cargar vehículo:', err);
       setError(err.response?.data?.message || 'Error al cargar los datos del vehículo');
@@ -371,12 +417,9 @@ const VehicleForm: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file);
-      // Crear preview
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhotoPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      readFileAsDataUrl(file)
+        .then((preview) => setPhotoPreview(preview))
+        .catch((err: Error) => setError(err.message));
     }
   };
 
@@ -387,6 +430,143 @@ const VehicleForm: React.FC = () => {
 
   const openFilePicker = () => {
     fileInputRef.current?.click();
+  };
+
+  const applyPropertyCardData = (ocrResult: VehicleCardReaderResult) => {
+    const { extracted } = ocrResult;
+
+    setFormData((prev) => ({
+      ...prev,
+      marca: extracted.marca || prev.marca,
+      modelo: extracted.modelo || prev.modelo,
+      tipoVehiculo: extracted.tipoVehiculo || prev.tipoVehiculo,
+      año: extracted.año || prev.año,
+      placa: extracted.placa || prev.placa,
+      vin: extracted.vin || extracted.numeroChasis || prev.vin,
+      color: extracted.color || prev.color,
+      datosTarjetaPropiedad: {
+        ...prev.datosTarjetaPropiedad,
+        linea: extracted.linea || prev.datosTarjetaPropiedad.linea,
+        cilindrada: extracted.cilindrada || prev.datosTarjetaPropiedad.cilindrada,
+        claseVehiculo: extracted.claseVehiculo || prev.datosTarjetaPropiedad.claseVehiculo,
+        servicio: extracted.servicio || prev.datosTarjetaPropiedad.servicio,
+        tipoCarroceria: extracted.tipoCarroceria || prev.datosTarjetaPropiedad.tipoCarroceria,
+        numeroMotor: extracted.numeroMotor || prev.datosTarjetaPropiedad.numeroMotor,
+        capacidad: extracted.capacidad || prev.datosTarjetaPropiedad.capacidad,
+        numeroChasis: extracted.numeroChasis || prev.datosTarjetaPropiedad.numeroChasis,
+        propietario: extracted.propietario || prev.datosTarjetaPropiedad.propietario,
+        identificacionPropietario:
+          extracted.identificacionPropietario || prev.datosTarjetaPropiedad.identificacionPropietario,
+      },
+      documentacion: {
+        ...prev.documentacion,
+        prenda: {
+          ...prev.documentacion.prenda,
+          tiene: extracted.prenda ? true : prev.documentacion.prenda.tiene,
+          detalles: extracted.prenda || prev.documentacion.prenda.detalles,
+        },
+        tarjetaPropiedad: {
+          ...prev.documentacion.tarjetaPropiedad,
+          tiene: true,
+        },
+      },
+    }));
+  };
+
+  const runPropertyCardReader = async (file: File) => {
+    setIsReadingPropertyCard(true);
+    setPropertyCardError('');
+    setPropertyCardResult(null);
+    setPropertyCardProgress(0);
+
+    try {
+      const preview = await readFileAsDataUrl(file);
+      setPropertyCardPreview(preview);
+
+      const result = await readVehicleCard(file, setPropertyCardProgress);
+      setPropertyCardResult(result);
+
+      if (result.detectedFields === 0) {
+        setPropertyCardError('Se leyó la imagen, pero no se detectaron campos claros. Prueba con una foto más nítida o mejor iluminada.');
+        return;
+      }
+
+      applyPropertyCardData(result);
+      setFormData((prev) => ({
+        ...prev,
+        documentacion: {
+          ...prev.documentacion,
+          tarjetaPropiedad: {
+            ...prev.documentacion.tarjetaPropiedad,
+            tiene: true,
+          },
+        },
+      }));
+    } catch (err: any) {
+      console.error('Error al leer tarjeta de propiedad:', err);
+      setPropertyCardError(
+        err?.message || 'No se pudo procesar la tarjeta de propiedad. Intenta con una imagen más clara.'
+      );
+    } finally {
+      setIsReadingPropertyCard(false);
+    }
+  };
+
+  const handlePropertyCardChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setPropertyCardFile(file);
+    setFormData((prev) => ({
+      ...prev,
+      documentacion: {
+        ...prev.documentacion,
+        tarjetaPropiedad: {
+          ...prev.documentacion.tarjetaPropiedad,
+          tiene: true,
+        },
+      },
+    }));
+    await runPropertyCardReader(file);
+  };
+
+  const removePropertyCardFile = () => {
+    setPropertyCardFile(null);
+    setPropertyCardPreview('');
+    setPropertyCardResult(null);
+    setPropertyCardError('');
+    setPropertyCardProgress(0);
+
+    if (propertyCardInputRef.current) {
+      propertyCardInputRef.current.value = '';
+    }
+  };
+
+  const openPropertyCardPicker = () => {
+    propertyCardInputRef.current?.click();
+  };
+
+  const updateCardData = (
+    field:
+      | 'linea'
+      | 'cilindrada'
+      | 'claseVehiculo'
+      | 'servicio'
+      | 'tipoCarroceria'
+      | 'numeroMotor'
+      | 'capacidad'
+      | 'numeroChasis'
+      | 'propietario'
+      | 'identificacionPropietario',
+    value: string
+  ) => {
+    setFormData((prev) => ({
+      ...prev,
+      datosTarjetaPropiedad: {
+        ...prev.datosTarjetaPropiedad,
+        [field]: value,
+      },
+    }));
   };
 
   // Funciones para manejar inversionistas
@@ -580,7 +760,8 @@ const VehicleForm: React.FC = () => {
       }
 
       // Si hay una foto seleccionada, subirla
-      if (selectedFile && vehicleId) {
+      if (vehicleId) {
+        if (selectedFile) {
         console.log('📸 Subiendo foto...');
         try {
           await vehiclesAPI.uploadPhotos(vehicleId, 'exteriores', [selectedFile]);
@@ -597,6 +778,26 @@ const VehicleForm: React.FC = () => {
             return;
           }
           throw photoErr;
+        }
+        }
+
+        if (propertyCardFile) {
+          try {
+            await vehiclesAPI.uploadPhotos(vehicleId, 'documentos', [propertyCardFile]);
+          } catch (documentErr: any) {
+            console.error('Error al subir tarjeta de propiedad:', documentErr);
+            if (vehicleUpdated) {
+              setError(
+                `Vehiculo ${isEditMode ? 'actualizado' : 'creado'} correctamente, pero hubo un error al subir la tarjeta de propiedad: ${documentErr.message || 'Error desconocido'}`
+              );
+              setSuccess(true);
+              setTimeout(() => {
+                navigate('/dashboard');
+              }, 3000);
+              return;
+            }
+            throw documentErr;
+          }
         }
       }
 
@@ -687,6 +888,319 @@ const VehicleForm: React.FC = () => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="card">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="mb-1 text-xl font-semibold text-gray-900">
+                  <FileText className="mr-2 inline h-5 w-5" />
+                  Lector de Tarjeta de Propiedad
+                </h2>
+                <p className="text-sm text-gray-600">
+                  Sube una foto clara de la tarjeta y la app intentara completar placa, marca, modelo, año, color y VIN.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={openPropertyCardPicker}
+                className="btn-secondary whitespace-nowrap"
+                disabled={isReadingPropertyCard}
+              >
+                {propertyCardFile ? 'Cambiar tarjeta' : 'Subir tarjeta'}
+              </button>
+            </div>
+
+            <input
+              ref={propertyCardInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handlePropertyCardChange}
+            />
+
+            {!propertyCardPreview ? (
+              <button
+                type="button"
+                onClick={openPropertyCardPicker}
+                className="flex w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-6 py-10 text-center transition-colors hover:bg-gray-100"
+                disabled={isReadingPropertyCard}
+              >
+                <Upload className="mb-3 h-10 w-10 text-gray-400" />
+                <span className="text-sm font-semibold text-gray-700">Seleccionar imagen de la tarjeta</span>
+                <span className="mt-1 text-xs text-gray-500">JPG o PNG. Entre mejor iluminada y centrada, mejor la lectura.</span>
+              </button>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_1fr]">
+                <div className="space-y-3">
+                  <img
+                    src={propertyCardPreview}
+                    alt="Tarjeta de propiedad"
+                    className="h-56 w-full rounded-lg border border-gray-200 object-cover"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={openPropertyCardPicker}
+                      className="btn-secondary"
+                      disabled={isReadingPropertyCard}
+                    >
+                      Cambiar imagen
+                    </button>
+                    <button
+                      type="button"
+                      onClick={removePropertyCardFile}
+                      className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-4 py-2 text-red-700 hover:bg-red-50"
+                      disabled={isReadingPropertyCard}
+                    >
+                      <X className="h-4 w-4" />
+                      Quitar
+                    </button>
+                  </div>
+                  {propertyCardFile && (
+                    <p className="text-xs text-gray-500">
+                      Archivo: <strong>{propertyCardFile.name}</strong>
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-semibold text-blue-900">Estado de lectura</p>
+                        <p className="text-sm text-blue-700">
+                          {isReadingPropertyCard
+                            ? `Leyendo tarjeta... ${propertyCardProgress}%`
+                            : propertyCardResult
+                              ? `Lectura completada con ${Math.round(propertyCardResult.confidence)}% de confianza.`
+                              : 'La lectura comenzara al seleccionar una imagen.'}
+                        </p>
+                      </div>
+                      {isReadingPropertyCard && (
+                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
+                      )}
+                    </div>
+                    {isReadingPropertyCard && (
+                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-blue-100">
+                        <div
+                          className="h-full rounded-full bg-blue-500 transition-all"
+                          style={{ width: `${propertyCardProgress}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {propertyCardError && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                      {propertyCardError}
+                    </div>
+                  )}
+
+                  {propertyCardResult && (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Placa</p>
+                          <p className="mt-1 text-sm font-semibold text-gray-900">{detectedCardData?.placa || 'No detectada'}</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Marca</p>
+                          <p className="mt-1 text-sm font-semibold text-gray-900">{detectedCardData?.marca || 'No detectada'}</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Modelo / Linea</p>
+                          <p className="mt-1 text-sm font-semibold text-gray-900">{detectedCardData?.modelo || 'No detectado'}</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Año</p>
+                          <p className="mt-1 text-sm font-semibold text-gray-900">{detectedCardData?.año || 'No detectado'}</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Color</p>
+                          <p className="mt-1 text-sm font-semibold text-gray-900">{detectedCardData?.color || 'No detectado'}</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">VIN / Chasis</p>
+                          <p className="mt-1 break-all text-sm font-semibold text-gray-900">{detectedCardData?.vin || 'No detectado'}</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Linea</p>
+                          <p className="mt-1 text-sm font-semibold text-gray-900">{detectedCardData?.linea || 'No detectada'}</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Cilindrada</p>
+                          <p className="mt-1 text-sm font-semibold text-gray-900">{detectedCardData?.cilindrada || 'No detectada'}</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Clase</p>
+                          <p className="mt-1 text-sm font-semibold text-gray-900">{detectedCardData?.claseVehiculo || 'No detectada'}</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Servicio</p>
+                          <p className="mt-1 text-sm font-semibold text-gray-900">{detectedCardData?.servicio || 'No detectado'}</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Carroceria</p>
+                          <p className="mt-1 text-sm font-semibold text-gray-900">{detectedCardData?.tipoCarroceria || 'No detectada'}</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Motor</p>
+                          <p className="mt-1 text-sm font-semibold text-gray-900">{detectedCardData?.numeroMotor || 'No detectado'}</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Capacidad</p>
+                          <p className="mt-1 text-sm font-semibold text-gray-900">{detectedCardData?.capacidad || 'No detectada'}</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Propietario</p>
+                          <p className="mt-1 text-sm font-semibold text-gray-900">{detectedCardData?.propietario || 'No detectado'}</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Identificacion</p>
+                          <p className="mt-1 text-sm font-semibold text-gray-900">{detectedCardData?.identificacionPropietario || 'No detectada'}</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Prenda</p>
+                          <p className="mt-1 text-sm font-semibold text-gray-900">{detectedCardData?.prenda || 'No detectada'}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          onClick={() => propertyCardResult && applyPropertyCardData(propertyCardResult)}
+                          className="btn-primary"
+                          disabled={isReadingPropertyCard || propertyCardResult.detectedFields === 0}
+                        >
+                          Aplicar datos otra vez
+                        </button>
+                        <p className="self-center text-xs text-gray-500">
+                          La tarjeta se adjuntara al guardar el vehiculo dentro de los documentos cargados.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-gray-700">Texto OCR detectado</label>
+                        <textarea
+                          value={propertyCardResult.rawText}
+                          readOnly
+                          rows={6}
+                          className="input-field text-xs"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="card">
+            <h2 className="text-xl font-semibold mb-4 text-gray-900">Datos de Tarjeta de Propiedad</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Linea</label>
+                <input
+                  type="text"
+                  value={formData.datosTarjetaPropiedad.linea}
+                  onChange={(e) => updateCardData('linea', e.target.value)}
+                  className="input-field"
+                  placeholder="Ej: Corolla XEi"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Cilindrada</label>
+                <input
+                  type="text"
+                  value={formData.datosTarjetaPropiedad.cilindrada}
+                  onChange={(e) => updateCardData('cilindrada', e.target.value)}
+                  className="input-field"
+                  placeholder="Ej: 1600"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Clase de Vehiculo</label>
+                <input
+                  type="text"
+                  value={formData.datosTarjetaPropiedad.claseVehiculo}
+                  onChange={(e) => updateCardData('claseVehiculo', e.target.value)}
+                  className="input-field"
+                  placeholder="Ej: Automovil"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Servicio</label>
+                <input
+                  type="text"
+                  value={formData.datosTarjetaPropiedad.servicio}
+                  onChange={(e) => updateCardData('servicio', e.target.value)}
+                  className="input-field"
+                  placeholder="Ej: Particular"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Carroceria</label>
+                <input
+                  type="text"
+                  value={formData.datosTarjetaPropiedad.tipoCarroceria}
+                  onChange={(e) => updateCardData('tipoCarroceria', e.target.value)}
+                  className="input-field"
+                  placeholder="Ej: Sedan"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Capacidad Kg/Psj</label>
+                <input
+                  type="text"
+                  value={formData.datosTarjetaPropiedad.capacidad}
+                  onChange={(e) => updateCardData('capacidad', e.target.value)}
+                  className="input-field"
+                  placeholder="Ej: 5"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Numero de Motor</label>
+                <input
+                  type="text"
+                  value={formData.datosTarjetaPropiedad.numeroMotor}
+                  onChange={(e) => updateCardData('numeroMotor', e.target.value)}
+                  className="input-field"
+                  placeholder="Ej: 1NZ123456"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Numero de Chasis</label>
+                <input
+                  type="text"
+                  value={formData.datosTarjetaPropiedad.numeroChasis}
+                  onChange={(e) => updateCardData('numeroChasis', e.target.value)}
+                  className="input-field"
+                  placeholder="Ej: 9BWZZZ377VT004251"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Propietario</label>
+                <input
+                  type="text"
+                  value={formData.datosTarjetaPropiedad.propietario}
+                  onChange={(e) => updateCardData('propietario', e.target.value)}
+                  className="input-field"
+                  placeholder="Nombre del propietario"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Identificacion del Propietario</label>
+                <input
+                  type="text"
+                  value={formData.datosTarjetaPropiedad.identificacionPropietario}
+                  onChange={(e) => updateCardData('identificacionPropietario', e.target.value)}
+                  className="input-field"
+                  placeholder="Cedula o NIT"
+                />
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-gray-500">
+              Estos datos se usan para precargar la venta, el contrato y el formulario de traspaso.
+            </p>
+          </div>
           {/* Datos Básicos */}
           <div className="card">
             <h2 className="text-xl font-semibold mb-4 text-gray-900">Datos Básicos</h2>

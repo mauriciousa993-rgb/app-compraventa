@@ -46,8 +46,11 @@ export interface IDatosVenta {
   vehiculoAdicional: {
     tipoCarroceria: string;
     capacidad: string;
+    cilindrada: string;
+    claseVehiculo: string;
     numeroPuertas: number;
     numeroMotor: string;
+    numeroChasis: string;
     linea: string;
     actaManifiesto: string;
     sitioMatricula: string;
@@ -72,6 +75,19 @@ export interface IDatosVenta {
     porcentaje: number;
     descripcion: string;
   };
+}
+
+export interface IDatosTarjetaPropiedad {
+  linea: string;
+  cilindrada: string;
+  claseVehiculo: string;
+  servicio: string;
+  tipoCarroceria: string;
+  numeroMotor: string;
+  capacidad: string;
+  numeroChasis: string;
+  propietario: string;
+  identificacionPropietario: string;
 }
 
 export interface IGastoDetalle {
@@ -118,6 +134,7 @@ export interface IVehicleDocument extends Document {
   tieneInversionistas: boolean;
   estado: 'en_proceso' | 'listo_venta' | 'en_negociacion' | 'separado' | 'vendido' | 'retirado';
   estadoTramite?: 'firma_documentos' | 'radicacion' | 'revision_documentos' | 'aprobado' | 'rechazado';
+  datosTarjetaPropiedad?: IDatosTarjetaPropiedad;
   datosVenta?: IDatosVenta;
   datosSeparacion?: IDatosSeparacion;
   fotos: {
@@ -236,6 +253,18 @@ const vehicleSchema = new Schema<IVehicleDocument>({
     type: String,
     enum: ['firma_documentos', 'radicacion', 'revision_documentos', 'aprobado', 'rechazado'],
   },
+  datosTarjetaPropiedad: {
+    linea: { type: String, default: '' },
+    cilindrada: { type: String, default: '' },
+    claseVehiculo: { type: String, default: '' },
+    servicio: { type: String, default: '' },
+    tipoCarroceria: { type: String, default: '' },
+    numeroMotor: { type: String, default: '' },
+    capacidad: { type: String, default: '' },
+    numeroChasis: { type: String, default: '' },
+    propietario: { type: String, default: '' },
+    identificacionPropietario: { type: String, default: '' },
+  },
   datosVenta: {
     vendedor: {
       nombre: { type: String, default: '' },
@@ -253,8 +282,11 @@ const vehicleSchema = new Schema<IVehicleDocument>({
     vehiculoAdicional: {
       tipoCarroceria: { type: String, default: '' },
       capacidad: { type: String, default: '' },
+      cilindrada: { type: String, default: '' },
+      claseVehiculo: { type: String, default: '' },
       numeroPuertas: { type: Number, default: 4 },
       numeroMotor: { type: String, default: '' },
+      numeroChasis: { type: String, default: '' },
       linea: { type: String, default: '' },
       actaManifiesto: { type: String, default: '' },
       sitioMatricula: { type: String, default: '' },

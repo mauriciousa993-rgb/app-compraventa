@@ -20,6 +20,7 @@ const VehicleList: React.FC = () => {
   const [saleModalOpen, setSaleModalOpen] = useState(false);
   const [separationModalOpen, setSeparationModalOpen] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
+  const [isSavingSeparation, setIsSavingSeparation] = useState(false);
 
   useEffect(() => {
     loadVehicles();
@@ -47,20 +48,13 @@ const VehicleList: React.FC = () => {
 
   const normalizeEstado = (estado?: string) => (estado || '').trim().toLowerCase();
 
-  const isListoParaVenta = (estado?: string) => {
-    const estadoNormalizado = normalizeEstado(estado);
-    return estadoNormalizado === 'listo_venta' || estadoNormalizado === 'en_negociacion';
-  };
+  const isListoParaVenta = (estado?: string) => normalizeEstado(estado) === 'listo_venta';
 
   const filterVehicles = () => {
     let filtered = vehicles;
 
     if (filterEstado !== 'todos') {
-      if (filterEstado === 'listo_venta') {
-        filtered = filtered.filter(v => isListoParaVenta(v.estado));
-      } else {
-        filtered = filtered.filter(v => normalizeEstado(v.estado) === filterEstado);
-      }
+      filtered = filtered.filter(v => normalizeEstado(v.estado) === filterEstado);
     }
 
     if (searchTerm) {
@@ -206,6 +200,8 @@ const VehicleList: React.FC = () => {
   const handleSaveSeparationData = async (data: DatosSeparacion) => {
     if (!selectedVehicle) return;
 
+    setIsSavingSeparation(true);
+
     try {
       if (selectedVehicle.estado === 'separado' && selectedVehicle.datosSeparacion) {
         await vehiclesAPI.updateSeparationData(selectedVehicle._id, data);
@@ -217,7 +213,7 @@ const VehicleList: React.FC = () => {
 
       setSeparationModalOpen(false);
       setSelectedVehicle(null);
-      loadVehicles();
+      await loadVehicles();
     } catch (error: any) {
       console.error('Error al guardar datos de separación:', error);
       
@@ -232,6 +228,8 @@ const VehicleList: React.FC = () => {
       }
       
       alert(errorMessage);
+    } finally {
+      setIsSavingSeparation(false);
     }
   };
 
@@ -260,6 +258,17 @@ const VehicleList: React.FC = () => {
       minimumFractionDigits: 0
     }).format(amount);
   };
+
+  const totalVehiculosListos = vehicles.filter(v => isListoParaVenta(v.estado)).length;
+  const totalVehiculosEnNegociacion = vehicles.filter(
+    v => normalizeEstado(v.estado) === 'en_negociacion'
+  ).length;
+  const totalVehiculosEnProceso = vehicles.filter(
+    v => normalizeEstado(v.estado) === 'en_proceso'
+  ).length;
+  const totalVehiculosVendidos = vehicles.filter(
+    v => normalizeEstado(v.estado) === 'vendido'
+  ).length;
 
   if (isLoading) {
     return (
@@ -345,7 +354,7 @@ const VehicleList: React.FC = () => {
 
         {/* Estadísticas Rápidas */}
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
           <button
             onClick={() => {
               setFilterEstado('todos');
@@ -374,7 +383,23 @@ const VehicleList: React.FC = () => {
           >
             <p className="text-sm text-ink-200 font-medium">Listos para Venta</p>
             <p className="text-2xl font-bold text-silver">
-              {vehicles.filter(v => isListoParaVenta(v.estado)).length}
+              {totalVehiculosListos}
+            </p>
+          </button>
+          <button
+            onClick={() => {
+              setFilterEstado('en_negociacion');
+              setSearchParams({ estado: 'en_negociacion' });
+            }}
+            className={`card transition-all ${
+              filterEstado === 'en_negociacion'
+                ? 'bg-[#16242c] border-[#4e8896] ring-2 ring-[#4e8896]'
+                : 'bg-[#152027] border-[#2d3f47] hover:border-[#4e8896]'
+            }`}
+          >
+            <p className="text-sm font-medium text-[#8fd5e5]">En Negociacion</p>
+            <p className="text-2xl font-bold text-[#8fd5e5]">
+              {totalVehiculosEnNegociacion}
             </p>
           </button>
           <button
@@ -390,7 +415,7 @@ const VehicleList: React.FC = () => {
           >
             <p className="text-sm text-[#f4c26b] font-medium">Con Pendientes</p>
             <p className="text-2xl font-bold text-[#f4c26b]">
-              {vehicles.filter(v => v.estado === 'en_proceso').length}
+              {totalVehiculosEnProceso}
             </p>
           </button>
           <button
@@ -406,7 +431,7 @@ const VehicleList: React.FC = () => {
           >
             <p className="text-sm text-primary-300 font-medium">Vendidos</p>
             <p className="text-2xl font-bold text-signal">
-              {vehicles.filter(v => v.estado === 'vendido').length}
+              {totalVehiculosVendidos}
             </p>
           </button>
         </div>
@@ -949,6 +974,7 @@ const VehicleList: React.FC = () => {
             }}
             onSubmit={handleSaveSaleData}
             vehiclePlaca={selectedVehicle.placa}
+            vehicleData={selectedVehicle}
             initialData={selectedVehicle.datosVenta}
             isEditMode={selectedVehicle.estado === 'vendido' && !!selectedVehicle.datosVenta}
           />
@@ -968,6 +994,7 @@ const VehicleList: React.FC = () => {
           vehiclePrecioVenta={selectedVehicle.precioVenta}
           initialData={selectedVehicle.datosSeparacion}
           isEditMode={selectedVehicle.estado === 'separado' && !!selectedVehicle.datosSeparacion}
+          isSubmitting={isSavingSeparation}
         />
       )}
     </Layout>

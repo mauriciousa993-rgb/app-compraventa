@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import Vehicle from '../models/Vehicle';
+import Vehicle, { IVehicleDocument } from '../models/Vehicle';
 import User from '../models/User';
 import { AuthRequest } from '../types';
 import ExcelJS from 'exceljs';
@@ -10,7 +10,9 @@ import { ensureUploadsDir, getPhotoFileName, getUploadsDir } from '../utils/uplo
 import { isUsingCloudinary } from '../middleware/upload.middleware';
 
 const VEHICLE_TYPES = new Set(['suv', 'pickup', 'sedan', 'hatchback']);
-const SALE_READY_STATUSES = ['listo_venta', 'en_negociacion'];
+const SALE_READY_STATUS = 'listo_venta';
+const NEGOTIATION_STATUS = 'en_negociacion';
+const INVENTORY_STATUSES = ['en_proceso', SALE_READY_STATUS, NEGOTIATION_STATUS];
 
 const normalizeVehicleType = (value: any): 'suv' | 'pickup' | 'sedan' | 'hatchback' => {
   const parsed = typeof value === 'string' ? value.toLowerCase().trim() : '';
@@ -58,6 +60,315 @@ const getInvestorUserId = (inversionista: any): string | undefined => {
   }
 
   return undefined;
+};
+
+type VehicleSaleData = NonNullable<IVehicleDocument['datosVenta']>;
+type VehicleCardData = NonNullable<IVehicleDocument['datosTarjetaPropiedad']>;
+
+const createEmptySaleData = (): VehicleSaleData => ({
+  vendedor: {
+    nombre: '',
+    identificacion: '',
+    direccion: '',
+    telefono: '',
+  },
+  comprador: {
+    nombre: '',
+    identificacion: '',
+    direccion: '',
+    telefono: '',
+    email: '',
+  },
+  vehiculoAdicional: {
+    tipoCarroceria: '',
+    capacidad: '',
+    cilindrada: '',
+    claseVehiculo: '',
+    numeroPuertas: 4,
+    numeroMotor: '',
+    numeroChasis: '',
+    linea: '',
+    actaManifiesto: '',
+    sitioMatricula: '',
+    tipoServicio: 'PARTICULAR',
+  },
+  transaccion: {
+    lugarCelebracion: '',
+    fechaCelebracion: new Date(),
+    precioLetras: '',
+    formaPago: '',
+    vendedorAnterior: '',
+    cedulaVendedorAnterior: '',
+    diasTraspaso: 30,
+    fechaEntrega: new Date(),
+    horaEntrega: '',
+    domicilioContractual: '',
+    clausulasAdicionales: '',
+  },
+  comision: {
+    monto: 0,
+    porcentaje: 0,
+    descripcion: '',
+  },
+});
+
+const getTrimmedString = (value: unknown): string =>
+  typeof value === 'string' ? value.trim() : '';
+
+const getFirstString = (...values: unknown[]): string => {
+  for (const value of values) {
+    const normalized = getTrimmedString(value);
+    if (normalized) return normalized;
+  }
+
+  return '';
+};
+
+const getFirstNumber = (...values: unknown[]): number => {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+
+    if (typeof value === 'string' && value.trim() !== '') {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+
+  return 0;
+};
+
+const getFirstDate = (...values: unknown[]): Date => {
+  for (const value of values) {
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return value;
+    }
+
+    if (typeof value === 'string' && value.trim() !== '') {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    }
+  }
+
+  return new Date();
+};
+
+const normalizeTextValue = (value: string) =>
+  value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
+
+const normalizeSaleService = (value: unknown): string => {
+  const text = getTrimmedString(value);
+  if (!text) return '';
+
+  const normalized = normalizeTextValue(text);
+
+  if (normalized.includes('PUBLIC')) return 'PUBLICO';
+  if (normalized.includes('OFICIAL')) return 'OFICIAL';
+  if (normalized.includes('DIPLO')) return 'DIPLOMATICO';
+  if (normalized.includes('PARTIC')) return 'PARTICULAR';
+
+  return normalized;
+};
+
+const resolveVehicleSaleData = (
+  vehicle: IVehicleDocument,
+  source?: Partial<VehicleSaleData>
+): VehicleSaleData => {
+  const defaults = createEmptySaleData();
+  const currentSale = (vehicle.datosVenta || {}) as Partial<VehicleSaleData>;
+  const incomingSale = (source || {}) as Partial<VehicleSaleData>;
+  const cardData = (vehicle.datosTarjetaPropiedad || {}) as Partial<VehicleCardData>;
+
+  return {
+    vendedor: {
+      ...defaults.vendedor,
+      ...(currentSale.vendedor || {}),
+      ...(incomingSale.vendedor || {}),
+    },
+    comprador: {
+      ...defaults.comprador,
+      ...(currentSale.comprador || {}),
+      ...(incomingSale.comprador || {}),
+    },
+    vehiculoAdicional: {
+      ...defaults.vehiculoAdicional,
+      ...(currentSale.vehiculoAdicional || {}),
+      ...(incomingSale.vehiculoAdicional || {}),
+      tipoCarroceria: getFirstString(
+        incomingSale.vehiculoAdicional?.tipoCarroceria,
+        currentSale.vehiculoAdicional?.tipoCarroceria,
+        cardData.tipoCarroceria
+      ),
+      capacidad: getFirstString(
+        incomingSale.vehiculoAdicional?.capacidad,
+        currentSale.vehiculoAdicional?.capacidad,
+        cardData.capacidad
+      ),
+      cilindrada: getFirstString(
+        incomingSale.vehiculoAdicional?.cilindrada,
+        currentSale.vehiculoAdicional?.cilindrada,
+        cardData.cilindrada
+      ),
+      claseVehiculo: getFirstString(
+        incomingSale.vehiculoAdicional?.claseVehiculo,
+        currentSale.vehiculoAdicional?.claseVehiculo,
+        cardData.claseVehiculo
+      ),
+      numeroPuertas: getFirstNumber(
+        incomingSale.vehiculoAdicional?.numeroPuertas,
+        currentSale.vehiculoAdicional?.numeroPuertas,
+        defaults.vehiculoAdicional.numeroPuertas
+      ),
+      numeroMotor: getFirstString(
+        incomingSale.vehiculoAdicional?.numeroMotor,
+        currentSale.vehiculoAdicional?.numeroMotor,
+        cardData.numeroMotor
+      ),
+      numeroChasis: getFirstString(
+        incomingSale.vehiculoAdicional?.numeroChasis,
+        currentSale.vehiculoAdicional?.numeroChasis,
+        cardData.numeroChasis,
+        vehicle.vin
+      ),
+      linea: getFirstString(
+        incomingSale.vehiculoAdicional?.linea,
+        currentSale.vehiculoAdicional?.linea,
+        cardData.linea
+      ),
+      actaManifiesto: getFirstString(
+        incomingSale.vehiculoAdicional?.actaManifiesto,
+        currentSale.vehiculoAdicional?.actaManifiesto
+      ),
+      sitioMatricula: getFirstString(
+        incomingSale.vehiculoAdicional?.sitioMatricula,
+        currentSale.vehiculoAdicional?.sitioMatricula
+      ),
+      tipoServicio: getFirstString(
+        normalizeSaleService(incomingSale.vehiculoAdicional?.tipoServicio),
+        normalizeSaleService(currentSale.vehiculoAdicional?.tipoServicio),
+        normalizeSaleService(cardData.servicio),
+        defaults.vehiculoAdicional.tipoServicio
+      ),
+    },
+    transaccion: {
+      ...defaults.transaccion,
+      ...(currentSale.transaccion || {}),
+      ...(incomingSale.transaccion || {}),
+      lugarCelebracion: getFirstString(
+        incomingSale.transaccion?.lugarCelebracion,
+        currentSale.transaccion?.lugarCelebracion
+      ),
+      fechaCelebracion: getFirstDate(
+        incomingSale.transaccion?.fechaCelebracion,
+        currentSale.transaccion?.fechaCelebracion,
+        defaults.transaccion.fechaCelebracion
+      ),
+      precioLetras: getFirstString(
+        incomingSale.transaccion?.precioLetras,
+        currentSale.transaccion?.precioLetras
+      ),
+      formaPago: getFirstString(
+        incomingSale.transaccion?.formaPago,
+        currentSale.transaccion?.formaPago
+      ),
+      vendedorAnterior: getFirstString(
+        incomingSale.transaccion?.vendedorAnterior,
+        currentSale.transaccion?.vendedorAnterior,
+        cardData.propietario
+      ),
+      cedulaVendedorAnterior: getFirstString(
+        incomingSale.transaccion?.cedulaVendedorAnterior,
+        currentSale.transaccion?.cedulaVendedorAnterior,
+        cardData.identificacionPropietario
+      ),
+      diasTraspaso: getFirstNumber(
+        incomingSale.transaccion?.diasTraspaso,
+        currentSale.transaccion?.diasTraspaso,
+        defaults.transaccion.diasTraspaso
+      ),
+      fechaEntrega: getFirstDate(
+        incomingSale.transaccion?.fechaEntrega,
+        currentSale.transaccion?.fechaEntrega,
+        defaults.transaccion.fechaEntrega
+      ),
+      horaEntrega: getFirstString(
+        incomingSale.transaccion?.horaEntrega,
+        currentSale.transaccion?.horaEntrega
+      ),
+      domicilioContractual: getFirstString(
+        incomingSale.transaccion?.domicilioContractual,
+        currentSale.transaccion?.domicilioContractual,
+        incomingSale.transaccion?.lugarCelebracion,
+        currentSale.transaccion?.lugarCelebracion
+      ),
+      clausulasAdicionales: getFirstString(
+        incomingSale.transaccion?.clausulasAdicionales,
+        currentSale.transaccion?.clausulasAdicionales
+      ),
+    },
+    comision: {
+      ...defaults.comision,
+      ...(currentSale.comision || {}),
+      ...(incomingSale.comision || {}),
+      monto: getFirstNumber(
+        incomingSale.comision?.monto,
+        currentSale.comision?.monto,
+        defaults.comision.monto
+      ),
+      porcentaje: getFirstNumber(
+        incomingSale.comision?.porcentaje,
+        currentSale.comision?.porcentaje,
+        defaults.comision.porcentaje
+      ),
+      descripcion: getFirstString(
+        incomingSale.comision?.descripcion,
+        currentSale.comision?.descripcion
+      ),
+    },
+  };
+};
+
+const resolveVehicleDocumentInfo = (vehicle: IVehicleDocument, saleData: VehicleSaleData) => {
+  const cardData = (vehicle.datosTarjetaPropiedad || {}) as Partial<VehicleCardData>;
+  const hasPrenda = Boolean(vehicle.documentacion?.prenda?.tiene);
+
+  return {
+    vin: getFirstString(vehicle.vin, cardData.numeroChasis, saleData.vehiculoAdicional.numeroChasis),
+    linea: getFirstString(saleData.vehiculoAdicional.linea, cardData.linea),
+    cilindrada: getFirstString(saleData.vehiculoAdicional.cilindrada, cardData.cilindrada),
+    claseVehiculo: getFirstString(saleData.vehiculoAdicional.claseVehiculo, cardData.claseVehiculo),
+    tipoServicio: getFirstString(
+      saleData.vehiculoAdicional.tipoServicio,
+      normalizeSaleService(cardData.servicio)
+    ),
+    tipoCarroceria: getFirstString(
+      saleData.vehiculoAdicional.tipoCarroceria,
+      cardData.tipoCarroceria
+    ),
+    numeroMotor: getFirstString(saleData.vehiculoAdicional.numeroMotor, cardData.numeroMotor),
+    capacidad: getFirstString(saleData.vehiculoAdicional.capacidad, cardData.capacidad),
+    numeroChasis: getFirstString(
+      saleData.vehiculoAdicional.numeroChasis,
+      cardData.numeroChasis,
+      vehicle.vin
+    ),
+    propietario: getFirstString(
+      saleData.transaccion.vendedorAnterior,
+      cardData.propietario
+    ),
+    identificacionPropietario: getFirstString(
+      saleData.transaccion.cedulaVendedorAnterior,
+      cardData.identificacionPropietario
+    ),
+    prenda: hasPrenda
+      ? getFirstString(vehicle.documentacion?.prenda?.detalles, 'Si, revisar detalle de prenda')
+      : 'No registra',
+  };
 };
 
 // Crear nuevo vehículo
@@ -365,14 +676,13 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
     const userRole = req.user?.rol;
 
     const totalVehiculos = await Vehicle.countDocuments();
-    const vehiculosListos = await Vehicle.countDocuments({
-      estado: { $in: SALE_READY_STATUSES },
-    });
+    const vehiculosListos = await Vehicle.countDocuments({ estado: SALE_READY_STATUS });
+    const vehiculosEnNegociacion = await Vehicle.countDocuments({ estado: NEGOTIATION_STATUS });
     const vehiculosPendientes = await Vehicle.countDocuments({ estado: 'en_proceso' });
     const vehiculosVendidos = await Vehicle.countDocuments({ estado: 'vendido' });
 
     const vehiculosEnStock = await Vehicle.find({
-      estado: { $in: ['en_proceso', ...SALE_READY_STATUSES] },
+      estado: { $in: INVENTORY_STATUSES },
     });
 
     const vehiculosVendidosData = await Vehicle.find({ estado: 'vendido' });
@@ -564,6 +874,7 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
     res.json({
       totalVehiculos,
       vehiculosListos,
+      vehiculosEnNegociacion,
       vehiculosPendientes,
       vehiculosVendidos,
       // Valores totales del sistema
@@ -817,7 +1128,7 @@ export const getVehiclesWithExpiringDocuments = async (
 export const saveSaleData = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const datosVenta = req.body;
+    const datosVentaInput = req.body;
 
     const vehicle = await Vehicle.findById(id);
 
@@ -826,6 +1137,7 @@ export const saveSaleData = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
+    const datosVenta = resolveVehicleSaleData(vehicle, datosVentaInput);
     vehicle.datosVenta = datosVenta;
     vehicle.estado = 'vendido';
     
@@ -921,23 +1233,28 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    if (!vehicle.datosVenta || 
-        !vehicle.datosVenta.comprador?.nombre || 
-        !vehicle.datosVenta.comprador?.identificacion ||
-        !vehicle.datosVenta.vendedor?.nombre ||
-        !vehicle.datosVenta.transaccion?.lugarCelebracion) {
+    const datosVenta = resolveVehicleSaleData(vehicle);
+    const vehicleInfo = resolveVehicleDocumentInfo(vehicle, datosVenta);
+    datosVenta.transaccion.domicilioContractual =
+      datosVenta.transaccion.domicilioContractual ||
+      datosVenta.transaccion.lugarCelebracion;
+    vehicle.datosVenta = datosVenta;
+    if (!datosVenta.comprador?.nombre ||
+        !datosVenta.comprador?.identificacion ||
+        !datosVenta.vendedor?.nombre ||
+        !datosVenta.transaccion?.lugarCelebracion) {
       res.status(400).json({ 
         message: 'El vehículo no tiene datos de venta completos.' 
       });
       return;
     }
 
-    const fechaCelebracion = vehicle.datosVenta.transaccion.fechaCelebracion 
-      ? new Date(vehicle.datosVenta.transaccion.fechaCelebracion)
+    const fechaCelebracion = datosVenta.transaccion.fechaCelebracion
+      ? new Date(datosVenta.transaccion.fechaCelebracion)
       : new Date();
     
-    const fechaEntrega = vehicle.datosVenta.transaccion.fechaEntrega
-      ? new Date(vehicle.datosVenta.transaccion.fechaEntrega)
+    const fechaEntrega = datosVenta.transaccion.fechaEntrega
+      ? new Date(datosVenta.transaccion.fechaEntrega)
       : new Date();
 
     const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -1000,8 +1317,19 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
     
     doc.fontSize(10).font('Helvetica')
        .text(`MARCA: ${vehicle.marca}                    MODELO: ${vehicle.año}`)
+       .text(`LINEA: ${vehicleInfo.linea || 'N/A'}        CLASE: ${vehicleInfo.claseVehiculo || 'N/A'}`)
        .text(`COLOR: ${vehicle.color}        PLACA: ${vehicle.placa}`)
-       .text(`VIN: ${vehicle.vin}`);
+       .text(`VIN/CHASIS: ${vehicleInfo.numeroChasis || vehicleInfo.vin || 'N/A'}`)
+       .text(`MOTOR: ${vehicleInfo.numeroMotor || 'N/A'}        CILINDRADA: ${vehicleInfo.cilindrada || 'N/A'}`)
+       .text(`SERVICIO: ${vehicleInfo.tipoServicio || 'N/A'}        CARROCERIA: ${vehicleInfo.tipoCarroceria || 'N/A'}`)
+       .text(`CAPACIDAD: ${vehicleInfo.capacidad || 'N/A'}`);
+    doc.moveDown();
+
+    doc.fontSize(10).font('Helvetica')
+       .text(
+         `Titular segun tarjeta de propiedad: ${vehicleInfo.propietario || 'N/A'} (${vehicleInfo.identificacionPropietario || 'N/A'}). Prenda: ${vehicleInfo.prenda}.`,
+         { align: 'justify' }
+       );
     doc.moveDown();
 
     // PRECIO
@@ -1059,8 +1387,10 @@ export const generateTransferForm = async (req: AuthRequest, res: Response): Pro
       return;
     }
 
-    if (!vehicle.datosVenta || 
-        !vehicle.datosVenta.comprador?.nombre || 
+    const datosVenta = resolveVehicleSaleData(vehicle);
+    const vehicleInfo = resolveVehicleDocumentInfo(vehicle, datosVenta);
+    vehicle.datosVenta = datosVenta;
+    if (!vehicle.datosVenta.comprador?.nombre ||
         !vehicle.datosVenta.comprador?.identificacion ||
         !vehicle.datosVenta.vendedor?.nombre) {
       res.status(400).json({ 
@@ -1116,10 +1446,18 @@ export const generateTransferForm = async (req: AuthRequest, res: Response): Pro
     // VEHÍCULO
     doc.fontSize(10).font('Helvetica-Bold').text('DATOS DEL VEHÍCULO:');
     doc.fontSize(9).font('Helvetica')
-       .text(`VIN: ${vehicle.vin}`)
-       .text(`Motor: ${vehicle.datosVenta.vehiculoAdicional?.numeroMotor || 'N/A'}`)
+       .text(`VIN: ${vehicleInfo.vin || 'N/A'}`)
+       .text(`Chasis: ${vehicleInfo.numeroChasis || 'N/A'}`)
+       .text(`Motor: ${vehicleInfo.numeroMotor || 'N/A'}`)
        .text(`Carrocería: ${vehicle.datosVenta.vehiculoAdicional?.tipoCarroceria || 'N/A'}`)
-       .text(`Capacidad: ${vehicle.datosVenta.vehiculoAdicional?.capacidad || 'N/A'}`);
+       .text(`Capacidad: ${vehicleInfo.capacidad || 'N/A'}`)
+       .text(`Linea: ${vehicleInfo.linea || 'N/A'}`)
+       .text(`Clase: ${vehicleInfo.claseVehiculo || 'N/A'}`)
+       .text(`Servicio: ${vehicleInfo.tipoServicio || 'N/A'}`)
+       .text(`Cilindrada: ${vehicleInfo.cilindrada || 'N/A'}`)
+       .text(`Propietario: ${vehicleInfo.propietario || 'N/A'}`)
+       .text(`Identificacion propietario: ${vehicleInfo.identificacionPropietario || 'N/A'}`)
+       .text(`Prenda: ${vehicleInfo.prenda}`);
     doc.moveDown();
 
     // Fecha y lugar
