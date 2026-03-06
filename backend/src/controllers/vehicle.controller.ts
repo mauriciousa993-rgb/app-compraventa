@@ -10,6 +10,7 @@ import { ensureUploadsDir, getPhotoFileName, getUploadsDir } from '../utils/uplo
 import { isUsingCloudinary } from '../middleware/upload.middleware';
 
 const VEHICLE_TYPES = new Set(['suv', 'pickup', 'sedan', 'hatchback']);
+const SALE_READY_STATUSES = ['listo_venta', 'en_negociacion'];
 
 const normalizeVehicleType = (value: any): 'suv' | 'pickup' | 'sedan' | 'hatchback' => {
   const parsed = typeof value === 'string' ? value.toLowerCase().trim() : '';
@@ -364,12 +365,14 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
     const userRole = req.user?.rol;
 
     const totalVehiculos = await Vehicle.countDocuments();
-    const vehiculosListos = await Vehicle.countDocuments({ estado: 'listo_venta' });
+    const vehiculosListos = await Vehicle.countDocuments({
+      estado: { $in: SALE_READY_STATUSES },
+    });
     const vehiculosPendientes = await Vehicle.countDocuments({ estado: 'en_proceso' });
     const vehiculosVendidos = await Vehicle.countDocuments({ estado: 'vendido' });
 
     const vehiculosEnStock = await Vehicle.find({
-      estado: { $in: ['en_proceso', 'listo_venta', 'en_negociacion'] },
+      estado: { $in: ['en_proceso', ...SALE_READY_STATUSES] },
     });
 
     const vehiculosVendidosData = await Vehicle.find({ estado: 'vendido' });
