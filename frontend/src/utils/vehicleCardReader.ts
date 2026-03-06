@@ -41,7 +41,7 @@ const LABEL_ALIASES = {
   capacidad: ['CAPACIDAD', 'CAPACIDAD KG PSJ', 'CAPACIDAD PSJ', 'CAPACIDAD PASAJEROS'],
   vin: ['VIN', 'CHASIS', 'SERIE', 'NUMERO DE CHASIS', 'NO CHASIS', 'NO. CHASIS', 'NRO CHASIS', 'NRO SERIE'],
   carroceria: ['CARROCERIA', 'TIPO CARROCERIA', 'TIPO DE CARROCERIA'],
-  propietario: ['PROPIETARIO', 'NOMBRE PROPIETARIO', 'TITULAR', 'NOMBRE'],
+  propietario: ['PROPIETARIO', 'NOMBRE PROPIETARIO', 'TITULAR'],
   identificacion: ['IDENTIFICACION', 'NO IDENTIFICACION', 'NO. IDENTIFICACION', 'NRO IDENTIFICACION', 'CEDULA', 'NIT', 'DOCUMENTO'],
   prenda: ['PRENDA', 'LIMITACION A LA PROPIEDAD', 'PIGNORACION'],
 } as const;
@@ -142,6 +142,7 @@ const cleanCandidate = (value: string): string => {
   const normalized = normalizeForSearch(value)
     .replace(/^[\s:.-]+/, '')
     .replace(/\b(?:LICENCIA DE TRANSITO|REPUBLICA DE COLOMBIA|MINISTERIO DE TRANSPORTE)\b/g, '')
+    .replace(/\b(?:SERVICIO|CILINDRAJE|CILINDRADA|MOTOR|CAPACIDAD)\b.*$/, '')
     .trim();
 
   return normalized;
@@ -174,20 +175,7 @@ const findNextUsefulLine = (lines: string[], startIndex: number): string => {
   return '';
 };
 
-const scoreCandidate = (candidate: string): number => {
-  let score = candidate.length;
-
-  if (candidate.split(' ').length > 1) score += 4;
-  if (/[A-Z]/.test(candidate)) score += 2;
-  if (/^\d+$/.test(candidate)) score -= 6;
-  if (ALL_LABELS.includes(candidate)) score -= 10;
-
-  return score;
-};
-
 const extractLabeledValue = (lines: string[], labels: readonly string[]): string => {
-  const candidates: string[] = [];
-
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
 
@@ -198,20 +186,17 @@ const extractLabeledValue = (lines: string[], labels: readonly string[]): string
       const remainder = cleanCandidate(line.slice(labelIndex + label.length));
       const sameLineValue = trimAtNextLabel(remainder);
       if (sameLineValue && sameLineValue !== label) {
-        candidates.push(sameLineValue);
+        return sameLineValue;
       }
 
       const nextLineValue = trimAtNextLabel(findNextUsefulLine(lines, index));
       if (nextLineValue && nextLineValue !== label) {
-        candidates.push(nextLineValue);
+        return nextLineValue;
       }
     }
   }
 
-  const uniqueCandidates = Array.from(new Set(candidates.map(cleanCandidate).filter(Boolean)));
-  uniqueCandidates.sort((a, b) => scoreCandidate(b) - scoreCandidate(a));
-
-  return uniqueCandidates[0] || '';
+  return '';
 };
 
 const extractPlate = (text: string): string => {
@@ -225,8 +210,8 @@ const extractVin = (text: string): string => {
 };
 
 const extractIdentification = (text: string): string => {
-  const candidates = text.match(/\b\d{5,15}\b/g) || [];
-  return candidates.sort((a, b) => b.length - a.length)[0] || '';
+  const match = text.match(/\b\d{5,15}\b/);
+  return match ? match[0] : '';
 };
 
 const extractYear = (text: string): number | null => {
@@ -282,9 +267,11 @@ const parseVehicleCardText = (rawText: string, confidence: number): VehicleCardR
   const servicio = cleanCandidate(extractLabeledValue(lines, LABEL_ALIASES.servicio));
   const numeroMotor = cleanCandidate(extractLabeledValue(lines, LABEL_ALIASES.numeroMotor));
   const capacidad = cleanCandidate(extractLabeledValue(lines, LABEL_ALIASES.capacidad));
-  const vinLabeled = cleanCandidate(extractLabeledValue(lines, LABEL_ALIASES.vin)).replace(/\s+/g, '');
-  const vin = extractVin(vinLabeled) || extractVin(normalizedText) || '';
-  const numeroChasis = cleanCandidate(vinLabeled) || vin;
+  const vin =
+    extractVin(normalizedText) ||
+    extractVin(extractLabeledValue(lines, LABEL_ALIASES.vin).replace(/\s+/g, '')) ||
+    '';
+  const numeroChasis = cleanCandidate(extractLabeledValue(lines, LABEL_ALIASES.vin)) || vin;
   const tipoCarroceria = cleanCandidate(extractLabeledValue(lines, LABEL_ALIASES.carroceria));
   const propietario = cleanCandidate(extractLabeledValue(lines, LABEL_ALIASES.propietario));
   const identificacionLabeled = cleanCandidate(
@@ -448,20 +435,171 @@ const runRecognition = async (
   );
 };
 
-const getResultScore = (result: VehicleCardReaderResult) => {
-  const criticalMatches = [
-    result.extracted.placa,
-    result.extracted.marca,
-    result.extracted.modelo,
-    result.extracted.vin || result.extracted.numeroChasis,
-    result.extracted.propietario,
+type ExtractedTextField = Exclude<keyof VehicleCardExtractedData, 'año' | 'tipoVehiculo'>;
+
+const isValidPlate = (value: string) =>
+  /\b[A-Z]{3}\d{3}\b|\b[A-Z]{3}\d{2}[A-Z]\b/.test(value);
+
+const isValidVin = (value: string) =>
+  /^[A-HJ-NPR-Z0-9]{17}$/.test(value);
+
+const isValidIdentification = (value: string) =>
+  /^\d{5,15}$/.test(value);
+
+const scoreExtractedText = (field: ExtractedTextField, value: string): number => {
+  const candidate = cleanCandidate(value);
+  if (!candidate) return 0;
+
+  switch (field) {
+    case 'placa':
+      return isValidPlate(candidate) ? 100 : 10;
+    case 'vin':
+    case 'numeroChasis':
+      if (isValidVin(candidate)) return 100;
+      return /^[A-Z0-9]{6,20}$/.test(candidate) ? 45 : 5;
+    case 'marca':
+      if (KNOWN_BRANDS.includes(candidate)) return 95;
+      return /^[A-Z ]{2,20}$/.test(candidate) ? 40 : 5;
+    case 'identificacionPropietario':
+      return isValidIdentification(candidate) ? 90 : 5;
+    case 'numeroMotor':
+      return /^[A-Z0-9-]{4,25}$/.test(candidate) ? 60 : 5;
+    case 'propietario':
+      if (/\d/.test(candidate)) return 5;
+      return candidate.split(' ').length >= 2 && candidate.length <= 40 ? 70 : 20;
+    case 'color':
+      return Object.keys(COLOR_ALIASES).some((color) => candidate.includes(color)) ? 70 : 25;
+    case 'cilindrada':
+      return /^\d{2,5}$/.test(candidate) ? 65 : 10;
+    case 'capacidad':
+      return /^\d{1,4}(?:\s+\d{1,4})?$/.test(candidate) ? 55 : 10;
+    case 'modelo':
+    case 'linea':
+      if (candidate.length > 28) return 5;
+      return candidate.length >= 2 ? 55 : 10;
+    case 'claseVehiculo':
+    case 'servicio':
+    case 'tipoCarroceria':
+    case 'prenda':
+      return candidate.length <= 30 ? 45 : 10;
+    default:
+      return candidate.length <= 40 ? 35 : 5;
+  }
+};
+
+const pickPreferredText = (
+  field: ExtractedTextField,
+  primary: string,
+  secondary: string
+) => {
+  const primaryScore = scoreExtractedText(field, primary);
+  const secondaryScore = scoreExtractedText(field, secondary);
+
+  if (secondaryScore > primaryScore) {
+    return secondary;
+  }
+
+  return primary;
+};
+
+const pickPreferredYear = (
+  primary: number | null,
+  secondary: number | null
+) => {
+  const currentYear = new Date().getFullYear() + 1;
+  const isPrimaryValid = typeof primary === 'number' && primary >= 1900 && primary <= currentYear;
+  const isSecondaryValid = typeof secondary === 'number' && secondary >= 1900 && secondary <= currentYear;
+
+  if (!isPrimaryValid && isSecondaryValid) return secondary;
+  return primary;
+};
+
+const countDetectedFields = (extracted: VehicleCardExtractedData) =>
+  [
+    extracted.placa,
+    extracted.marca,
+    extracted.modelo,
+    extracted.año,
+    extracted.color,
+    extracted.vin,
+    extracted.linea,
+    extracted.cilindrada,
+    extracted.claseVehiculo,
+    extracted.servicio,
+    extracted.tipoCarroceria,
+    extracted.numeroMotor,
+    extracted.capacidad,
+    extracted.numeroChasis,
+    extracted.propietario,
+    extracted.identificacionPropietario,
+    extracted.prenda,
+    extracted.tipoVehiculo,
   ].filter(Boolean).length;
 
-  return result.detectedFields * 10 + result.confidence + criticalMatches * 12;
+const mergeVehicleCardResults = (
+  baseResult: VehicleCardReaderResult,
+  enhancedResult: VehicleCardReaderResult
+): VehicleCardReaderResult => {
+  const extracted: VehicleCardExtractedData = {
+    ...emptyExtractedData(),
+    placa: pickPreferredText('placa', baseResult.extracted.placa, enhancedResult.extracted.placa),
+    marca: pickPreferredText('marca', baseResult.extracted.marca, enhancedResult.extracted.marca),
+    modelo: pickPreferredText('modelo', baseResult.extracted.modelo, enhancedResult.extracted.modelo),
+    año: pickPreferredYear(baseResult.extracted.año, enhancedResult.extracted.año),
+    color: pickPreferredText('color', baseResult.extracted.color, enhancedResult.extracted.color),
+    vin: pickPreferredText('vin', baseResult.extracted.vin, enhancedResult.extracted.vin),
+    linea: pickPreferredText('linea', baseResult.extracted.linea, enhancedResult.extracted.linea),
+    cilindrada: pickPreferredText('cilindrada', baseResult.extracted.cilindrada, enhancedResult.extracted.cilindrada),
+    claseVehiculo: pickPreferredText(
+      'claseVehiculo',
+      baseResult.extracted.claseVehiculo,
+      enhancedResult.extracted.claseVehiculo
+    ),
+    servicio: pickPreferredText('servicio', baseResult.extracted.servicio, enhancedResult.extracted.servicio),
+    tipoCarroceria: pickPreferredText(
+      'tipoCarroceria',
+      baseResult.extracted.tipoCarroceria,
+      enhancedResult.extracted.tipoCarroceria
+    ),
+    numeroMotor: pickPreferredText(
+      'numeroMotor',
+      baseResult.extracted.numeroMotor,
+      enhancedResult.extracted.numeroMotor
+    ),
+    capacidad: pickPreferredText('capacidad', baseResult.extracted.capacidad, enhancedResult.extracted.capacidad),
+    numeroChasis: pickPreferredText(
+      'numeroChasis',
+      baseResult.extracted.numeroChasis,
+      enhancedResult.extracted.numeroChasis
+    ),
+    propietario: pickPreferredText(
+      'propietario',
+      baseResult.extracted.propietario,
+      enhancedResult.extracted.propietario
+    ),
+    identificacionPropietario: pickPreferredText(
+      'identificacionPropietario',
+      baseResult.extracted.identificacionPropietario,
+      enhancedResult.extracted.identificacionPropietario
+    ),
+    prenda: pickPreferredText('prenda', baseResult.extracted.prenda, enhancedResult.extracted.prenda),
+    tipoVehiculo: baseResult.extracted.tipoVehiculo || enhancedResult.extracted.tipoVehiculo,
+  };
+
+  return {
+    rawText: baseResult.rawText,
+    confidence: Math.max(baseResult.confidence, enhancedResult.confidence),
+    extracted,
+    detectedFields: countDetectedFields(extracted),
+  };
 };
 
 const shouldRetryWithEnhancedPass = (result: VehicleCardReaderResult) =>
-  result.detectedFields < 9 || result.confidence < 70;
+  result.detectedFields <= 4 ||
+  (
+    result.confidence < 55 &&
+    (!result.extracted.placa || !result.extracted.modelo || !result.extracted.propietario)
+  );
 
 export const readVehicleCard = async (
   file: File,
@@ -478,9 +616,10 @@ export const readVehicleCard = async (
     const enhancedImage = await enhanceImageForOcr(file);
     const enhancedResult = await runRecognition(enhancedImage, 62, 100, onProgress);
     onProgress?.(100);
+    const mergedResult = mergeVehicleCardResults(baseResult, enhancedResult);
 
-    return getResultScore(enhancedResult) >= getResultScore(baseResult)
-      ? enhancedResult
+    return mergedResult.detectedFields > baseResult.detectedFields
+      ? mergedResult
       : baseResult;
   } catch {
     onProgress?.(100);
