@@ -103,6 +103,11 @@ const COLOR_ALIASES: Record<string, string> = {
   TITANIO: 'Titanio',
 };
 
+const OCR_DOCUMENT_BASE_WIDTH = 1654;
+const OCR_DOCUMENT_BASE_HEIGHT = 2339;
+const OCR_DOCUMENT_MARGIN = 96;
+const OCR_DOCUMENT_MAX_EDGE = 3000;
+
 const emptyExtractedData = (): VehicleCardExtractedData => ({
   placa: '',
   marca: '',
@@ -353,6 +358,14 @@ const loadImageElement = (file: Blob): Promise<HTMLImageElement> =>
     image.src = objectUrl;
   });
 
+const createCanvas = (width: number, height: number): HTMLCanvasElement => {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+
+  return canvas;
+};
+
 const canvasToBlob = (canvas: HTMLCanvasElement): Promise<Blob> =>
   new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -365,25 +378,78 @@ const canvasToBlob = (canvas: HTMLCanvasElement): Promise<Blob> =>
     }, 'image/png');
   });
 
-const enhanceImageForOcr = async (file: File): Promise<Blob> => {
+const renderBlobToCanvas = async (file: Blob, scaleFactor = 1): Promise<HTMLCanvasElement> => {
   const image = await loadImageElement(file);
-  const scaleFactor = image.width < 1500 ? 2 : 1.35;
-  const canvas = document.createElement('canvas');
-  const width = Math.max(1, Math.round(image.width * scaleFactor));
-  const height = Math.max(1, Math.round(image.height * scaleFactor));
-
-  canvas.width = width;
-  canvas.height = height;
-
+  const canvas = createCanvas(
+    Math.max(1, Math.round(image.width * scaleFactor)),
+    Math.max(1, Math.round(image.height * scaleFactor))
+  );
   const context = canvas.getContext('2d');
+
+  if (!context) {
+    throw new Error('No se pudo preparar la imagen de la tarjeta.');
+  }
+
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+  return canvas;
+};
+
+const getDocumentCanvasSize = (imageWidth: number, imageHeight: number) => {
+  const landscape = imageWidth > imageHeight * 1.15;
+  const baseWidth = landscape ? OCR_DOCUMENT_BASE_HEIGHT : OCR_DOCUMENT_BASE_WIDTH;
+  const baseHeight = landscape ? OCR_DOCUMENT_BASE_WIDTH : OCR_DOCUMENT_BASE_HEIGHT;
+  const usableWidth = baseWidth - OCR_DOCUMENT_MARGIN * 2;
+  const usableHeight = baseHeight - OCR_DOCUMENT_MARGIN * 2;
+  const fitScale = Math.min(usableWidth / imageWidth, usableHeight / imageHeight);
+  const upscaleFactor = fitScale < 1 ? 1 / fitScale : 1;
+  const maxScale = OCR_DOCUMENT_MAX_EDGE / Math.max(baseWidth, baseHeight);
+  const pageScale = Math.min(upscaleFactor, maxScale);
+
+  return {
+    width: Math.max(1, Math.round(baseWidth * pageScale)),
+    height: Math.max(1, Math.round(baseHeight * pageScale)),
+    margin: Math.max(24, Math.round(OCR_DOCUMENT_MARGIN * pageScale)),
+  };
+};
+
+const createPdfPageImageForOcr = async (file: Blob): Promise<Blob> => {
+  const image = await loadImageElement(file);
+  const pageSize = getDocumentCanvasSize(image.width, image.height);
+  const canvas = createCanvas(pageSize.width, pageSize.height);
+  const context = canvas.getContext('2d');
+
   if (!context) {
     return file;
   }
 
-  context.imageSmoothingEnabled = false;
-  context.drawImage(image, 0, 0, width, height);
+  const maxWidth = pageSize.width - pageSize.margin * 2;
+  const maxHeight = pageSize.height - pageSize.margin * 2;
+  const fitScale = Math.min(maxWidth / image.width, maxHeight / image.height);
+  const drawWidth = Math.max(1, Math.round(image.width * fitScale));
+  const drawHeight = Math.max(1, Math.round(image.height * fitScale));
+  const offsetX = Math.round((pageSize.width - drawWidth) / 2);
+  const offsetY = Math.round((pageSize.height - drawHeight) / 2);
 
-  const imageData = context.getImageData(0, 0, width, height);
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, pageSize.width, pageSize.height);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
+  context.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
+
+  return canvasToBlob(canvas);
+};
+
+const applyCanvasOcrEnhancement = (canvas: HTMLCanvasElement) => {
+  const context = canvas.getContext('2d');
+
+  if (!context) {
+    return;
+  }
+
+  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
   const pixels = imageData.data;
 
   for (let index = 0; index < pixels.length; index += 4) {
@@ -400,34 +466,66 @@ const enhanceImageForOcr = async (file: File): Promise<Blob> => {
   }
 
   context.putImageData(imageData, 0, 0);
+};
 
+const enhanceImageForOcr = async (file: Blob): Promise<Blob> => {
+  const image = await loadImageElement(file);
+  const scaleFactor = image.width < 1500 ? 2 : 1.35;
+  const canvas = await renderBlobToCanvas(file, scaleFactor);
+
+  applyCanvasOcrEnhancement(canvas);
   return canvasToBlob(canvas);
 };
 
-const buildProgressLogger = (
-  onProgress: ((progress: number) => void) | undefined,
-  start: number,
-  end: number
-) => {
-  const span = end - start;
+type OcrProgressState = {
+  start: number;
+  end: number;
+  onProgress?: (progress: number) => void;
+};
 
+const buildProgressLogger = (state: OcrProgressState) => {
   return (message: { status?: string; progress?: number }) => {
     if (message.status === 'recognizing text' && typeof message.progress === 'number') {
-      onProgress?.(Math.round(start + message.progress * span));
+      const span = state.end - state.start;
+      state.onProgress?.(Math.round(state.start + message.progress * span));
     }
   };
 };
 
+const createOcrWorker = async (progressState: OcrProgressState) => {
+  const { createWorker, OEM, PSM } = await import('tesseract.js');
+  const worker = await createWorker('spa+eng', OEM.LSTM_ONLY, {
+    logger: buildProgressLogger(progressState),
+  });
+
+  await worker.setParameters({
+    tessedit_pageseg_mode: PSM.SPARSE_TEXT,
+    preserve_interword_spaces: '1',
+    user_defined_dpi: '300',
+  });
+
+  return worker;
+};
+
+type OcrWorker = Awaited<ReturnType<typeof createOcrWorker>>;
+
 const runRecognition = async (
+  worker: OcrWorker,
+  progressState: OcrProgressState,
   file: File | Blob,
   startProgress: number,
   endProgress: number,
   onProgress?: (progress: number) => void
 ) => {
-  const { recognize } = await import('tesseract.js');
-  const recognition = await recognize(file, 'spa+eng', {
-    logger: buildProgressLogger(onProgress, startProgress, endProgress),
+  progressState.start = startProgress;
+  progressState.end = endProgress;
+  progressState.onProgress = onProgress;
+  onProgress?.(startProgress);
+
+  const recognition = await worker.recognize(file, {
+    rotateAuto: true,
   });
+  onProgress?.(endProgress);
 
   return parseVehicleCardText(
     recognition.data.text || '',
@@ -587,7 +685,10 @@ const mergeVehicleCardResults = (
   };
 
   return {
-    rawText: baseResult.rawText,
+    rawText:
+      enhancedResult.detectedFields > baseResult.detectedFields
+        ? enhancedResult.rawText
+        : baseResult.rawText,
     confidence: Math.max(baseResult.confidence, enhancedResult.confidence),
     extracted,
     detectedFields: countDetectedFields(extracted),
@@ -605,24 +706,45 @@ export const readVehicleCard = async (
   file: File,
   onProgress?: (progress: number) => void
 ): Promise<VehicleCardReaderResult> => {
-  const baseResult = await runRecognition(file, 0, 62, onProgress);
-
-  if (!shouldRetryWithEnhancedPass(baseResult)) {
-    onProgress?.(100);
-    return baseResult;
-  }
+  const progressState: OcrProgressState = {
+    start: 0,
+    end: 100,
+    onProgress,
+  };
+  const worker = await createOcrWorker(progressState);
 
   try {
-    const enhancedImage = await enhanceImageForOcr(file);
-    const enhancedResult = await runRecognition(enhancedImage, 62, 100, onProgress);
-    onProgress?.(100);
-    const mergedResult = mergeVehicleCardResults(baseResult, enhancedResult);
+    // Tesseract.js no procesa PDF como entrada. Para aproximar ese flujo,
+    // normalizamos la foto a una pagina tipo documento antes del OCR.
+    const documentImage = await createPdfPageImageForOcr(file).catch(() => file);
+    const baseResult = await runRecognition(worker, progressState, documentImage, 0, 62, onProgress);
 
-    return mergedResult.detectedFields > baseResult.detectedFields
-      ? mergedResult
-      : baseResult;
-  } catch {
-    onProgress?.(100);
-    return baseResult;
+    if (!shouldRetryWithEnhancedPass(baseResult)) {
+      onProgress?.(100);
+      return baseResult;
+    }
+
+    try {
+      const enhancedImage = await enhanceImageForOcr(documentImage);
+      const enhancedResult = await runRecognition(
+        worker,
+        progressState,
+        enhancedImage,
+        62,
+        100,
+        onProgress
+      );
+      onProgress?.(100);
+      const mergedResult = mergeVehicleCardResults(baseResult, enhancedResult);
+
+      return mergedResult.detectedFields > baseResult.detectedFields
+        ? mergedResult
+        : baseResult;
+    } catch {
+      onProgress?.(100);
+      return baseResult;
+    }
+  } finally {
+    await worker.terminate();
   }
 };

@@ -513,14 +513,14 @@ const VehicleForm: React.FC = () => {
         if (name === 'modelo') {
           nextState.datosTarjetaPropiedad = {
             ...prev.datosTarjetaPropiedad,
-            linea: normalizedValue
+            linea: String(normalizedValue)
           };
         }
 
         if (name === 'vin') {
           nextState.datosTarjetaPropiedad = {
             ...nextState.datosTarjetaPropiedad,
-            numeroChasis: normalizedValue
+            numeroChasis: String(normalizedValue)
           };
         }
 
