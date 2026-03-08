@@ -115,6 +115,9 @@ const MAX_AUTO_UPSCALE = 3.4;
 const UPSCALE_STEP_FACTOR = 1.35;
 const MIN_TARGET_OCR_EDGE = 3600;
 const OCR_IMAGE_MIME_TYPE = 'image/png';
+const PROPERTY_CARD_TARGET_ASPECT_RATIO = 1.58;
+const PROPERTY_CARD_MIN_ASPECT_RATIO = 1.18;
+const PROPERTY_CARD_MAX_ASPECT_RATIO = 2.15;
 
 const loadImage = (file: Blob): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
@@ -560,6 +563,357 @@ const getRectangleMeanScore = (
   return getRectangleScore(integral, width, height, left, top, right, bottom) / area;
 };
 
+const getCropBoxArea = (cropBox: CropBox) => Math.max(1, cropBox.width * cropBox.height);
+
+const expandCropBox = (
+  cropBox: CropBox,
+  width: number,
+  height: number,
+  paddingX: number,
+  paddingY: number
+): CropBox => {
+  const x = clamp(cropBox.x - paddingX, 0, width - 1);
+  const y = clamp(cropBox.y - paddingY, 0, height - 1);
+  const x1 = clamp(cropBox.x + cropBox.width + paddingX, x + 1, width);
+  const y1 = clamp(cropBox.y + cropBox.height + paddingY, y + 1, height);
+
+  return {
+    x,
+    y,
+    width: x1 - x,
+    height: y1 - y,
+  };
+};
+
+const calculatePropertyCardAspectScore = (aspectRatio: number) => {
+  const logDistance = Math.abs(Math.log(aspectRatio / PROPERTY_CARD_TARGET_ASPECT_RATIO));
+  return Math.max(0, 1 - logDistance / 0.42);
+};
+
+const isPlausiblePropertyCardCropBox = (
+  cropBox: CropBox,
+  width: number,
+  height: number
+) => {
+  const cropWidth = cropBox.width;
+  const cropHeight = cropBox.height;
+  const aspectRatio = cropWidth / Math.max(1, cropHeight);
+  const areaRatio = getCropBoxArea(cropBox) / Math.max(1, width * height);
+
+  if (
+    cropWidth < width * 0.24 ||
+    cropHeight < height * 0.16 ||
+    cropWidth > width * 0.988 ||
+    cropHeight > height * 0.988
+  ) {
+    return false;
+  }
+
+  if (areaRatio < 0.08 || areaRatio > 0.92) {
+    return false;
+  }
+
+  return (
+    aspectRatio >= PROPERTY_CARD_MIN_ASPECT_RATIO &&
+    aspectRatio <= PROPERTY_CARD_MAX_ASPECT_RATIO
+  );
+};
+
+const getCropBoxOutsideMeanScore = (
+  integral: Float64Array,
+  width: number,
+  height: number,
+  cropBox: CropBox,
+  paddingX: number,
+  paddingY: number
+) => {
+  const expanded = expandCropBox(cropBox, width, height, paddingX, paddingY);
+  const expandedScore = getRectangleScore(
+    integral,
+    width,
+    height,
+    expanded.x,
+    expanded.y,
+    expanded.x + expanded.width,
+    expanded.y + expanded.height
+  );
+  const innerScore = getRectangleScore(
+    integral,
+    width,
+    height,
+    cropBox.x,
+    cropBox.y,
+    cropBox.x + cropBox.width,
+    cropBox.y + cropBox.height
+  );
+  const outsideArea = Math.max(1, getCropBoxArea(expanded) - getCropBoxArea(cropBox));
+
+  return Math.max(0, expandedScore - innerScore) / outsideArea;
+};
+
+const scoreDetectedPropertyCardCropBox = (
+  integral: Float64Array,
+  width: number,
+  height: number,
+  cropBox: CropBox
+) => {
+  if (!isPlausiblePropertyCardCropBox(cropBox, width, height)) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  const aspectRatio = cropBox.width / Math.max(1, cropBox.height);
+  const aspectScore = calculatePropertyCardAspectScore(aspectRatio);
+  const borderWidth = Math.max(4, Math.round(cropBox.width * 0.032));
+  const borderHeight = Math.max(4, Math.round(cropBox.height * 0.036));
+  const coreInsetX = Math.max(borderWidth + 2, Math.round(cropBox.width * 0.11));
+  const coreInsetY = Math.max(borderHeight + 2, Math.round(cropBox.height * 0.11));
+  const insideMean = getRectangleMeanScore(
+    integral,
+    width,
+    height,
+    cropBox.x,
+    cropBox.y,
+    cropBox.x + cropBox.width,
+    cropBox.y + cropBox.height
+  );
+  const coreMean = getRectangleMeanScore(
+    integral,
+    width,
+    height,
+    cropBox.x + coreInsetX,
+    cropBox.y + coreInsetY,
+    cropBox.x + cropBox.width - coreInsetX,
+    cropBox.y + cropBox.height - coreInsetY
+  );
+  const leftBorderMean = getRectangleMeanScore(
+    integral,
+    width,
+    height,
+    cropBox.x,
+    cropBox.y,
+    cropBox.x + borderWidth,
+    cropBox.y + cropBox.height
+  );
+  const rightBorderMean = getRectangleMeanScore(
+    integral,
+    width,
+    height,
+    cropBox.x + cropBox.width - borderWidth,
+    cropBox.y,
+    cropBox.x + cropBox.width,
+    cropBox.y + cropBox.height
+  );
+  const topBorderMean = getRectangleMeanScore(
+    integral,
+    width,
+    height,
+    cropBox.x,
+    cropBox.y,
+    cropBox.x + cropBox.width,
+    cropBox.y + borderHeight
+  );
+  const bottomBorderMean = getRectangleMeanScore(
+    integral,
+    width,
+    height,
+    cropBox.x,
+    cropBox.y + cropBox.height - borderHeight,
+    cropBox.x + cropBox.width,
+    cropBox.y + cropBox.height
+  );
+  const borderMean =
+    (leftBorderMean + rightBorderMean + topBorderMean + bottomBorderMean) / 4;
+  const outsideMean = getCropBoxOutsideMeanScore(
+    integral,
+    width,
+    height,
+    cropBox,
+    Math.max(6, Math.round(cropBox.width * 0.05)),
+    Math.max(6, Math.round(cropBox.height * 0.05))
+  );
+  const cropCenterX = cropBox.x + cropBox.width / 2;
+  const cropCenterY = cropBox.y + cropBox.height / 2;
+  const centerDistance =
+    Math.hypot(cropCenterX - width / 2, cropCenterY - height / 2) /
+    Math.max(1, Math.hypot(width / 2, height / 2));
+
+  return (
+    borderMean * 1.35 +
+    insideMean * 0.72 +
+    coreMean * 0.38 -
+    outsideMean * 0.62 +
+    aspectScore * 78 -
+    centerDistance * 24
+  );
+};
+
+const detectConnectedPropertyCardCropBox = (
+  integral: Float64Array,
+  width: number,
+  height: number
+): CropBox | null => {
+  const step = clamp(Math.round(Math.max(width, height) / 420), 2, 6);
+  const windowRadius = Math.max(6, step * 2);
+  const gridWidth = Math.max(1, Math.ceil(width / step));
+  const gridHeight = Math.max(1, Math.ceil(height / step));
+  const densities = new Float32Array(gridWidth * gridHeight);
+  let densityTotal = 0;
+  let maxDensity = 0;
+
+  for (let gy = 0; gy < gridHeight; gy += 1) {
+    const centerY = Math.min(height - 1, gy * step + Math.floor(step / 2));
+
+    for (let gx = 0; gx < gridWidth; gx += 1) {
+      const centerX = Math.min(width - 1, gx * step + Math.floor(step / 2));
+      const density = getRectangleMeanScore(
+        integral,
+        width,
+        height,
+        centerX - windowRadius,
+        centerY - windowRadius,
+        centerX + windowRadius,
+        centerY + windowRadius
+      );
+      const densityIndex = gy * gridWidth + gx;
+      densities[densityIndex] = density;
+      densityTotal += density;
+      maxDensity = Math.max(maxDensity, density);
+    }
+  }
+
+  if (maxDensity <= 0) {
+    return null;
+  }
+
+  const meanDensity = densityTotal / Math.max(1, densities.length);
+  const activeThreshold = Math.max(meanDensity * 1.28, maxDensity * 0.24);
+  const active = new Uint8Array(densities.length);
+
+  for (let index = 0; index < densities.length; index += 1) {
+    active[index] = densities[index] >= activeThreshold ? 1 : 0;
+  }
+
+  const visited = new Uint8Array(densities.length);
+  const queueX: number[] = [];
+  const queueY: number[] = [];
+  let bestCropBox: CropBox | null = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (let startY = 0; startY < gridHeight; startY += 1) {
+    for (let startX = 0; startX < gridWidth; startX += 1) {
+      const startIndex = startY * gridWidth + startX;
+      if (!active[startIndex] || visited[startIndex]) {
+        continue;
+      }
+
+      visited[startIndex] = 1;
+      queueX.length = 0;
+      queueY.length = 0;
+      queueX.push(startX);
+      queueY.push(startY);
+
+      let head = 0;
+      let minX = startX;
+      let maxX = startX;
+      let minY = startY;
+      let maxY = startY;
+      let cellCount = 0;
+      let densitySum = 0;
+
+      while (head < queueX.length) {
+        const currentX = queueX[head];
+        const currentY = queueY[head];
+        head += 1;
+
+        const currentIndex = currentY * gridWidth + currentX;
+        cellCount += 1;
+        densitySum += densities[currentIndex];
+        minX = Math.min(minX, currentX);
+        maxX = Math.max(maxX, currentX);
+        minY = Math.min(minY, currentY);
+        maxY = Math.max(maxY, currentY);
+
+        const neighbors = [
+          [currentX - 1, currentY],
+          [currentX + 1, currentY],
+          [currentX, currentY - 1],
+          [currentX, currentY + 1],
+        ] as const;
+
+        for (const [nextX, nextY] of neighbors) {
+          if (
+            nextX < 0 ||
+            nextX >= gridWidth ||
+            nextY < 0 ||
+            nextY >= gridHeight
+          ) {
+            continue;
+          }
+
+          const nextIndex = nextY * gridWidth + nextX;
+          if (!active[nextIndex] || visited[nextIndex]) {
+            continue;
+          }
+
+          visited[nextIndex] = 1;
+          queueX.push(nextX);
+          queueY.push(nextY);
+        }
+      }
+
+      if (cellCount < 6) {
+        continue;
+      }
+
+      const componentCropBox = expandCropBox(
+        {
+          x: minX * step,
+          y: minY * step,
+          width: Math.min(width, (maxX + 1) * step) - minX * step,
+          height: Math.min(height, (maxY + 1) * step) - minY * step,
+        },
+        width,
+        height,
+        step * 2,
+        step * 2
+      );
+
+      if (!isPlausiblePropertyCardCropBox(componentCropBox, width, height)) {
+        continue;
+      }
+
+      const densityRatio = (densitySum / Math.max(1, cellCount)) / Math.max(1, maxDensity);
+      const areaRatio = getCropBoxArea(componentCropBox) / Math.max(1, width * height);
+      const aspectScore = calculatePropertyCardAspectScore(
+        componentCropBox.width / Math.max(1, componentCropBox.height)
+      );
+      const centerDistance =
+        Math.hypot(
+          componentCropBox.x + componentCropBox.width / 2 - width / 2,
+          componentCropBox.y + componentCropBox.height / 2 - height / 2
+        ) / Math.max(1, Math.hypot(width / 2, height / 2));
+      const touchesEdgeCount =
+        (componentCropBox.x <= step ? 1 : 0) +
+        (componentCropBox.y <= step ? 1 : 0) +
+        (componentCropBox.x + componentCropBox.width >= width - step ? 1 : 0) +
+        (componentCropBox.y + componentCropBox.height >= height - step ? 1 : 0);
+      const componentScore =
+        densityRatio * 105 +
+        aspectScore * 95 +
+        Math.sqrt(areaRatio) * 82 -
+        centerDistance * 62 -
+        touchesEdgeCount * 9;
+
+      if (componentScore > bestScore) {
+        bestScore = componentScore;
+        bestCropBox = componentCropBox;
+      }
+    }
+  }
+
+  return bestCropBox;
+};
+
 const refineVerticalBoundary = (
   integral: Float64Array,
   width: number,
@@ -792,50 +1146,61 @@ const detectPropertyCardCropBox = (canvas: HTMLCanvasElement): CropBox | null =>
     }
   }
 
+  const scoreIntegral = buildIntegralImage(scoreMap, width, height);
+  const candidateCropBoxes: CropBox[] = [];
   const rowBounds = detectProjectionBounds(rowProjection, 0.22, 0.34);
   const colBounds = detectProjectionBounds(colProjection, 0.24, 0.42);
 
-  if (!rowBounds || !colBounds) {
+  if (rowBounds && colBounds) {
+    const paddingX = Math.max(8, Math.round(width * 0.025));
+    const paddingY = Math.max(8, Math.round(height * 0.025));
+    candidateCropBoxes.push({
+      x: Math.max(0, colBounds.start - paddingX),
+      y: Math.max(0, rowBounds.start - paddingY),
+      width:
+        Math.min(width, colBounds.end + paddingX) - Math.max(0, colBounds.start - paddingX),
+      height:
+        Math.min(height, rowBounds.end + paddingY) - Math.max(0, rowBounds.start - paddingY),
+    });
+  }
+
+  const connectedCropBox = detectConnectedPropertyCardCropBox(scoreIntegral, width, height);
+  if (connectedCropBox) {
+    candidateCropBoxes.push(connectedCropBox);
+  }
+
+  if (!candidateCropBoxes.length) {
     return null;
   }
 
-  const paddingX = Math.max(8, Math.round(width * 0.025));
-  const paddingY = Math.max(8, Math.round(height * 0.025));
-  const roughCropBox: CropBox = {
-    x: Math.max(0, colBounds.start - paddingX),
-    y: Math.max(0, rowBounds.start - paddingY),
-    width: Math.min(width, colBounds.end + paddingX) - Math.max(0, colBounds.start - paddingX),
-    height: Math.min(height, rowBounds.end + paddingY) - Math.max(0, rowBounds.start - paddingY),
-  };
-  const cropBox = refinePropertyCardCropBox(
-    buildIntegralImage(scoreMap, width, height),
-    width,
-    height,
-    roughCropBox
-  );
-  const cropWidth = cropBox.width;
-  const cropHeight = cropBox.height;
+  let bestCropBox: CropBox | null = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
 
-  if (
-    cropWidth < width * 0.45 ||
-    cropHeight < height * 0.32 ||
-    cropWidth > width * 0.98 ||
-    cropHeight > height * 0.98
-  ) {
+  for (const roughCropBox of candidateCropBoxes) {
+    const refinedCropBox = refinePropertyCardCropBox(
+      scoreIntegral,
+      width,
+      height,
+      roughCropBox
+    );
+    const candidateScore = scoreDetectedPropertyCardCropBox(
+      scoreIntegral,
+      width,
+      height,
+      refinedCropBox
+    );
+
+    if (candidateScore > bestScore) {
+      bestScore = candidateScore;
+      bestCropBox = refinedCropBox;
+    }
+  }
+
+  if (!bestCropBox || !isPlausiblePropertyCardCropBox(bestCropBox, width, height)) {
     return null;
   }
 
-  const aspectRatio = cropWidth / Math.max(1, cropHeight);
-  if (aspectRatio < 1.15 || aspectRatio > 2.6) {
-    return null;
-  }
-
-  return {
-    x: cropBox.x,
-    y: cropBox.y,
-    width: cropWidth,
-    height: cropHeight,
-  };
+  return bestCropBox;
 };
 
 const preparePropertyCardBaseCanvas = async (file: Blob) => {
