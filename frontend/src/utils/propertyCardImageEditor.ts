@@ -64,26 +64,26 @@ export const OCR_SOFT_COLOR_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustm
   binarizeThreshold: null,
 };
 
-export const OCR_BLACK_AND_WHITE_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
+export const OCR_SOFT_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
   rotation: 0,
-  brightness: 118,
-  contrast: 176,
+  brightness: 110,
+  contrast: 148,
+  saturation: 0,
+  grayscale: 100,
+  sharpen: 26,
+  upscale: 1.08,
+  binarizeThreshold: null,
+};
+
+export const OCR_DETAIL_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
+  rotation: 0,
+  brightness: 116,
+  contrast: 168,
   saturation: 0,
   grayscale: 100,
   sharpen: 32,
-  upscale: 1.16,
-  binarizeThreshold: 158,
-};
-
-export const OCR_SOFT_BLACK_AND_WHITE_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
-  rotation: 0,
-  brightness: 114,
-  contrast: 164,
-  saturation: 0,
-  grayscale: 100,
-  sharpen: 28,
-  upscale: 1.1,
-  binarizeThreshold: 148,
+  upscale: 1.14,
+  binarizeThreshold: null,
 };
 
 export interface PropertyCardAutoEnhancementResult {
@@ -264,12 +264,28 @@ const buildAutoPropertyCardImagePresets = (
 
   return [
     {
-      key: 'ocr-soft-bw',
-      adjustments: withUpscale(OCR_SOFT_BLACK_AND_WHITE_PROPERTY_CARD_IMAGE_PRESET, 1.08),
+      key: 'ocr-gray-soft',
+      adjustments: withUpscale(OCR_SOFT_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET, 1.02),
     },
     {
-      key: 'ocr-bw',
-      adjustments: withUpscale(OCR_BLACK_AND_WHITE_PROPERTY_CARD_IMAGE_PRESET, 1.12),
+      key: 'ocr-gray-balanced',
+      adjustments: withUpscale(OCR_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET, 1.08),
+    },
+    {
+      key: 'ocr-gray-contrast',
+      adjustments: withUpscale(OCR_DETAIL_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET, 1.1),
+    },
+    {
+      key: 'ocr-gray-high-contrast',
+      adjustments: withUpscale(
+        {
+          ...OCR_HIGH_CONTRAST_PROPERTY_CARD_IMAGE_PRESET,
+          saturation: 0,
+          grayscale: 100,
+          binarizeThreshold: null,
+        },
+        1.06
+      ),
     },
   ];
 };
