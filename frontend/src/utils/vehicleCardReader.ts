@@ -656,6 +656,28 @@ const extractPlateLoose = (...values: string[]): string => {
   return bestMatch?.value || '';
 };
 
+const extractPreferredPlate = (preferredValue: string, ...fallbackValues: string[]): string => {
+  const normalizedPreferred = normalizeForSearch(preferredValue);
+  const strictPreferred = extractPlate(normalizedPreferred) || extractPlate(preferredValue);
+  if (strictPreferred) {
+    return strictPreferred;
+  }
+
+  const loosePreferred = extractPlateLoose(preferredValue);
+  if (loosePreferred) {
+    return loosePreferred;
+  }
+
+  for (const value of fallbackValues) {
+    const strictCandidate = extractPlate(normalizeForSearch(value)) || extractPlate(value);
+    if (strictCandidate) {
+      return strictCandidate;
+    }
+  }
+
+  return extractPlateLoose(...fallbackValues);
+};
+
 const extractVinLoose = (...values: string[]): string => {
   for (const value of values) {
     const normalized = normalizeForSearch(value)
@@ -761,14 +783,29 @@ const normalizeMechanicalValue = (value: string): string => {
   const tokenMatches = candidate
     .split(/\s+/)
     .map((token) => token.replace(/[^A-Z0-9-]/g, ''))
-    .filter((token) => token.length >= 5 && /\d/.test(token));
+    .filter(
+      (token) =>
+        token.length >= 5 &&
+        token.length <= 25 &&
+        /\d/.test(token) &&
+        !/^(?:REPUBLICA|COLOMBIA|MINISTERIO|TRANSPORTE|LICENCIA|TRANSITO)+$/.test(token)
+    );
 
   if (tokenMatches.length) {
     return tokenMatches.sort((left, right) => right.length - left.length)[0];
   }
 
   const compact = candidate.replace(/[^A-Z0-9-]/g, '');
-  return compact.length >= 6 ? compact : candidate;
+  if (
+    compact.length >= 5 &&
+    compact.length <= 25 &&
+    /\d/.test(compact) &&
+    !/^(?:REPUBLICA|COLOMBIA|MINISTERIO|TRANSPORTE|LICENCIA|TRANSITO)+$/.test(compact)
+  ) {
+    return compact;
+  }
+
+  return '';
 };
 
 const normalizeCilindrada = (value: string): string => {
@@ -895,7 +932,12 @@ const parseVehicleCardText = (rawText: string, confidence: number): VehicleCardR
     .filter(Boolean);
   const joinedLines = lines.join(' ');
 
-  const placa = extractPlate(normalizedText) || extractPlate(joinedLines);
+  const placa = extractPreferredPlate(
+    extractLabeledValue(lines, LABEL_ALIASES.placa),
+    normalizedText,
+    joinedLines,
+    ...lines
+  );
   const marca = normalizeBrand(extractLabeledValue(lines, LABEL_ALIASES.marca), normalizedText);
   const linea = cleanCandidate(extractLabeledValue(lines, LABEL_ALIASES.modelo));
   const modelo = linea;
@@ -1008,7 +1050,7 @@ const parseVehicleCardRecognition = (
     return pickBestExtractedValue(inlineValue, belowValue, strategy);
   };
 
-  const placa = extractPlateLoose(
+  const placa = extractPreferredPlate(
     resolveFieldValue(LABEL_ALIASES.placa, 'alphanumeric'),
     normalizedText,
     joinedLines,
@@ -1642,8 +1684,9 @@ const extractStructuredFieldValue = (
 
   switch (field) {
     case 'placa':
-      return extractPlateLoose(
+      return extractPreferredPlate(
         resolveFieldValueFromRegion(rawText, LABEL_ALIASES.placa, 'alphanumeric'),
+        rawText,
         normalizedRegionText
       );
     case 'marca':

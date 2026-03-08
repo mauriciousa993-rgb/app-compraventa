@@ -387,7 +387,7 @@ const VehicleForm: React.FC = () => {
           tipoCarroceria: vehicle.datosTarjetaPropiedad?.tipoCarroceria || '',
           numeroMotor: vehicle.datosTarjetaPropiedad?.numeroMotor || '',
           capacidad: vehicle.datosTarjetaPropiedad?.capacidad || '',
-          numeroChasis: vehicle.datosTarjetaPropiedad?.numeroChasis || vinUnificado,
+          numeroChasis: vehicle.datosTarjetaPropiedad?.numeroChasis || '',
           propietario: vehicle.datosTarjetaPropiedad?.propietario || '',
           identificacionPropietario: vehicle.datosTarjetaPropiedad?.identificacionPropietario || ''
         },
@@ -1055,9 +1055,7 @@ const VehicleForm: React.FC = () => {
         datosTarjetaPropiedad: {
           ...formData.datosTarjetaPropiedad,
           linea: formData.datosTarjetaPropiedad.linea.trim() || modeloUnificado,
-          numeroChasis: normalizeVinValue(
-            formData.datosTarjetaPropiedad.numeroChasis || vinUnificado
-          ),
+          numeroChasis: normalizeVinValue(formData.datosTarjetaPropiedad.numeroChasis || ''),
           cilindrada: formData.datosTarjetaPropiedad.cilindrada.trim(),
           claseVehiculo: formData.datosTarjetaPropiedad.claseVehiculo.trim(),
           servicio: formData.datosTarjetaPropiedad.servicio.trim(),
