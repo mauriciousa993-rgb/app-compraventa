@@ -22,10 +22,10 @@ export const DEFAULT_PROPERTY_CARD_IMAGE_ADJUSTMENTS: PropertyCardImageAdjustmen
 
 export const OCR_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
   rotation: 0,
-  brightness: 108,
-  contrast: 138,
-  saturation: 110,
-  grayscale: 6,
+  brightness: 106,
+  contrast: 136,
+  saturation: 118,
+  grayscale: 0,
   sharpen: 26,
   upscale: 1.05,
   binarizeThreshold: null,
@@ -33,10 +33,10 @@ export const OCR_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
 
 export const OCR_HIGH_CONTRAST_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
   rotation: 0,
-  brightness: 114,
-  contrast: 156,
-  saturation: 92,
-  grayscale: 18,
+  brightness: 110,
+  contrast: 154,
+  saturation: 108,
+  grayscale: 0,
   sharpen: 34,
   upscale: 1.1,
   binarizeThreshold: null,
@@ -44,11 +44,11 @@ export const OCR_HIGH_CONTRAST_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdju
 
 export const OCR_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
   rotation: 0,
-  brightness: 118,
-  contrast: 172,
-  saturation: 0,
-  grayscale: 72,
-  sharpen: 30,
+  brightness: 112,
+  contrast: 166,
+  saturation: 112,
+  grayscale: 0,
+  sharpen: 32,
   upscale: 1.14,
   binarizeThreshold: null,
 };
@@ -66,21 +66,21 @@ export const OCR_SOFT_COLOR_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustm
 
 export const OCR_SOFT_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
   rotation: 0,
-  brightness: 110,
-  contrast: 148,
-  saturation: 0,
-  grayscale: 100,
-  sharpen: 26,
+  brightness: 106,
+  contrast: 144,
+  saturation: 120,
+  grayscale: 0,
+  sharpen: 24,
   upscale: 1.08,
   binarizeThreshold: null,
 };
 
 export const OCR_DETAIL_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
   rotation: 0,
-  brightness: 116,
-  contrast: 168,
-  saturation: 0,
-  grayscale: 100,
+  brightness: 111,
+  contrast: 165,
+  saturation: 108,
+  grayscale: 0,
   sharpen: 32,
   upscale: 1.14,
   binarizeThreshold: null,
@@ -274,24 +274,24 @@ const buildAutoPropertyCardImagePresets = (
 
   return [
     {
-      key: 'ocr-gray-soft',
+      key: 'ocr-color-soft',
       adjustments: withUpscale(OCR_SOFT_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET, 1.02),
     },
     {
-      key: 'ocr-gray-balanced',
+      key: 'ocr-color-balanced',
       adjustments: withUpscale(OCR_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET, 1.08),
     },
     {
-      key: 'ocr-gray-contrast',
+      key: 'ocr-color-contrast',
       adjustments: withUpscale(OCR_DETAIL_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET, 1.1),
     },
     {
-      key: 'ocr-gray-high-contrast',
+      key: 'ocr-color-high-contrast',
       adjustments: withUpscale(
         {
           ...OCR_HIGH_CONTRAST_PROPERTY_CARD_IMAGE_PRESET,
-          saturation: 0,
-          grayscale: 100,
+          saturation: 104,
+          grayscale: 0,
           binarizeThreshold: null,
         },
         1.06

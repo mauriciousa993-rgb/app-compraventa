@@ -49,8 +49,11 @@ const pickCardNumberValue = (
   return current > 0 && current !== DEFAULT_VEHICLE_YEAR ? current : incoming;
 };
 
-const normalizePlateValue = (value: string) =>
-  value.toUpperCase().replace(/\s+/g, '').slice(0, 6);
+const normalizePlateValue = (value: string) => {
+  const normalized = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const match = normalized.match(/[A-Z]{3}\d{3}|[A-Z]{3}\d{2}[A-Z]/);
+  return (match?.[0] || normalized).slice(0, 6);
+};
 
 const normalizeVinValue = (value: string) =>
   value.toUpperCase().replace(/\s+/g, '');
@@ -1358,8 +1361,8 @@ const VehicleForm: React.FC = () => {
                 <div className="space-y-4">
                   <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-900">
                     La foto se recorta y corrige automaticamente antes del OCR. La app intenta aislar solo el cuadro
-                    de la tarjeta, conservar mas detalle de la imagen original, mejorar resolucion, llevarla a escala
-                    de grises, ajustar contraste y nitidez, y usar la version que estime mas legible.
+                    de la tarjeta, conservar mas detalle de la imagen original, mejorar resolucion, ajustar contraste
+                    y nitidez, y usar la version que estime mas legible.
                   </div>
 
                   <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
@@ -1368,7 +1371,7 @@ const VehicleForm: React.FC = () => {
                         <p className="text-sm font-semibold text-blue-900">Estado de lectura</p>
                         <p className="text-sm text-blue-700">
                           {isApplyingPropertyCardEditor
-                            ? 'Recortando la tarjeta, mejorando resolucion y pasandola automaticamente a escala de grises antes del OCR...'
+                            ? 'Recortando la tarjeta y mejorando resolucion, contraste y nitidez antes del OCR...'
                             : isReadingPropertyCard
                             ? `Leyendo tarjeta... ${propertyCardProgress}%`
                             : propertyCardResult
