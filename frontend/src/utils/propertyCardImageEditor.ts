@@ -108,11 +108,13 @@ type CropBox = {
 
 type DrawableSource = HTMLCanvasElement | HTMLImageElement;
 
-const MAX_OUTPUT_EDGE = 3200;
+const MAX_OUTPUT_EDGE = 4800;
 const CARD_PREPARE_MAX_EDGE = 1800;
-const MAX_CROPPED_SOURCE_EDGE = 2600;
-const MAX_AUTO_UPSCALE = 2.4;
+const MAX_CROPPED_SOURCE_EDGE = 4200;
+const MAX_AUTO_UPSCALE = 3.4;
 const UPSCALE_STEP_FACTOR = 1.35;
+const MIN_TARGET_OCR_EDGE = 3600;
+const OCR_IMAGE_MIME_TYPE = 'image/png';
 
 const loadImage = (file: Blob): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
@@ -139,7 +141,11 @@ const createCanvas = (width: number, height: number): HTMLCanvasElement => {
   return canvas;
 };
 
-const canvasToBlob = (canvas: HTMLCanvasElement): Promise<Blob> =>
+const canvasToBlob = (
+  canvas: HTMLCanvasElement,
+  mimeType = 'image/jpeg',
+  quality?: number
+): Promise<Blob> =>
   new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => {
@@ -150,17 +156,9 @@ const canvasToBlob = (canvas: HTMLCanvasElement): Promise<Blob> =>
 
         reject(new Error('No se pudo generar la imagen mejorada.'));
       },
-      'image/jpeg',
-      0.92
+      mimeType,
+      quality
     );
-  });
-
-const blobToDataUrl = (blob: Blob): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve((reader.result as string) || '');
-    reader.onerror = () => reject(new Error('No se pudo convertir la imagen a PDF.'));
-    reader.readAsDataURL(blob);
   });
 
 const clamp = (value: number, min: number, max: number) =>
@@ -232,12 +230,13 @@ const progressivelyUpscaleCanvas = (
 const estimateAdaptiveUpscale = (width: number, height: number) => {
   const longEdge = Math.max(width, height);
 
-  if (longEdge <= 720) return 2.35;
-  if (longEdge <= 900) return 2.1;
-  if (longEdge <= 1150) return 1.85;
-  if (longEdge <= 1450) return 1.6;
-  if (longEdge <= 1850) return 1.35;
-  return 1.12;
+  if (longEdge <= 720) return 3.1;
+  if (longEdge <= 900) return 2.7;
+  if (longEdge <= 1150) return 2.35;
+  if (longEdge <= 1450) return 2;
+  if (longEdge <= 1850) return 1.7;
+  if (longEdge <= 2400) return 1.4;
+  return 1.18;
 };
 
 const buildAutoPropertyCardImagePresets = (
@@ -249,8 +248,16 @@ const buildAutoPropertyCardImagePresets = (
     1,
     MAX_AUTO_UPSCALE
   );
+  const targetResolutionUpscale = clamp(
+    MIN_TARGET_OCR_EDGE / Math.max(1, longEdge),
+    1,
+    maxAllowedUpscale
+  );
   const baseUpscale = clamp(
-    estimateAdaptiveUpscale(preparedCanvas.width, preparedCanvas.height),
+    Math.max(
+      estimateAdaptiveUpscale(preparedCanvas.width, preparedCanvas.height),
+      targetResolutionUpscale
+    ),
     1,
     maxAllowedUpscale
   );
@@ -882,23 +889,32 @@ const preparePropertyCardBaseCanvas = async (file: Blob) => {
   );
 };
 
-const buildEditedFileName = (fileName: string) => {
+const getFileExtensionForMimeType = (mimeType: string) =>
+  mimeType === 'image/png' ? 'png' : 'jpg';
+
+const buildEditedFileName = (fileName: string, mimeType = 'image/jpeg') => {
+  const extension = getFileExtensionForMimeType(mimeType);
   const dotIndex = fileName.lastIndexOf('.');
   if (dotIndex <= 0) {
-    return `${fileName}-editada.jpg`;
+    return `${fileName}-editada.${extension}`;
   }
 
-  return `${fileName.slice(0, dotIndex)}-editada.jpg`;
+  return `${fileName.slice(0, dotIndex)}-editada.${extension}`;
 };
 
-const buildEditedFileNameWithKey = (fileName: string, key: string) => {
+const buildEditedFileNameWithKey = (
+  fileName: string,
+  key: string,
+  mimeType = 'image/jpeg'
+) => {
+  const extension = getFileExtensionForMimeType(mimeType);
   const safeKey = key.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
   const dotIndex = fileName.lastIndexOf('.');
   if (dotIndex <= 0) {
-    return `${fileName}-${safeKey}.jpg`;
+    return `${fileName}-${safeKey}.${extension}`;
   }
 
-  return `${fileName.slice(0, dotIndex)}-${safeKey}.jpg`;
+  return `${fileName.slice(0, dotIndex)}-${safeKey}.${extension}`;
 };
 
 const buildPdfFileName = (fileName: string) => {
@@ -922,7 +938,8 @@ export const buildPropertyCardPdfFile = async (file: File): Promise<File> => {
     format: [width, height],
     compress: true,
   });
-  const imageDataUrl = await blobToDataUrl(file);
+  const pdfCanvas = drawSourceToCanvas(image, width, height);
+  const imageDataUrl = pdfCanvas.toDataURL('image/jpeg', 0.9);
 
   pdf.addImage(imageDataUrl, 'JPEG', 0, 0, width, height, undefined, 'FAST');
 
@@ -1089,9 +1106,9 @@ export const processPropertyCardImage = async (
 ): Promise<File> => {
   const preparedCanvas = await preparePropertyCardBaseCanvas(file);
   const canvas = await renderAdjustedPropertyCardCanvas(preparedCanvas, adjustments);
-  const blob = await canvasToBlob(canvas);
-  return new File([blob], buildEditedFileName(file.name), {
-    type: 'image/jpeg',
+  const blob = await canvasToBlob(canvas, OCR_IMAGE_MIME_TYPE);
+  return new File([blob], buildEditedFileName(file.name, OCR_IMAGE_MIME_TYPE), {
+    type: OCR_IMAGE_MIME_TYPE,
     lastModified: Date.now(),
   });
 };
@@ -1106,12 +1123,12 @@ export const autoProcessPropertyCardImage = async (
   for (const preset of presets) {
     const canvas = await renderAdjustedPropertyCardCanvas(preparedCanvas, preset.adjustments);
     const score = calculatePropertyCardLegibilityScore(canvas);
-    const blob = await canvasToBlob(canvas);
+    const blob = await canvasToBlob(canvas, OCR_IMAGE_MIME_TYPE);
     const processedFile = new File(
       [blob],
-      buildEditedFileNameWithKey(file.name, preset.key),
+      buildEditedFileNameWithKey(file.name, preset.key, OCR_IMAGE_MIME_TYPE),
       {
-        type: 'image/jpeg',
+        type: OCR_IMAGE_MIME_TYPE,
         lastModified: Date.now(),
       }
     );
