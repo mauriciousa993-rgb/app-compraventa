@@ -26,14 +26,6 @@ const DEFAULT_VEHICLE_YEAR = new Date().getFullYear();
 
 type PropertyCardApplyMode = 'overwrite' | 'fill-empty';
 
-type VisionAiOcrResponse = {
-  source?: string;
-  confidence?: number;
-  detectedFields?: number;
-  rawText?: string;
-  extracted?: Record<string, unknown>;
-};
-
 const hasText = (value: string | null | undefined) => Boolean(value && value.trim());
 
 const pickCardTextValue = (
@@ -740,101 +732,6 @@ const VehicleForm: React.FC = () => {
     setPropertyCardProgress(0);
   };
 
-  const readPropertyCardWithVisionAI = async (
-    file: File
-  ): Promise<VehicleCardReaderResult | null> => {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const response = await api.post<VisionAiOcrResponse>(
-      '/vehicles/ocr/property-card',
-      formData,
-      {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        timeout: 35000,
-      }
-    );
-
-    const payload = response.data;
-    if (!payload?.extracted) {
-      return null;
-    }
-
-    const extracted = normalizePropertyCardDraft(
-      mapVisionAiExtractedToDraft(payload.extracted)
-    );
-    const detectedFields =
-      typeof payload.detectedFields === 'number' && Number.isFinite(payload.detectedFields)
-        ? payload.detectedFields
-        : Object.values(extracted).filter(Boolean).length;
-    const confidence =
-      typeof payload.confidence === 'number' && Number.isFinite(payload.confidence)
-        ? Math.max(0, Math.min(99, Math.round(payload.confidence)))
-        : Math.max(0, Math.min(99, Math.round(35 + detectedFields * 3.5)));
-
-    return {
-      rawText: typeof payload.rawText === 'string' ? payload.rawText : '',
-      confidence,
-      detectedFields,
-      extracted,
-    };
-  };
-
-  const runPropertyCardReader = async (file: File, previewOverride?: string) => {
-    setIsReadingPropertyCard(true);
-    setPropertyCardError('');
-    setPropertyCardResult(null);
-    setPropertyCardProgress(0);
-
-    try {
-      const preview = previewOverride || (await readFileAsDataUrl(file));
-      setPropertyCardPreview(preview);
-
-      setPropertyCardProgress(12);
-      const result = await readPropertyCardWithVisionAI(file);
-      if (!result) {
-        throw new Error('La IA no devolvio datos de lectura para esta tarjeta.');
-      }
-      setPropertyCardProgress(100);
-
-      const normalizedExtracted = normalizePropertyCardDraft(result.extracted);
-      setPropertyCardDraft(normalizedExtracted);
-      setPropertyCardResult({
-        ...result,
-        extracted: normalizedExtracted,
-      });
-
-      if (result.detectedFields === 0) {
-        setPropertyCardError('Se leyó la imagen, pero no se detectaron campos claros. Prueba con una foto más nítida o mejor iluminada.');
-        return;
-      }
-
-      applyPropertyCardDataWithMode(normalizedExtracted, 'overwrite');
-      setFormData((prev) => ({
-        ...prev,
-        documentacion: {
-          ...prev.documentacion,
-          tarjetaPropiedad: {
-            ...prev.documentacion.tarjetaPropiedad,
-            tiene: true,
-          },
-        },
-      }));
-    } catch (err: any) {
-      console.error('Error al leer tarjeta de propiedad:', err);
-      setPropertyCardError(
-        err?.response?.data?.message ||
-          err?.response?.data?.error ||
-          err?.message ||
-          'No se pudo procesar la tarjeta de propiedad con IA. Intenta con una imagen mas clara.'
-      );
-    } finally {
-      setIsReadingPropertyCard(false);
-    }
-  };
-
   const initializePropertyCardSelection = async (file: File) => {
     const preview = await readFileAsDataUrl(file);
 
@@ -868,8 +765,9 @@ const VehicleForm: React.FC = () => {
       setPropertyCardFile(nextFile);
       setPropertyCardDocumentFile(nextDocumentFile);
       setPropertyCardPreview(nextPreview);
-      setIsApplyingPropertyCardEditor(false);
-      await runPropertyCardReader(nextFile, nextPreview);
+      setPropertyCardResult(null);
+      setPropertyCardDraft(createEmptyPropertyCardDraft());
+      setPropertyCardProgress(0);
     } catch (err: any) {
       setPropertyCardError(
         err?.message || 'No se pudo optimizar la foto de la tarjeta. Intenta con otra imagen.'
@@ -1375,10 +1273,10 @@ const VehicleForm: React.FC = () => {
               <div>
                 <h2 className="mb-1 text-xl font-semibold text-gray-900">
                   <FileText className="mr-2 inline h-5 w-5" />
-                  Lector de Tarjeta de Propiedad
+                  Tarjeta de Propiedad
                 </h2>
                 <p className="text-sm text-gray-600">
-                  Sube una foto clara de la tarjeta y la app intentara completar placa, marca, modelo, año, color y VIN.
+                  Sube una foto clara de la tarjeta. La app la recorta, la mejora y la adjunta al guardar el vehiculo.
                 </p>
               </div>
               <button
@@ -1440,7 +1338,7 @@ const VehicleForm: React.FC = () => {
                   {propertyCardFile && (
                     <div className="space-y-1 text-xs text-gray-500">
                       <p>
-                        Imagen OCR aplicada: <strong>{propertyCardFile.name}</strong>
+                        Imagen procesada: <strong>{propertyCardFile.name}</strong>
                       </p>
                       {propertyCardDocumentFile && (
                         <p>
@@ -1461,39 +1359,27 @@ const VehicleForm: React.FC = () => {
 
                 <div className="space-y-4">
                   <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-900">
-                    La foto se recorta y corrige automaticamente antes del OCR. La app intenta aislar solo el cuadro
-                    de la tarjeta, conservar mas detalle de la imagen original, mejorar resolucion, ajustar contraste
-                    y nitidez, y usar la version que estime mas legible.
+                    La foto se recorta y corrige automaticamente para adjuntarla al vehiculo. La app intenta aislar
+                    solo el cuadro de la tarjeta, conservar detalle de la imagen, mejorar resolucion, ajustar contraste
+                    y nitidez.
                   </div>
 
                   <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
                     <div className="flex items-center justify-between gap-4">
                       <div>
-                        <p className="text-sm font-semibold text-blue-900">Estado de lectura</p>
+                        <p className="text-sm font-semibold text-blue-900">Estado de procesamiento</p>
                         <p className="text-sm text-blue-700">
                           {isApplyingPropertyCardEditor
-                            ? 'Recortando la tarjeta y mejorando resolucion, contraste y nitidez antes del OCR...'
-                            : isReadingPropertyCard
-                            ? `Leyendo tarjeta... ${propertyCardProgress}%`
-                            : propertyCardResult
-                              ? `Lectura completada con ${Math.round(propertyCardResult.confidence)}% de confianza.`
-                              : propertyCardFile
-                                ? 'La app esta lista para procesar automaticamente la tarjeta.'
-                                : 'La lectura comenzara al seleccionar una imagen.'}
+                            ? 'Recortando la tarjeta y mejorando resolucion, contraste y nitidez...'
+                            : propertyCardFile
+                              ? 'Tarjeta lista para adjuntar al guardar el vehiculo.'
+                              : 'El procesamiento comenzara al seleccionar una imagen.'}
                         </p>
                       </div>
-                      {isPropertyCardBusy && (
+                      {isApplyingPropertyCardEditor && (
                         <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
                       )}
                     </div>
-                    {isReadingPropertyCard && (
-                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-blue-100">
-                        <div
-                          className="h-full rounded-full bg-blue-500 transition-all"
-                          style={{ width: `${propertyCardProgress}%` }}
-                        />
-                      </div>
-                    )}
                   </div>
 
                   {propertyCardError && (
@@ -1502,7 +1388,7 @@ const VehicleForm: React.FC = () => {
                     </div>
                   )}
 
-                  {propertyCardResult && (
+                  {false && propertyCardResult && (
                     <div className="space-y-4">
                       <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
                         Revisa y corrige la lectura antes de aplicarla. Los campos compartidos quedan unificados con la seccion de
