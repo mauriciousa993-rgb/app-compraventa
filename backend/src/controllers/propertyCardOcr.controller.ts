@@ -33,6 +33,11 @@ type VisionCompletionResponse = {
   }>;
 };
 
+type UploadedImageFile = {
+  mimetype: string;
+  buffer: Buffer;
+};
+
 const VEHICLE_TYPE_SET = new Set(['suv', 'pickup', 'sedan', 'hatchback']);
 const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || 'gpt-4o-mini';
 const OPENAI_API_BASE_URL = process.env.OPENAI_API_BASE_URL || 'https://api.openai.com/v1';
@@ -130,7 +135,7 @@ export const ocrPropertyCardWithVisionAI = async (
       return;
     }
 
-    const file = req.file as Express.Multer.File | undefined;
+    const file = req.file as UploadedImageFile | undefined;
     if (!file) {
       res.status(400).json({ message: 'Debes adjuntar una imagen de la tarjeta en el campo file.' });
       return;
@@ -255,4 +260,3 @@ export const ocrPropertyCardWithVisionAI = async (
     });
   }
 };
-
