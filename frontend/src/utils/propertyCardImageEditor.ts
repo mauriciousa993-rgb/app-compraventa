@@ -5,6 +5,8 @@ export interface PropertyCardImageAdjustments {
   saturation: number;
   grayscale: number;
   sharpen: number;
+  upscale: number;
+  binarizeThreshold: number | null;
 }
 
 export const DEFAULT_PROPERTY_CARD_IMAGE_ADJUSTMENTS: PropertyCardImageAdjustments = {
@@ -14,6 +16,8 @@ export const DEFAULT_PROPERTY_CARD_IMAGE_ADJUSTMENTS: PropertyCardImageAdjustmen
   saturation: 100,
   grayscale: 0,
   sharpen: 0,
+  upscale: 1,
+  binarizeThreshold: null,
 };
 
 export const OCR_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
@@ -23,6 +27,8 @@ export const OCR_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
   saturation: 110,
   grayscale: 6,
   sharpen: 26,
+  upscale: 1.05,
+  binarizeThreshold: null,
 };
 
 export const OCR_HIGH_CONTRAST_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
@@ -32,6 +38,8 @@ export const OCR_HIGH_CONTRAST_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdju
   saturation: 92,
   grayscale: 18,
   sharpen: 34,
+  upscale: 1.1,
+  binarizeThreshold: null,
 };
 
 export const OCR_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
@@ -41,6 +49,8 @@ export const OCR_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustme
   saturation: 0,
   grayscale: 72,
   sharpen: 30,
+  upscale: 1.14,
+  binarizeThreshold: null,
 };
 
 export const OCR_SOFT_COLOR_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
@@ -50,6 +60,30 @@ export const OCR_SOFT_COLOR_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustm
   saturation: 122,
   grayscale: 0,
   sharpen: 18,
+  upscale: 1.02,
+  binarizeThreshold: null,
+};
+
+export const OCR_BLACK_AND_WHITE_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
+  rotation: 0,
+  brightness: 122,
+  contrast: 188,
+  saturation: 0,
+  grayscale: 100,
+  sharpen: 36,
+  upscale: 1.16,
+  binarizeThreshold: 168,
+};
+
+export const OCR_SOFT_BLACK_AND_WHITE_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
+  rotation: 0,
+  brightness: 116,
+  contrast: 176,
+  saturation: 0,
+  grayscale: 100,
+  sharpen: 30,
+  upscale: 1.1,
+  binarizeThreshold: 154,
 };
 
 export interface PropertyCardAutoEnhancementResult {
@@ -71,15 +105,13 @@ type CropBox = {
   height: number;
 };
 
-const MAX_OUTPUT_EDGE = 2600;
+type DrawableSource = HTMLCanvasElement | HTMLImageElement;
+
+const MAX_OUTPUT_EDGE = 3200;
 const CARD_PREPARE_MAX_EDGE = 1800;
-const AUTO_PROPERTY_CARD_IMAGE_PRESETS: PropertyCardImagePresetOption[] = [
-  { key: 'original', adjustments: DEFAULT_PROPERTY_CARD_IMAGE_ADJUSTMENTS },
-  { key: 'ocr-balanced', adjustments: OCR_PROPERTY_CARD_IMAGE_PRESET },
-  { key: 'ocr-high-contrast', adjustments: OCR_HIGH_CONTRAST_PROPERTY_CARD_IMAGE_PRESET },
-  { key: 'ocr-grayscale', adjustments: OCR_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET },
-  { key: 'ocr-soft-color', adjustments: OCR_SOFT_COLOR_PROPERTY_CARD_IMAGE_PRESET },
-];
+const MAX_CROPPED_SOURCE_EDGE = 2600;
+const MAX_AUTO_UPSCALE = 2.4;
+const UPSCALE_STEP_FACTOR = 1.35;
 
 const loadImage = (file: Blob): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
@@ -125,6 +157,128 @@ const canvasToBlob = (canvas: HTMLCanvasElement): Promise<Blob> =>
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
+const getSourceDimensions = (source: DrawableSource) =>
+  source instanceof HTMLCanvasElement
+    ? { width: source.width, height: source.height }
+    : {
+        width: source.naturalWidth || source.width,
+        height: source.naturalHeight || source.height,
+      };
+
+const drawSourceToCanvas = (
+  source: DrawableSource,
+  outputWidth: number,
+  outputHeight: number,
+  cropBox?: CropBox
+) => {
+  const targetCanvas = createCanvas(outputWidth, outputHeight);
+  const context = targetCanvas.getContext('2d');
+
+  if (!context) {
+    throw new Error('No se pudo preparar la imagen seleccionada.');
+  }
+
+  const sourceDimensions = getSourceDimensions(source);
+  const x = cropBox?.x ?? 0;
+  const y = cropBox?.y ?? 0;
+  const width = cropBox?.width ?? sourceDimensions.width;
+  const height = cropBox?.height ?? sourceDimensions.height;
+
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, targetCanvas.width, targetCanvas.height);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
+  context.drawImage(source, x, y, width, height, 0, 0, targetCanvas.width, targetCanvas.height);
+
+  return targetCanvas;
+};
+
+const progressivelyUpscaleCanvas = (
+  sourceCanvas: HTMLCanvasElement,
+  targetWidth: number,
+  targetHeight: number
+) => {
+  if (targetWidth <= sourceCanvas.width && targetHeight <= sourceCanvas.height) {
+    return sourceCanvas;
+  }
+
+  let workingCanvas = sourceCanvas;
+
+  while (workingCanvas.width < targetWidth || workingCanvas.height < targetHeight) {
+    const nextWidth = Math.min(
+      targetWidth,
+      Math.max(workingCanvas.width + 1, Math.round(workingCanvas.width * UPSCALE_STEP_FACTOR))
+    );
+    const nextHeight = Math.min(
+      targetHeight,
+      Math.max(workingCanvas.height + 1, Math.round(workingCanvas.height * UPSCALE_STEP_FACTOR))
+    );
+
+    workingCanvas = drawSourceToCanvas(workingCanvas, nextWidth, nextHeight);
+  }
+
+  return workingCanvas;
+};
+
+const estimateAdaptiveUpscale = (width: number, height: number) => {
+  const longEdge = Math.max(width, height);
+
+  if (longEdge <= 720) return 2.35;
+  if (longEdge <= 900) return 2.1;
+  if (longEdge <= 1150) return 1.85;
+  if (longEdge <= 1450) return 1.6;
+  if (longEdge <= 1850) return 1.35;
+  return 1.12;
+};
+
+const buildAutoPropertyCardImagePresets = (
+  preparedCanvas: HTMLCanvasElement
+): PropertyCardImagePresetOption[] => {
+  const longEdge = Math.max(preparedCanvas.width, preparedCanvas.height);
+  const maxAllowedUpscale = clamp(
+    MAX_OUTPUT_EDGE / Math.max(1, longEdge),
+    1,
+    MAX_AUTO_UPSCALE
+  );
+  const baseUpscale = clamp(
+    estimateAdaptiveUpscale(preparedCanvas.width, preparedCanvas.height),
+    1,
+    maxAllowedUpscale
+  );
+  const withUpscale = (
+    adjustments: PropertyCardImageAdjustments,
+    factor: number
+  ): PropertyCardImageAdjustments => ({
+    ...adjustments,
+    upscale: clamp(adjustments.upscale * baseUpscale * factor, 1, maxAllowedUpscale),
+  });
+
+  return [
+    { key: 'source-clean', adjustments: withUpscale(DEFAULT_PROPERTY_CARD_IMAGE_ADJUSTMENTS, 0.92) },
+    { key: 'ocr-balanced', adjustments: withUpscale(OCR_PROPERTY_CARD_IMAGE_PRESET, 1) },
+    {
+      key: 'ocr-high-contrast',
+      adjustments: withUpscale(OCR_HIGH_CONTRAST_PROPERTY_CARD_IMAGE_PRESET, 1.06),
+    },
+    {
+      key: 'ocr-grayscale',
+      adjustments: withUpscale(OCR_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET, 1.1),
+    },
+    {
+      key: 'ocr-soft-bw',
+      adjustments: withUpscale(OCR_SOFT_BLACK_AND_WHITE_PROPERTY_CARD_IMAGE_PRESET, 1.08),
+    },
+    {
+      key: 'ocr-bw',
+      adjustments: withUpscale(OCR_BLACK_AND_WHITE_PROPERTY_CARD_IMAGE_PRESET, 1.12),
+    },
+    {
+      key: 'ocr-soft-color',
+      adjustments: withUpscale(OCR_SOFT_COLOR_PROPERTY_CARD_IMAGE_PRESET, 0.96),
+    },
+  ];
+};
+
 const applySharpen = (canvas: HTMLCanvasElement, amount: number) => {
   if (amount <= 0) return;
 
@@ -161,6 +315,30 @@ const applySharpen = (canvas: HTMLCanvasElement, amount: number) => {
   }
 
   context.putImageData(new ImageData(target, width, height), 0, 0);
+};
+
+const applyBinarization = (canvas: HTMLCanvasElement, threshold: number | null) => {
+  if (threshold === null) return;
+
+  const context = canvas.getContext('2d');
+  if (!context) return;
+
+  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+  const pixels = imageData.data;
+  const normalizedThreshold = clamp(threshold, 64, 220);
+
+  for (let index = 0; index < pixels.length; index += 4) {
+    const luma =
+      pixels[index] * 0.299 +
+      pixels[index + 1] * 0.587 +
+      pixels[index + 2] * 0.114;
+    const value = luma >= normalizedThreshold ? 255 : 0;
+    pixels[index] = value;
+    pixels[index + 1] = value;
+    pixels[index + 2] = value;
+  }
+
+  context.putImageData(imageData, 0, 0);
 };
 
 const smoothSeries = (values: number[], radius: number) =>
@@ -335,51 +513,55 @@ const detectPropertyCardCropBox = (canvas: HTMLCanvasElement): CropBox | null =>
   };
 };
 
-const cropCanvas = (canvas: HTMLCanvasElement, cropBox: CropBox) => {
-  const targetCanvas = createCanvas(cropBox.width, cropBox.height);
-  const context = targetCanvas.getContext('2d');
-
-  if (!context) {
-    throw new Error('No se pudo recortar la tarjeta.');
-  }
-
-  context.fillStyle = '#ffffff';
-  context.fillRect(0, 0, targetCanvas.width, targetCanvas.height);
-  context.drawImage(
-    canvas,
-    cropBox.x,
-    cropBox.y,
-    cropBox.width,
-    cropBox.height,
-    0,
-    0,
-    targetCanvas.width,
-    targetCanvas.height
-  );
-
-  return targetCanvas;
-};
-
 const preparePropertyCardBaseCanvas = async (file: Blob) => {
   const image = await loadImage(file);
-  const scale = Math.min(1, CARD_PREPARE_MAX_EDGE / Math.max(image.width, image.height));
-  const width = Math.max(1, Math.round(image.width * scale));
-  const height = Math.max(1, Math.round(image.height * scale));
-  const baseCanvas = createCanvas(width, height);
-  const context = baseCanvas.getContext('2d');
+  const { width: imageWidth, height: imageHeight } = getSourceDimensions(image);
+  const detectionScale = Math.min(1, CARD_PREPARE_MAX_EDGE / Math.max(imageWidth, imageHeight));
+  const detectionWidth = Math.max(1, Math.round(imageWidth * detectionScale));
+  const detectionHeight = Math.max(1, Math.round(imageHeight * detectionScale));
+  const detectionCanvas = drawSourceToCanvas(image, detectionWidth, detectionHeight);
+  const detectedCropBox = detectPropertyCardCropBox(detectionCanvas);
 
-  if (!context) {
-    throw new Error('No se pudo preparar la imagen seleccionada.');
+  if (detectedCropBox) {
+    const cropBox: CropBox = {
+      x: clamp(Math.round(detectedCropBox.x / detectionScale), 0, imageWidth - 1),
+      y: clamp(Math.round(detectedCropBox.y / detectionScale), 0, imageHeight - 1),
+      width: clamp(
+        Math.round(detectedCropBox.width / detectionScale),
+        1,
+        imageWidth
+      ),
+      height: clamp(
+        Math.round(detectedCropBox.height / detectionScale),
+        1,
+        imageHeight
+      ),
+    };
+    const safeCropWidth = clamp(cropBox.width, 1, imageWidth - cropBox.x);
+    const safeCropHeight = clamp(cropBox.height, 1, imageHeight - cropBox.y);
+    const cropScale = Math.min(
+      1,
+      MAX_CROPPED_SOURCE_EDGE / Math.max(safeCropWidth, safeCropHeight)
+    );
+
+    return drawSourceToCanvas(
+      image,
+      Math.max(1, Math.round(safeCropWidth * cropScale)),
+      Math.max(1, Math.round(safeCropHeight * cropScale)),
+      {
+        ...cropBox,
+        width: safeCropWidth,
+        height: safeCropHeight,
+      }
+    );
   }
 
-  context.fillStyle = '#ffffff';
-  context.fillRect(0, 0, baseCanvas.width, baseCanvas.height);
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = 'high';
-  context.drawImage(image, 0, 0, width, height);
-
-  const cropBox = detectPropertyCardCropBox(baseCanvas);
-  return cropBox ? cropCanvas(baseCanvas, cropBox) : baseCanvas;
+  const fallbackScale = Math.min(1, MAX_CROPPED_SOURCE_EDGE / Math.max(imageWidth, imageHeight));
+  return drawSourceToCanvas(
+    image,
+    Math.max(1, Math.round(imageWidth * fallbackScale)),
+    Math.max(1, Math.round(imageHeight * fallbackScale))
+  );
 };
 
 const buildEditedFileName = (fileName: string) => {
@@ -438,14 +620,23 @@ const renderAdjustedPropertyCardCanvas = async (
       : await preparePropertyCardBaseCanvas(source);
   const sourceWidth = imageCanvas.width;
   const sourceHeight = imageCanvas.height;
-  const scale = Math.min(1, MAX_OUTPUT_EDGE / Math.max(sourceWidth, sourceHeight));
+  const scale = Math.min(
+    Math.max(adjustments.upscale, 0.1),
+    MAX_OUTPUT_EDGE / Math.max(sourceWidth, sourceHeight)
+  );
   const drawWidth = Math.max(1, Math.round(sourceWidth * scale));
   const drawHeight = Math.max(1, Math.round(sourceHeight * scale));
+  const preparedDrawCanvas =
+    scale > 1.02
+      ? progressivelyUpscaleCanvas(imageCanvas, drawWidth, drawHeight)
+      : scale < 0.98
+        ? drawSourceToCanvas(imageCanvas, drawWidth, drawHeight)
+        : imageCanvas;
   const rotateRightAngle =
     adjustments.rotation === 90 || adjustments.rotation === 270;
   const canvas = createCanvas(
-    rotateRightAngle ? drawHeight : drawWidth,
-    rotateRightAngle ? drawWidth : drawHeight
+    rotateRightAngle ? preparedDrawCanvas.height : preparedDrawCanvas.width,
+    rotateRightAngle ? preparedDrawCanvas.width : preparedDrawCanvas.height
   );
   const context = canvas.getContext('2d');
 
@@ -460,11 +651,18 @@ const renderAdjustedPropertyCardCanvas = async (
   context.filter = buildPropertyCardPreviewFilter(adjustments);
   context.translate(canvas.width / 2, canvas.height / 2);
   context.rotate((adjustments.rotation * Math.PI) / 180);
-  context.drawImage(imageCanvas, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+  context.drawImage(
+    preparedDrawCanvas,
+    -preparedDrawCanvas.width / 2,
+    -preparedDrawCanvas.height / 2,
+    preparedDrawCanvas.width,
+    preparedDrawCanvas.height
+  );
   context.setTransform(1, 0, 0, 1, 0, 0);
   context.filter = 'none';
 
   applySharpen(canvas, adjustments.sharpen);
+  applyBinarization(canvas, adjustments.binarizeThreshold);
 
   return canvas;
 };
@@ -483,6 +681,7 @@ const calculatePropertyCardLegibilityScore = (canvas: HTMLCanvasElement): number
   let edgeSum = 0;
   let clippedPixels = 0;
   let textLikePixels = 0;
+  let darkTextPixels = 0;
 
   const getLuma = (offset: number) =>
     imageData[offset] * 0.299 +
@@ -501,6 +700,7 @@ const calculatePropertyCardLegibilityScore = (canvas: HTMLCanvasElement): number
       edgeSum += Math.abs(luma - right) + Math.abs(luma - bottom);
       clippedPixels += luma < 18 || luma > 242 ? 1 : 0;
       textLikePixels += luma > 35 && luma < 215 ? 1 : 0;
+      darkTextPixels += luma >= 8 && luma <= 138 ? 1 : 0;
       count += 1;
     }
   }
@@ -513,14 +713,23 @@ const calculatePropertyCardLegibilityScore = (canvas: HTMLCanvasElement): number
   const edge = edgeSum / (count * 2);
   const clippedRatio = clippedPixels / count;
   const textRatio = textLikePixels / count;
+  const darkTextRatio = darkTextPixels / count;
   const exposureBalance = 255 - Math.abs(mean - 172);
+  const resolutionBonus =
+    Math.min(28, Math.max(0, (Math.max(width, height) - 1350) / 65)) +
+    Math.min(18, Math.max(0, (Math.min(width, height) - 760) / 48));
+  const binaryBalance = 1 - Math.min(1, Math.abs(darkTextRatio - 0.22) / 0.22);
+  const binaryFriendlyBonus = edge > 20 ? binaryBalance * 18 : 0;
+  const clippingPenalty = clippedRatio * (darkTextRatio > 0.08 && edge > 18 ? 46 : 85);
 
   return (
     edge * 1.8 +
     contrast * 1.45 +
     exposureBalance * 0.35 +
     textRatio * 45 -
-    clippedRatio * 85
+    clippingPenalty +
+    resolutionBonus +
+    binaryFriendlyBonus
   );
 };
 
@@ -541,9 +750,10 @@ export const autoProcessPropertyCardImage = async (
   file: File
 ): Promise<PropertyCardAutoEnhancementResult> => {
   const preparedCanvas = await preparePropertyCardBaseCanvas(file);
+  const presets = buildAutoPropertyCardImagePresets(preparedCanvas);
   let bestCandidate: PropertyCardAutoEnhancementResult | null = null;
 
-  for (const preset of AUTO_PROPERTY_CARD_IMAGE_PRESETS) {
+  for (const preset of presets) {
     const canvas = await renderAdjustedPropertyCardCanvas(preparedCanvas, preset.adjustments);
     const score = calculatePropertyCardLegibilityScore(canvas);
     const blob = await canvasToBlob(canvas);
