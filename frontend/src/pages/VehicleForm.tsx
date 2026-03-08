@@ -14,7 +14,6 @@ import {
 import Layout from '../components/Layout/Layout';
 import api, { buildVehiclePhotoUrl, vehiclesAPI } from '../services/api';
 import {
-  readVehicleCard,
   VehicleCardExtractedData,
   VehicleCardReaderResult
 } from '../utils/vehicleCardReader';
@@ -793,21 +792,12 @@ const VehicleForm: React.FC = () => {
       const preview = previewOverride || (await readFileAsDataUrl(file));
       setPropertyCardPreview(preview);
 
-      let result: VehicleCardReaderResult | null = null;
-      setPropertyCardProgress(8);
-
-      try {
-        result = await readPropertyCardWithVisionAI(file);
-      } catch (visionErr: any) {
-        console.warn('OCR IA no disponible, se usa OCR local:', visionErr?.message || visionErr);
-      }
-
+      setPropertyCardProgress(12);
+      const result = await readPropertyCardWithVisionAI(file);
       if (!result) {
-        setPropertyCardProgress(18);
-        result = await readVehicleCard(file, setPropertyCardProgress);
-      } else {
-        setPropertyCardProgress(100);
+        throw new Error('La IA no devolvio datos de lectura para esta tarjeta.');
       }
+      setPropertyCardProgress(100);
 
       const normalizedExtracted = normalizePropertyCardDraft(result.extracted);
       setPropertyCardDraft(normalizedExtracted);
@@ -835,7 +825,10 @@ const VehicleForm: React.FC = () => {
     } catch (err: any) {
       console.error('Error al leer tarjeta de propiedad:', err);
       setPropertyCardError(
-        err?.message || 'No se pudo procesar la tarjeta de propiedad. Intenta con una imagen más clara.'
+        err?.response?.data?.message ||
+          err?.response?.data?.error ||
+          err?.message ||
+          'No se pudo procesar la tarjeta de propiedad con IA. Intenta con una imagen mas clara.'
       );
     } finally {
       setIsReadingPropertyCard(false);
