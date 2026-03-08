@@ -34,10 +34,10 @@ const LABEL_ALIASES = {
   modelo: ['LINEA', 'LINEA REFERENCIA', 'REFERENCIA', 'VERSION'],
   año: ['MODELO', 'ANO', 'ANO MODELO'],
   color: ['COLOR', 'COLOR PRINCIPAL'],
-  cilindrada: ['CILINDRAJE', 'CILINDRADA', 'CILINDRAJE CC'],
+  cilindrada: ['CILINDRAJE', 'CILINDRADA', 'CILINDRAJE CC', 'CILINDRADA CC'],
   claseVehiculo: ['CLASE', 'CLASE VEHICULO', 'CLASE DE VEHICULO'],
   servicio: ['SERVICIO', 'TIPO SERVICIO'],
-  numeroMotor: ['NUMERO MOTOR', 'NO MOTOR', 'NO. MOTOR', 'NRO MOTOR', 'MOTOR'],
+  numeroMotor: ['NUMERO DE MOTOR', 'NUMERO MOTOR', 'NO MOTOR', 'NO. MOTOR', 'NRO MOTOR', 'MOTOR'],
   capacidad: ['CAPACIDAD', 'CAPACIDAD KG PSJ', 'CAPACIDAD PSJ', 'CAPACIDAD PASAJEROS'],
   vin: ['VIN', 'NUMERO VIN', 'NO VIN', 'NO. VIN', 'NRO VIN'],
   numeroChasis: ['CHASIS', 'NUMERO DE CHASIS', 'NO CHASIS', 'NO. CHASIS', 'NRO CHASIS', 'SERIE', 'NRO SERIE'],
@@ -48,6 +48,8 @@ const LABEL_ALIASES = {
     'TITULAR',
     'APELLIDOS Y NOMBRES',
     'APELLIDOS NOMBRES',
+    'APELLIDO S Y NOMBRE S',
+    'APELLIDO S Y NOMBRES',
     'NOMBRES Y APELLIDOS',
     'RAZON SOCIAL',
   ],
@@ -151,6 +153,12 @@ const OCR_DOCUMENT_BASE_WIDTH = 1654;
 const OCR_DOCUMENT_BASE_HEIGHT = 2339;
 const OCR_DOCUMENT_MARGIN = 96;
 const OCR_DOCUMENT_MAX_EDGE = 3000;
+const OCR_CARD_BASE_WIDTH = 2200;
+const OCR_CARD_BASE_HEIGHT = 1400;
+const OCR_CARD_MARGIN = 36;
+const OCR_REGION_SCALE = 1.75;
+const OCR_PSM_SPARSE_TEXT = 11;
+const OCR_PSM_SINGLE_BLOCK = 6;
 
 const emptyExtractedData = (): VehicleCardExtractedData => ({
   placa: '',
@@ -207,6 +215,23 @@ const trimAtNextLabel = (candidate: string): string => {
   }
 
   return trimmed.trim();
+};
+
+const escapeRegExp = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const stripFieldLabels = (value: string, labels: readonly string[]): string => {
+  const normalizedLabels = orderLabelsByLength(
+    Array.from(new Set(labels.map((label) => normalizeLine(label)).filter(Boolean)))
+  );
+
+  let candidate = cleanCandidate(value);
+
+  for (const label of normalizedLabels) {
+    candidate = candidate.replace(new RegExp(`\\b${escapeRegExp(label)}\\b`, 'g'), ' ');
+  }
+
+  return candidate.replace(/\s+/g, ' ').trim();
 };
 
 const findNextUsefulLine = (lines: string[], startIndex: number): string => {
@@ -713,13 +738,15 @@ const normalizeVehicleClass = (value: string, fallbackText = ''): string => {
   const candidate = cleanCandidate(value)
     .replace(/\b(?:CLASE|DE VEHICULO|VEHICULO)\b/g, '')
     .trim();
+  const normalizedFallbackText = normalizeForSearch(fallbackText);
 
   if (!candidate) {
-    return '';
+    const fallback = KNOWN_VEHICLE_CLASSES.find((item) => normalizedFallbackText.includes(item));
+    return fallback || '';
   }
 
   if (candidate === 'DE' || candidate === 'VEHICULO') {
-    const fallback = KNOWN_VEHICLE_CLASSES.find((item) => normalizeForSearch(fallbackText).includes(item));
+    const fallback = KNOWN_VEHICLE_CLASSES.find((item) => normalizedFallbackText.includes(item));
     return fallback || '';
   }
 
@@ -732,7 +759,10 @@ const normalizeCapacity = (value: string): string => {
 
 const normalizeOwner = (value: string): string => {
   const candidate = cleanCandidate(value)
-    .replace(/\b(?:APELLIDOS Y NOMBRES|NOMBRES Y APELLIDOS|RAZON SOCIAL|PROPIETARIO|TITULAR)\b/g, '')
+    .replace(
+      /\b(?:APELLIDOS Y NOMBRES|APELLIDO S Y NOMBRE S|APELLIDO S Y NOMBRES|NOMBRES Y APELLIDOS|RAZON SOCIAL|PROPIETARIO|TITULAR)\b/g,
+      ''
+    )
     .replace(/\b\d{5,15}\b/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -751,6 +781,50 @@ const inferVehicleType = (text: string): ExtractedVehicleType | null => {
   if (text.includes('SEDAN') || text.includes('AUTOMOVIL')) return 'sedan';
   return null;
 };
+
+type StructuredScanField =
+  | 'placa'
+  | 'marca'
+  | 'linea'
+  | 'a\u00f1o'
+  | 'color'
+  | 'cilindrada'
+  | 'claseVehiculo'
+  | 'servicio'
+  | 'tipoCarroceria'
+  | 'capacidad'
+  | 'numeroMotor'
+  | 'vin'
+  | 'numeroChasis'
+  | 'propietario'
+  | 'identificacionPropietario';
+
+type StructuredCardScanZone = {
+  field: StructuredScanField;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  scale?: number;
+};
+
+const STRUCTURED_CARD_SCAN_ZONES: StructuredCardScanZone[] = [
+  { field: 'placa', x: 0.02, y: 0.225, width: 0.15, height: 0.125, scale: 2 },
+  { field: 'marca', x: 0.195, y: 0.225, width: 0.18, height: 0.125 },
+  { field: 'linea', x: 0.48, y: 0.225, width: 0.3, height: 0.125 },
+  { field: 'a\u00f1o', x: 0.84, y: 0.225, width: 0.13, height: 0.125 },
+  { field: 'cilindrada', x: 0.02, y: 0.37, width: 0.16, height: 0.115 },
+  { field: 'color', x: 0.195, y: 0.37, width: 0.34, height: 0.115 },
+  { field: 'servicio', x: 0.72, y: 0.37, width: 0.24, height: 0.115 },
+  { field: 'claseVehiculo', x: 0.02, y: 0.49, width: 0.24, height: 0.115 },
+  { field: 'tipoCarroceria', x: 0.29, y: 0.49, width: 0.22, height: 0.115 },
+  { field: 'capacidad', x: 0.79, y: 0.49, width: 0.17, height: 0.115 },
+  { field: 'numeroMotor', x: 0.02, y: 0.605, width: 0.29, height: 0.115, scale: 1.9 },
+  { field: 'vin', x: 0.52, y: 0.605, width: 0.34, height: 0.115, scale: 1.9 },
+  { field: 'numeroChasis', x: 0.52, y: 0.72, width: 0.38, height: 0.115, scale: 1.9 },
+  { field: 'propietario', x: 0.02, y: 0.83, width: 0.6, height: 0.11, scale: 1.85 },
+  { field: 'identificacionPropietario', x: 0.67, y: 0.83, width: 0.25, height: 0.11, scale: 1.85 },
+];
 
 const parseVehicleCardText = (rawText: string, confidence: number): VehicleCardReaderResult => {
   const normalizedText = normalizeForSearch(rawText);
@@ -998,6 +1072,19 @@ const createCanvas = (width: number, height: number): HTMLCanvasElement => {
   return canvas;
 };
 
+type CanvasBox = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type PreparedCardOcrImage = {
+  canvas: HTMLCanvasElement;
+  blob: Blob;
+  contentBox: CanvasBox;
+};
+
 const canvasToBlob = (canvas: HTMLCanvasElement): Promise<Blob> =>
   new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -1025,6 +1112,116 @@ const renderBlobToCanvas = async (file: Blob, scaleFactor = 1): Promise<HTMLCanv
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = 'high';
   context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+  return canvas;
+};
+
+const renderBlobToLandscapeCanvas = async (file: Blob): Promise<HTMLCanvasElement> => {
+  const image = await loadImageElement(file);
+  const sourceWidth = Math.max(1, image.width);
+  const sourceHeight = Math.max(1, image.height);
+  const rotate = sourceHeight > sourceWidth;
+  const canvas = createCanvas(rotate ? sourceHeight : sourceWidth, rotate ? sourceWidth : sourceHeight);
+  const context = canvas.getContext('2d');
+
+  if (!context) {
+    throw new Error('No se pudo preparar la imagen de la tarjeta.');
+  }
+
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
+
+  if (rotate) {
+    context.translate(canvas.width / 2, canvas.height / 2);
+    context.rotate(Math.PI / 2);
+    context.drawImage(image, -sourceWidth / 2, -sourceHeight / 2, sourceWidth, sourceHeight);
+  } else {
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  }
+
+  return canvas;
+};
+
+const prepareCardImageForOcr = async (file: Blob): Promise<PreparedCardOcrImage> => {
+  const sourceCanvas = await renderBlobToLandscapeCanvas(file);
+  const canvas = createCanvas(OCR_CARD_BASE_WIDTH, OCR_CARD_BASE_HEIGHT);
+  const context = canvas.getContext('2d');
+
+  if (!context) {
+    throw new Error('No se pudo preparar la tarjeta para OCR.');
+  }
+
+  const maxWidth = canvas.width - OCR_CARD_MARGIN * 2;
+  const maxHeight = canvas.height - OCR_CARD_MARGIN * 2;
+  const fitScale = Math.min(maxWidth / sourceCanvas.width, maxHeight / sourceCanvas.height);
+  const drawWidth = Math.max(1, Math.round(sourceCanvas.width * fitScale));
+  const drawHeight = Math.max(1, Math.round(sourceCanvas.height * fitScale));
+  const offsetX = Math.round((canvas.width - drawWidth) / 2);
+  const offsetY = Math.round((canvas.height - drawHeight) / 2);
+
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
+  context.drawImage(sourceCanvas, offsetX, offsetY, drawWidth, drawHeight);
+
+  return {
+    canvas,
+    blob: await canvasToBlob(canvas),
+    contentBox: {
+      x: offsetX,
+      y: offsetY,
+      width: drawWidth,
+      height: drawHeight,
+    },
+  };
+};
+
+const scaleCanvasBox = (box: CanvasBox, scaleX: number, scaleY: number): CanvasBox => ({
+  x: Math.round(box.x * scaleX),
+  y: Math.round(box.y * scaleY),
+  width: Math.round(box.width * scaleX),
+  height: Math.round(box.height * scaleY),
+});
+
+const cropCardScanZone = (
+  sourceCanvas: HTMLCanvasElement,
+  contentBox: CanvasBox,
+  zone: StructuredCardScanZone
+): HTMLCanvasElement => {
+  const left = Math.max(0, Math.round(contentBox.x + contentBox.width * zone.x));
+  const top = Math.max(0, Math.round(contentBox.y + contentBox.height * zone.y));
+  const width = Math.max(1, Math.round(contentBox.width * zone.width));
+  const height = Math.max(1, Math.round(contentBox.height * zone.height));
+  const scale = zone.scale || OCR_REGION_SCALE;
+  const padding = Math.max(12, Math.round(14 * scale));
+  const canvas = createCanvas(
+    Math.max(1, Math.round(width * scale)) + padding * 2,
+    Math.max(1, Math.round(height * scale)) + padding * 2
+  );
+  const context = canvas.getContext('2d');
+
+  if (!context) {
+    throw new Error('No se pudo recortar una zona de la tarjeta.');
+  }
+
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
+  context.drawImage(
+    sourceCanvas,
+    left,
+    top,
+    width,
+    height,
+    padding,
+    padding,
+    canvas.width - padding * 2,
+    canvas.height - padding * 2
+  );
 
   return canvas;
 };
@@ -1152,6 +1349,11 @@ const runRecognition = async (
   progressState.end = endProgress;
   progressState.onProgress = onProgress;
   onProgress?.(startProgress);
+  await worker.setParameters({
+    tessedit_pageseg_mode: OCR_PSM_SPARSE_TEXT as never,
+    preserve_interword_spaces: '1',
+    user_defined_dpi: '300',
+  });
 
   const recognition = await worker.recognize(file, {
     rotateAuto: true,
@@ -1195,7 +1397,7 @@ const scoreExtractedText = (field: ExtractedTextField, value: string): number =>
     case 'identificacionPropietario':
       return isValidIdentification(candidate) ? 90 : 5;
     case 'numeroMotor':
-      return /^[A-Z0-9-]{4,25}$/.test(candidate) ? 60 : 5;
+      return /^[A-Z0-9-]{4,25}$/.test(candidate) ? 60 + candidate.length : 5;
     case 'propietario':
       if (/\d/.test(candidate)) return 5;
       return candidate.split(' ').length >= 2 && candidate.length <= 40 ? 70 : 20;
@@ -1210,7 +1412,10 @@ const scoreExtractedText = (field: ExtractedTextField, value: string): number =>
       if (candidate.length > 28) return 5;
       return candidate.length >= 2 ? 55 : 10;
     case 'claseVehiculo':
+      if (KNOWN_VEHICLE_CLASSES.includes(candidate)) return 75;
+      return candidate.length <= 30 ? 45 : 10;
     case 'servicio':
+      return Object.keys(SERVICE_ALIASES).some((service) => candidate.includes(service)) ? 70 : 20;
     case 'tipoCarroceria':
     case 'prenda':
       return candidate.length <= 30 ? 45 : 10;
@@ -1311,6 +1516,233 @@ const countDetectedFields = (extracted: VehicleCardExtractedData) =>
     extracted.tipoVehiculo,
   ].filter(Boolean).length;
 
+const resolveFieldValueFromRegion = (
+  rawText: string,
+  labels: readonly string[],
+  strategy: 'text' | 'numeric' | 'name' | 'alphanumeric' = 'text'
+) => {
+  const lines = rawText
+    .split(/\r?\n/)
+    .map(normalizeLine)
+    .filter(Boolean);
+  const labeledValue = extractLabeledValue(lines, labels);
+  const strippedValue = stripFieldLabels(lines.join(' '), labels);
+
+  return pickBestExtractedValue(labeledValue, strippedValue, strategy);
+};
+
+const extractStructuredFieldValue = (
+  field: StructuredScanField,
+  rawText: string,
+  fullText: string
+): string | number | null => {
+  const normalizedRegionText = normalizeForSearch(rawText);
+  const fallbackText = `${fullText} ${normalizedRegionText}`.trim();
+
+  switch (field) {
+    case 'placa':
+      return extractPlateLoose(
+        resolveFieldValueFromRegion(rawText, LABEL_ALIASES.placa, 'alphanumeric'),
+        normalizedRegionText
+      );
+    case 'marca':
+      return normalizeBrand(resolveFieldValueFromRegion(rawText, LABEL_ALIASES.marca), fallbackText);
+    case 'linea':
+      return cleanCandidate(
+        resolveFieldValueFromRegion(rawText, LABEL_ALIASES.modelo) ||
+          stripFieldLabels(rawText, LABEL_ALIASES.modelo)
+      );
+    case 'a\u00f1o':
+      return (
+        extractYear(resolveFieldValueFromRegion(rawText, LABEL_ALIASES['a\u00f1o'], 'numeric')) ||
+        extractYear(normalizedRegionText) ||
+        null
+      );
+    case 'color':
+      return normalizeColor(resolveFieldValueFromRegion(rawText, LABEL_ALIASES.color), fallbackText);
+    case 'cilindrada':
+      return normalizeCilindrada(
+        resolveFieldValueFromRegion(rawText, LABEL_ALIASES.cilindrada, 'numeric') ||
+          normalizedRegionText
+      );
+    case 'claseVehiculo':
+      return normalizeVehicleClass(
+        resolveFieldValueFromRegion(rawText, LABEL_ALIASES.claseVehiculo),
+        fallbackText
+      );
+    case 'servicio':
+      return normalizeService(
+        resolveFieldValueFromRegion(rawText, LABEL_ALIASES.servicio),
+        fallbackText
+      );
+    case 'tipoCarroceria':
+      return cleanCandidate(
+        resolveFieldValueFromRegion(rawText, LABEL_ALIASES.carroceria) ||
+          stripFieldLabels(rawText, LABEL_ALIASES.carroceria)
+      );
+    case 'capacidad':
+      return normalizeCapacity(
+        resolveFieldValueFromRegion(rawText, LABEL_ALIASES.capacidad, 'numeric') ||
+          normalizedRegionText
+      );
+    case 'numeroMotor':
+      return normalizeMechanicalValue(
+        resolveFieldValueFromRegion(rawText, LABEL_ALIASES.numeroMotor, 'alphanumeric') ||
+          normalizedRegionText
+      );
+    case 'vin':
+      return extractVinLoose(
+        resolveFieldValueFromRegion(rawText, LABEL_ALIASES.vin, 'alphanumeric'),
+        normalizedRegionText
+      );
+    case 'numeroChasis': {
+      const candidate =
+        resolveFieldValueFromRegion(rawText, LABEL_ALIASES.numeroChasis, 'alphanumeric') ||
+        stripFieldLabels(rawText, LABEL_ALIASES.numeroChasis);
+      const vinLike = extractVinLoose(candidate, normalizedRegionText);
+      return normalizeMechanicalValue(vinLike || candidate);
+    }
+    case 'propietario':
+      return normalizeOwner(
+        resolveFieldValueFromRegion(rawText, LABEL_ALIASES.propietario, 'name') ||
+          normalizedRegionText
+      );
+    case 'identificacionPropietario':
+      return (
+        extractIdentification(
+          resolveFieldValueFromRegion(rawText, LABEL_ALIASES.identificacion, 'numeric')
+        ) ||
+        extractIdentification(normalizedRegionText) ||
+        ''
+      );
+    default:
+      return '';
+  }
+};
+
+const buildStructuredVehicleCardResult = (
+  zoneTexts: Partial<Record<StructuredScanField, string>>,
+  ocrConfidence: number
+): VehicleCardReaderResult => {
+  const mergedZoneText = Object.values(zoneTexts).filter(Boolean).join('\n');
+  const normalizedZoneText = normalizeForSearch(mergedZoneText);
+  const linea = String(extractStructuredFieldValue('linea', zoneTexts.linea || '', normalizedZoneText) || '');
+  const claseVehiculo = String(
+    extractStructuredFieldValue('claseVehiculo', zoneTexts.claseVehiculo || '', normalizedZoneText) || ''
+  );
+  const tipoCarroceria = String(
+    extractStructuredFieldValue('tipoCarroceria', zoneTexts.tipoCarroceria || '', normalizedZoneText) || ''
+  );
+
+  const extracted: VehicleCardExtractedData = {
+    ...emptyExtractedData(),
+    placa: String(extractStructuredFieldValue('placa', zoneTexts.placa || '', normalizedZoneText) || ''),
+    marca: String(extractStructuredFieldValue('marca', zoneTexts.marca || '', normalizedZoneText) || ''),
+    modelo: linea,
+    ['a\u00f1o']: extractStructuredFieldValue('a\u00f1o', zoneTexts['a\u00f1o'] || '', normalizedZoneText) as number | null,
+    color: String(extractStructuredFieldValue('color', zoneTexts.color || '', normalizedZoneText) || ''),
+    vin: String(extractStructuredFieldValue('vin', zoneTexts.vin || '', normalizedZoneText) || ''),
+    linea,
+    cilindrada: String(
+      extractStructuredFieldValue('cilindrada', zoneTexts.cilindrada || '', normalizedZoneText) || ''
+    ),
+    claseVehiculo,
+    servicio: String(
+      extractStructuredFieldValue('servicio', zoneTexts.servicio || '', normalizedZoneText) || ''
+    ),
+    tipoCarroceria,
+    numeroMotor: String(
+      extractStructuredFieldValue('numeroMotor', zoneTexts.numeroMotor || '', normalizedZoneText) || ''
+    ),
+    capacidad: String(
+      extractStructuredFieldValue('capacidad', zoneTexts.capacidad || '', normalizedZoneText) || ''
+    ),
+    numeroChasis: String(
+      extractStructuredFieldValue('numeroChasis', zoneTexts.numeroChasis || '', normalizedZoneText) || ''
+    ),
+    propietario: String(
+      extractStructuredFieldValue('propietario', zoneTexts.propietario || '', normalizedZoneText) || ''
+    ),
+    identificacionPropietario: String(
+      extractStructuredFieldValue(
+        'identificacionPropietario',
+        zoneTexts.identificacionPropietario || '',
+        normalizedZoneText
+      ) || ''
+    ),
+    prenda: '',
+    tipoVehiculo: inferVehicleType(`${tipoCarroceria} ${claseVehiculo} ${normalizedZoneText}`),
+  };
+
+  return {
+    rawText: mergedZoneText,
+    confidence: calculateVehicleCardConfidence(extracted, ocrConfidence),
+    extracted,
+    detectedFields: countDetectedFields(extracted),
+  };
+};
+
+const runStructuredRecognition = async (
+  worker: OcrWorker,
+  progressState: OcrProgressState,
+  preparedCard: PreparedCardOcrImage,
+  startProgress: number,
+  endProgress: number,
+  onProgress?: (progress: number) => void
+) => {
+  const zoneTexts: Partial<Record<StructuredScanField, string>> = {};
+  const zoneConfidences: number[] = [];
+  const totalZones = STRUCTURED_CARD_SCAN_ZONES.length;
+
+  onProgress?.(startProgress);
+  await worker.setParameters({
+    tessedit_pageseg_mode: OCR_PSM_SINGLE_BLOCK as never,
+    preserve_interword_spaces: '1',
+    user_defined_dpi: '300',
+  });
+
+  try {
+    for (let index = 0; index < totalZones; index += 1) {
+      const zone = STRUCTURED_CARD_SCAN_ZONES[index];
+      const zoneStart = Math.round(startProgress + ((endProgress - startProgress) * index) / totalZones);
+      const zoneEnd = Math.round(
+        startProgress + ((endProgress - startProgress) * (index + 1)) / totalZones
+      );
+      const zoneCanvas = cropCardScanZone(preparedCard.canvas, preparedCard.contentBox, zone);
+      const zoneBlob = await canvasToBlob(zoneCanvas);
+
+      progressState.start = zoneStart;
+      progressState.end = zoneEnd;
+      progressState.onProgress = onProgress;
+
+      const recognition = await worker.recognize(zoneBlob, {
+        rotateAuto: false,
+      });
+      const zoneText = (recognition.data.text || '').trim();
+
+      if (zoneText) {
+        zoneTexts[zone.field] = zoneText;
+      }
+
+      zoneConfidences.push(recognition.data.confidence || 0);
+    }
+  } finally {
+    await worker.setParameters({
+      tessedit_pageseg_mode: OCR_PSM_SPARSE_TEXT as never,
+      preserve_interword_spaces: '1',
+      user_defined_dpi: '300',
+    });
+  }
+
+  onProgress?.(endProgress);
+
+  const averageConfidence = zoneConfidences.length
+    ? zoneConfidences.reduce((sum, value) => sum + value, 0) / zoneConfidences.length
+    : 0;
+
+  return buildStructuredVehicleCardResult(zoneTexts, averageConfidence);
+};
+
 const mergeVehicleCardResults = (
   baseResult: VehicleCardReaderResult,
   enhancedResult: VehicleCardReaderResult
@@ -1395,34 +1827,66 @@ export const readVehicleCard = async (
 
   try {
     // Tesseract.js no procesa PDF como entrada. Para aproximar ese flujo,
-    // normalizamos la foto a una pagina tipo documento antes del OCR.
-    const documentImage = await createPdfPageImageForOcr(file).catch(() => file);
-    const baseResult = await runRecognition(worker, progressState, documentImage, 0, 62, onProgress);
+    // primero normalizamos la tarjeta en horizontal y luego generamos una pagina tipo documento.
+    const preparedCard = await prepareCardImageForOcr(file);
+    const documentImage = await createPdfPageImageForOcr(preparedCard.blob).catch(() => preparedCard.blob);
+    const baseResult = await runRecognition(worker, progressState, documentImage, 0, 44, onProgress);
+    const structuredResult = await runStructuredRecognition(
+      worker,
+      progressState,
+      preparedCard,
+      44,
+      78,
+      onProgress
+    );
+    const mergedBaseResult = mergeVehicleCardResults(baseResult, structuredResult);
 
-    if (!shouldRetryWithEnhancedPass(baseResult)) {
+    if (!shouldRetryWithEnhancedPass(mergedBaseResult)) {
       onProgress?.(100);
-      return baseResult;
+      return mergedBaseResult;
     }
 
     try {
-      const enhancedImage = await enhanceImageForOcr(documentImage);
+      const enhancedCardBlob = await enhanceImageForOcr(preparedCard.blob);
+      const enhancedCardCanvas = await renderBlobToCanvas(enhancedCardBlob);
+      const enhancedPreparedCard: PreparedCardOcrImage = {
+        canvas: enhancedCardCanvas,
+        blob: enhancedCardBlob,
+        contentBox: scaleCanvasBox(
+          preparedCard.contentBox,
+          enhancedCardCanvas.width / preparedCard.canvas.width,
+          enhancedCardCanvas.height / preparedCard.canvas.height
+        ),
+      };
+      const enhancedDocumentImage = await createPdfPageImageForOcr(enhancedCardBlob).catch(
+        () => enhancedCardBlob
+      );
       const enhancedResult = await runRecognition(
         worker,
         progressState,
-        enhancedImage,
-        62,
+        enhancedDocumentImage,
+        78,
+        90,
+        onProgress
+      );
+      const enhancedStructuredResult = await runStructuredRecognition(
+        worker,
+        progressState,
+        enhancedPreparedCard,
+        90,
         100,
         onProgress
       );
       onProgress?.(100);
-      const mergedResult = mergeVehicleCardResults(baseResult, enhancedResult);
+      const mergedEnhancedResult = mergeVehicleCardResults(enhancedResult, enhancedStructuredResult);
+      const mergedResult = mergeVehicleCardResults(mergedBaseResult, mergedEnhancedResult);
 
-      return mergedResult.detectedFields > baseResult.detectedFields
+      return mergedResult.detectedFields >= mergedBaseResult.detectedFields
         ? mergedResult
-        : baseResult;
+        : mergedBaseResult;
     } catch {
       onProgress?.(100);
-      return baseResult;
+      return mergedBaseResult;
     }
   } finally {
     await worker.terminate();
