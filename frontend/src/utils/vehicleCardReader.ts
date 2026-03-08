@@ -68,6 +68,9 @@ const ALL_LABELS = Array.from(
   new Set(Object.values(LABEL_ALIASES).flat().sort((a, b) => b.length - a.length))
 );
 
+const orderLabelsByLength = (labels: readonly string[]) =>
+  [...labels].sort((a, b) => b.length - a.length);
+
 const KNOWN_BRANDS = [
   'AUDI',
   'BMW',
@@ -206,10 +209,12 @@ const findNextUsefulLine = (lines: string[], startIndex: number): string => {
 };
 
 const extractLabeledValue = (lines: string[], labels: readonly string[]): string => {
+  const orderedLabels = orderLabelsByLength(labels);
+
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
 
-    for (const label of labels) {
+    for (const label of orderedLabels) {
       const labelIndex = line.indexOf(label);
       if (labelIndex === -1) continue;
 
@@ -374,10 +379,12 @@ const extractLabeledValueFromLayout = (
   layoutLines: OcrLayoutLine[],
   labels: readonly string[]
 ): string => {
+  const orderedLabels = orderLabelsByLength(labels);
+
   for (let lineIndex = 0; lineIndex < layoutLines.length; lineIndex += 1) {
     const line = layoutLines[lineIndex];
 
-    for (const label of labels) {
+    for (const label of orderedLabels) {
       const match = findLabelMatchInWords(line.words, label);
       if (!match) continue;
 
@@ -395,6 +402,46 @@ const extractLabeledValueFromLayout = (
       }
 
       const nextLineValue = findNextUsefulLayoutLine(layoutLines, lineIndex, line.bbox);
+      if (nextLineValue && nextLineValue !== label) {
+        return nextLineValue;
+      }
+    }
+  }
+
+  return '';
+};
+
+const extractValueBelowLabel = (
+  layoutLines: OcrLayoutLine[],
+  lines: string[],
+  labels: readonly string[]
+): string => {
+  const orderedLabels = orderLabelsByLength(labels);
+
+  for (let lineIndex = 0; lineIndex < layoutLines.length; lineIndex += 1) {
+    const line = layoutLines[lineIndex];
+
+    for (const label of orderedLabels) {
+      if (!line.normalized.includes(label)) {
+        continue;
+      }
+
+      const nextLineValue = findNextUsefulLayoutLine(layoutLines, lineIndex, line.bbox);
+      if (nextLineValue && nextLineValue !== label) {
+        return nextLineValue;
+      }
+    }
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+
+    for (const label of orderedLabels) {
+      if (!line.includes(label)) {
+        continue;
+      }
+
+      const nextLineValue = trimAtNextLabel(findNextUsefulLine(lines, index));
       if (nextLineValue && nextLineValue !== label) {
         return nextLineValue;
       }
@@ -422,6 +469,30 @@ const extractIdentification = (text: string): string => {
 const extractYear = (text: string): number | null => {
   const match = text.match(/\b(19\d{2}|20\d{2})\b/);
   return match ? parseInt(match[1], 10) : null;
+};
+
+const extractPlateLoose = (...values: string[]): string => {
+  for (const value of values) {
+    const normalized = normalizeForSearch(value).replace(/[^A-Z0-9]/g, '');
+    const match = normalized.match(/[A-Z]{3}\d{3}|[A-Z]{3}\d{2}[A-Z]/);
+    if (match) {
+      return match[0];
+    }
+  }
+
+  return '';
+};
+
+const extractVinLoose = (...values: string[]): string => {
+  for (const value of values) {
+    const normalized = normalizeForSearch(value).replace(/[^A-Z0-9]/g, '');
+    const match = normalized.match(/[A-HJ-NPR-Z0-9]{17}/);
+    if (match) {
+      return match[0];
+    }
+  }
+
+  return '';
 };
 
 const normalizeBrand = (value: string, fallbackText: string): string => {
@@ -482,7 +553,34 @@ const normalizeCilindrada = (value: string): string => {
     return numericMatch[0];
   }
 
+  return '';
+};
+
+const normalizeVehicleClass = (value: string): string => {
+  const candidate = cleanCandidate(value)
+    .replace(/\b(?:CLASE|DE VEHICULO|VEHICULO)\b/g, '')
+    .trim();
+
+  if (!candidate) {
+    return '';
+  }
+
+  if (candidate === 'DE' || candidate === 'VEHICULO') {
+    return '';
+  }
+
   return candidate;
+};
+
+const normalizeCapacity = (value: string): string => {
+  const candidate = cleanCandidate(value);
+  const numericMatch = candidate.match(/\b\d{1,4}\b/);
+
+  if (numericMatch) {
+    return numericMatch[0];
+  }
+
+  return '';
 };
 
 const normalizeOwner = (value: string): string => {
@@ -595,7 +693,6 @@ const parseVehicleCardText = (rawText: string, confidence: number): VehicleCardR
   };
 };
 
-/*
 const parseVehicleCardRecognition = (
   rawText: string,
   confidence: number,
@@ -612,110 +709,11 @@ const parseVehicleCardRecognition = (
   const extractFieldValue = (labels: readonly string[]) =>
     extractLabeledValueFromLayout(layoutLines, labels) || extractLabeledValue(lines, labels);
 
-  const placa = extractPlate(normalizedText) || extractPlate(joinedLines);
-  const marca = normalizeBrand(extractFieldValue(LABEL_ALIASES.marca), normalizedText);
-  const linea = cleanCandidate(extractFieldValue(LABEL_ALIASES.modelo));
-  const modelo = linea;
-  const aÃ±o =
-    extractYear(extractFieldValue(LABEL_ALIASES.aÃ±o)) ||
-    extractYear(normalizedText) ||
-    null;
-  const color = normalizeColor(extractFieldValue(LABEL_ALIASES.color), normalizedText);
-  const cilindrada = normalizeCilindrada(extractFieldValue(LABEL_ALIASES.cilindrada));
-  const claseVehiculo = cleanCandidate(extractFieldValue(LABEL_ALIASES.claseVehiculo));
-  const servicio = normalizeService(extractFieldValue(LABEL_ALIASES.servicio), normalizedText);
-  const numeroMotor = normalizeMechanicalValue(extractFieldValue(LABEL_ALIASES.numeroMotor));
-  const capacidad = cleanCandidate(extractFieldValue(LABEL_ALIASES.capacidad));
-  const vinLabeled = cleanCandidate(extractFieldValue(LABEL_ALIASES.vin)).replace(/\s+/g, '');
-  const numeroChasisLabeled = normalizeMechanicalValue(
-    extractFieldValue(LABEL_ALIASES.numeroChasis)
+  const placa = extractPlateLoose(
+    extractFieldValue(LABEL_ALIASES.placa),
+    normalizedText,
+    joinedLines
   );
-  const vin =
-    extractVin(vinLabeled) ||
-    extractVin(numeroChasisLabeled.replace(/\s+/g, '')) ||
-    extractVin(normalizedText) ||
-    '';
-  const numeroChasis = cleanCandidate(numeroChasisLabeled || vinLabeled || vin);
-  const tipoCarroceria = cleanCandidate(extractFieldValue(LABEL_ALIASES.carroceria));
-  const propietario = normalizeOwner(extractFieldValue(LABEL_ALIASES.propietario));
-  const identificacionLabeled = cleanCandidate(extractFieldValue(LABEL_ALIASES.identificacion));
-  const identificacionPropietario =
-    extractIdentification(identificacionLabeled) ||
-    extractIdentification(normalizedText) ||
-    '';
-  const prenda = cleanCandidate(extractFieldValue(LABEL_ALIASES.prenda));
-  const tipoVehiculo = inferVehicleType(`${tipoCarroceria} ${claseVehiculo} ${normalizedText}`);
-
-  const extracted: VehicleCardExtractedData = {
-    ...emptyExtractedData(),
-    placa,
-    marca,
-    modelo,
-    aÃ±o,
-    color,
-    vin,
-    linea,
-    cilindrada,
-    claseVehiculo,
-    servicio,
-    tipoCarroceria,
-    numeroMotor,
-    capacidad,
-    numeroChasis,
-    propietario,
-    identificacionPropietario,
-    prenda,
-    tipoVehiculo,
-  };
-
-  const detectedFields = [
-    extracted.placa,
-    extracted.marca,
-    extracted.modelo,
-    extracted.aÃ±o,
-    extracted.color,
-    extracted.vin,
-    extracted.linea,
-    extracted.cilindrada,
-    extracted.claseVehiculo,
-    extracted.servicio,
-    extracted.tipoCarroceria,
-    extracted.numeroMotor,
-    extracted.capacidad,
-    extracted.numeroChasis,
-    extracted.propietario,
-    extracted.identificacionPropietario,
-    extracted.prenda,
-    extracted.tipoVehiculo,
-  ].filter(Boolean).length;
-
-  return {
-    rawText,
-    confidence,
-    extracted,
-    detectedFields,
-  };
-};
-
-*/
-
-const parseVehicleCardRecognition = (
-  rawText: string,
-  confidence: number,
-  blocks?: OcrRecognitionBlock[] | null
-): VehicleCardReaderResult => {
-  const normalizedText = normalizeForSearch(rawText);
-  const lines = rawText
-    .split(/\r?\n/)
-    .map(normalizeLine)
-    .filter(Boolean);
-  const joinedLines = lines.join(' ');
-  const layoutLines = buildLayoutLines(blocks);
-
-  const extractFieldValue = (labels: readonly string[]) =>
-    extractLabeledValueFromLayout(layoutLines, labels) || extractLabeledValue(lines, labels);
-
-  const placa = extractPlate(normalizedText) || extractPlate(joinedLines);
   const marca = normalizeBrand(extractFieldValue(LABEL_ALIASES.marca), normalizedText);
   const linea = cleanCandidate(extractFieldValue(LABEL_ALIASES.modelo));
   const modelo = linea;
@@ -725,22 +723,26 @@ const parseVehicleCardRecognition = (
     null;
   const color = normalizeColor(extractFieldValue(LABEL_ALIASES.color), normalizedText);
   const cilindrada = normalizeCilindrada(extractFieldValue(LABEL_ALIASES.cilindrada));
-  const claseVehiculo = cleanCandidate(extractFieldValue(LABEL_ALIASES.claseVehiculo));
+  const claseVehiculo = normalizeVehicleClass(extractFieldValue(LABEL_ALIASES.claseVehiculo));
   const servicio = normalizeService(extractFieldValue(LABEL_ALIASES.servicio), normalizedText);
   const numeroMotor = normalizeMechanicalValue(extractFieldValue(LABEL_ALIASES.numeroMotor));
-  const capacidad = cleanCandidate(extractFieldValue(LABEL_ALIASES.capacidad));
+  const capacidad = normalizeCapacity(extractFieldValue(LABEL_ALIASES.capacidad));
   const vinLabeled = cleanCandidate(extractFieldValue(LABEL_ALIASES.vin)).replace(/\s+/g, '');
   const numeroChasisLabeled = normalizeMechanicalValue(
     extractFieldValue(LABEL_ALIASES.numeroChasis)
   );
-  const vin =
-    extractVin(vinLabeled) ||
-    extractVin(numeroChasisLabeled.replace(/\s+/g, '')) ||
-    extractVin(normalizedText) ||
-    '';
+  const vin = extractVinLoose(
+    vinLabeled,
+    numeroChasisLabeled,
+    normalizedText,
+    joinedLines,
+    ...lines
+  );
   const numeroChasis = cleanCandidate(numeroChasisLabeled || vinLabeled || vin);
   const tipoCarroceria = cleanCandidate(extractFieldValue(LABEL_ALIASES.carroceria));
-  const propietario = normalizeOwner(extractFieldValue(LABEL_ALIASES.propietario));
+  const propietario =
+    normalizeOwner(extractFieldValue(LABEL_ALIASES.propietario)) ||
+    normalizeOwner(extractValueBelowLabel(layoutLines, lines, LABEL_ALIASES.propietario));
   const identificacionLabeled = cleanCandidate(extractFieldValue(LABEL_ALIASES.identificacion));
   const identificacionPropietario =
     extractIdentification(identificacionLabeled) ||
