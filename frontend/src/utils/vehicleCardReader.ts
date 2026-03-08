@@ -471,21 +471,125 @@ const extractYear = (text: string): number | null => {
   return match ? parseInt(match[1], 10) : null;
 };
 
+const OCR_DIGIT_TO_LETTER: Record<string, string> = {
+  '0': 'O',
+  '1': 'I',
+  '2': 'Z',
+  '4': 'A',
+  '5': 'S',
+  '6': 'G',
+  '7': 'T',
+  '8': 'B',
+};
+
+const OCR_LETTER_TO_DIGIT: Record<string, string> = {
+  O: '0',
+  Q: '0',
+  D: '0',
+  I: '1',
+  L: '1',
+  Z: '2',
+  S: '5',
+  G: '6',
+  B: '8',
+};
+
+const normalizeNumericCandidate = (
+  value: string,
+  minDigits: number,
+  maxDigits: number
+): string => {
+  const normalized = normalizeForSearch(value)
+    .replace(/[A-Z]/g, (char) => OCR_LETTER_TO_DIGIT[char] || char)
+    .replace(/[^A-Z0-9]/g, '');
+
+  const matches = normalized.match(new RegExp(`\\d{${minDigits},${maxDigits}}`, 'g')) || [];
+  return matches.sort((a, b) => b.length - a.length)[0] || '';
+};
+
+const normalizePlateWindow = (value: string): { value: string; score: number } | null => {
+  const normalized = normalizeForSearch(value).replace(/[^A-Z0-9]/g, '');
+  if (normalized.length !== 6) {
+    return null;
+  }
+
+  const letterScore = (char: string) => {
+    if (/^[A-Z]$/.test(char)) return { value: char, score: 2 };
+    const mapped = OCR_DIGIT_TO_LETTER[char];
+    return mapped ? { value: mapped, score: 1 } : null;
+  };
+
+  const digitScore = (char: string) => {
+    if (/^\d$/.test(char)) return { value: char, score: 2 };
+    const mapped = OCR_LETTER_TO_DIGIT[char];
+    return mapped ? { value: mapped, score: 1 } : null;
+  };
+
+  const buildCandidate = (tailPattern: Array<'digit' | 'letter'>) => {
+    let score = 0;
+    let candidate = '';
+
+    for (let index = 0; index < 3; index += 1) {
+      const result = letterScore(normalized[index]);
+      if (!result) return null;
+      candidate += result.value;
+      score += result.score;
+    }
+
+    for (let index = 0; index < tailPattern.length; index += 1) {
+      const char = normalized[index + 3];
+      const result =
+        tailPattern[index] === 'digit'
+          ? digitScore(char)
+          : letterScore(char);
+
+      if (!result) return null;
+      candidate += result.value;
+      score += result.score;
+    }
+
+    return { value: candidate, score };
+  };
+
+  const candidates = [
+    buildCandidate(['digit', 'digit', 'digit']),
+    buildCandidate(['digit', 'digit', 'letter']),
+  ].filter(Boolean) as Array<{ value: string; score: number }>;
+
+  if (!candidates.length) {
+    return null;
+  }
+
+  return candidates.sort((a, b) => b.score - a.score)[0];
+};
+
 const extractPlateLoose = (...values: string[]): string => {
+  let bestMatch: { value: string; score: number } | null = null;
+
   for (const value of values) {
     const normalized = normalizeForSearch(value).replace(/[^A-Z0-9]/g, '');
-    const match = normalized.match(/[A-Z]{3}\d{3}|[A-Z]{3}\d{2}[A-Z]/);
-    if (match) {
-      return match[0];
+
+    for (let index = 0; index <= normalized.length - 6; index += 1) {
+      const window = normalized.slice(index, index + 6);
+      const candidate = normalizePlateWindow(window);
+
+      if (!candidate) continue;
+
+      if (!bestMatch || candidate.score > bestMatch.score) {
+        bestMatch = candidate;
+      }
     }
   }
 
-  return '';
+  return bestMatch?.value || '';
 };
 
 const extractVinLoose = (...values: string[]): string => {
   for (const value of values) {
-    const normalized = normalizeForSearch(value).replace(/[^A-Z0-9]/g, '');
+    const normalized = normalizeForSearch(value)
+      .replace(/[OQ]/g, '0')
+      .replace(/I/g, '1')
+      .replace(/[^A-Z0-9]/g, '');
     const match = normalized.match(/[A-HJ-NPR-Z0-9]{17}/);
     if (match) {
       return match[0];
@@ -546,14 +650,7 @@ const normalizeMechanicalValue = (value: string): string => {
 };
 
 const normalizeCilindrada = (value: string): string => {
-  const candidate = cleanCandidate(value);
-  const numericMatch = candidate.match(/\b\d{2,5}\b/);
-
-  if (numericMatch) {
-    return numericMatch[0];
-  }
-
-  return '';
+  return normalizeNumericCandidate(value, 2, 5);
 };
 
 const normalizeVehicleClass = (value: string): string => {
@@ -573,22 +670,17 @@ const normalizeVehicleClass = (value: string): string => {
 };
 
 const normalizeCapacity = (value: string): string => {
-  const candidate = cleanCandidate(value);
-  const numericMatch = candidate.match(/\b\d{1,4}\b/);
-
-  if (numericMatch) {
-    return numericMatch[0];
-  }
-
-  return '';
+  return normalizeNumericCandidate(value, 1, 4);
 };
 
 const normalizeOwner = (value: string): string => {
   const candidate = cleanCandidate(value)
     .replace(/\b(?:APELLIDOS Y NOMBRES|NOMBRES Y APELLIDOS|RAZON SOCIAL|PROPIETARIO|TITULAR)\b/g, '')
+    .replace(/\b\d{5,15}\b/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
 
-  if (!candidate || /\d/.test(candidate)) {
+  if (!candidate) {
     return '';
   }
 
@@ -741,8 +833,8 @@ const parseVehicleCardRecognition = (
   const numeroChasis = cleanCandidate(numeroChasisLabeled || vinLabeled || vin);
   const tipoCarroceria = cleanCandidate(extractFieldValue(LABEL_ALIASES.carroceria));
   const propietario =
-    normalizeOwner(extractFieldValue(LABEL_ALIASES.propietario)) ||
-    normalizeOwner(extractValueBelowLabel(layoutLines, lines, LABEL_ALIASES.propietario));
+    normalizeOwner(extractValueBelowLabel(layoutLines, lines, LABEL_ALIASES.propietario)) ||
+    normalizeOwner(extractFieldValue(LABEL_ALIASES.propietario));
   const identificacionLabeled = cleanCandidate(extractFieldValue(LABEL_ALIASES.identificacion));
   const identificacionPropietario =
     extractIdentification(identificacionLabeled) ||
