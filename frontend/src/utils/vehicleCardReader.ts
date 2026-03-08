@@ -39,10 +39,28 @@ const LABEL_ALIASES = {
   servicio: ['SERVICIO', 'TIPO SERVICIO'],
   numeroMotor: ['NUMERO MOTOR', 'NO MOTOR', 'NO. MOTOR', 'NRO MOTOR', 'MOTOR'],
   capacidad: ['CAPACIDAD', 'CAPACIDAD KG PSJ', 'CAPACIDAD PSJ', 'CAPACIDAD PASAJEROS'],
-  vin: ['VIN', 'CHASIS', 'SERIE', 'NUMERO DE CHASIS', 'NO CHASIS', 'NO. CHASIS', 'NRO CHASIS', 'NRO SERIE'],
+  vin: ['VIN', 'NUMERO VIN', 'NO VIN', 'NO. VIN', 'NRO VIN'],
+  numeroChasis: ['CHASIS', 'NUMERO DE CHASIS', 'NO CHASIS', 'NO. CHASIS', 'NRO CHASIS', 'SERIE', 'NRO SERIE'],
   carroceria: ['CARROCERIA', 'TIPO CARROCERIA', 'TIPO DE CARROCERIA'],
-  propietario: ['PROPIETARIO', 'NOMBRE PROPIETARIO', 'TITULAR'],
-  identificacion: ['IDENTIFICACION', 'NO IDENTIFICACION', 'NO. IDENTIFICACION', 'NRO IDENTIFICACION', 'CEDULA', 'NIT', 'DOCUMENTO'],
+  propietario: [
+    'PROPIETARIO',
+    'NOMBRE PROPIETARIO',
+    'TITULAR',
+    'APELLIDOS Y NOMBRES',
+    'APELLIDOS NOMBRES',
+    'NOMBRES Y APELLIDOS',
+    'RAZON SOCIAL',
+  ],
+  identificacion: [
+    'IDENTIFICACION',
+    'NO IDENTIFICACION',
+    'NO. IDENTIFICACION',
+    'NRO IDENTIFICACION',
+    'CEDULA',
+    'NIT',
+    'DOCUMENTO',
+    'DOCUMENTO IDENTIDAD',
+  ],
   prenda: ['PRENDA', 'LIMITACION A LA PROPIEDAD', 'PIGNORACION'],
 } as const;
 
@@ -103,6 +121,14 @@ const COLOR_ALIASES: Record<string, string> = {
   TITANIO: 'Titanio',
 };
 
+const SERVICE_ALIASES: Record<string, string> = {
+  PARTICULAR: 'Particular',
+  PUBLICO: 'Publico',
+  OFICIAL: 'Oficial',
+  DIPLOMATICO: 'Diplomatico',
+  ESPECIAL: 'Especial',
+};
+
 const OCR_DOCUMENT_BASE_WIDTH = 1654;
 const OCR_DOCUMENT_BASE_HEIGHT = 2339;
 const OCR_DOCUMENT_MARGIN = 96;
@@ -147,7 +173,6 @@ const cleanCandidate = (value: string): string => {
   const normalized = normalizeForSearch(value)
     .replace(/^[\s:.-]+/, '')
     .replace(/\b(?:LICENCIA DE TRANSITO|REPUBLICA DE COLOMBIA|MINISTERIO DE TRANSPORTE)\b/g, '')
-    .replace(/\b(?:SERVICIO|CILINDRAJE|CILINDRADA|MOTOR|CAPACIDAD)\b.*$/, '')
     .trim();
 
   return normalized;
@@ -204,6 +229,181 @@ const extractLabeledValue = (lines: string[], labels: readonly string[]): string
   return '';
 };
 
+type OcrBoundingBox = {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+};
+
+type OcrRecognitionWord = {
+  text: string;
+  bbox: OcrBoundingBox;
+};
+
+type OcrRecognitionLine = {
+  text: string;
+  bbox: OcrBoundingBox;
+  words: OcrRecognitionWord[];
+};
+
+type OcrRecognitionParagraph = {
+  lines: OcrRecognitionLine[];
+};
+
+type OcrRecognitionBlock = {
+  paragraphs: OcrRecognitionParagraph[];
+};
+
+type OcrLayoutWord = {
+  text: string;
+  normalized: string;
+  bbox: OcrBoundingBox;
+};
+
+type OcrLayoutLine = {
+  text: string;
+  normalized: string;
+  words: OcrLayoutWord[];
+  bbox: OcrBoundingBox;
+};
+
+const getBoxHeight = (bbox: OcrBoundingBox) =>
+  Math.max(1, bbox.y1 - bbox.y0);
+
+const buildLayoutLines = (blocks?: OcrRecognitionBlock[] | null): OcrLayoutLine[] => {
+  if (!blocks?.length) {
+    return [];
+  }
+
+  return blocks
+    .flatMap((block) => block.paragraphs || [])
+    .flatMap((paragraph) => paragraph.lines || [])
+    .map((line) => ({
+      text: line.text || '',
+      normalized: normalizeLine(line.text || ''),
+      words: (line.words || [])
+        .map((word) => ({
+          text: word.text || '',
+          normalized: normalizeLine(word.text || ''),
+          bbox: word.bbox,
+        }))
+        .filter((word) => word.normalized),
+      bbox: line.bbox,
+    }))
+    .filter((line) => line.normalized && line.words.length > 0)
+    .sort((left, right) => {
+      const yDiff = left.bbox.y0 - right.bbox.y0;
+      return Math.abs(yDiff) <= 12
+        ? left.bbox.x0 - right.bbox.x0
+        : yDiff;
+    });
+};
+
+const findLabelMatchInWords = (words: OcrLayoutWord[], label: string) => {
+  const labelTokens = label.split(' ');
+
+  for (let index = 0; index <= words.length - labelTokens.length; index += 1) {
+    const candidate = words
+      .slice(index, index + labelTokens.length)
+      .map((word) => word.normalized)
+      .join(' ');
+
+    if (candidate === label) {
+      return {
+        start: index,
+        end: index + labelTokens.length - 1,
+      };
+    }
+  }
+
+  return null;
+};
+
+const findNextLabelStartInWords = (words: OcrLayoutWord[], startIndex: number) => {
+  for (let index = startIndex; index < words.length; index += 1) {
+    const startsLabel = ALL_LABELS.some((label) => findLabelMatchInWords(words.slice(index), label)?.start === 0);
+    if (startsLabel) {
+      return index;
+    }
+  }
+
+  return -1;
+};
+
+const findNextUsefulLayoutLine = (
+  lines: OcrLayoutLine[],
+  startIndex: number,
+  sourceBox: OcrBoundingBox
+): string => {
+  const sourceHeight = getBoxHeight(sourceBox);
+
+  for (let index = startIndex + 1; index < lines.length; index += 1) {
+    const candidateLine = lines[index];
+    const verticalDistance = candidateLine.bbox.y0 - sourceBox.y1;
+
+    if (verticalDistance <= sourceHeight * 0.15) {
+      continue;
+    }
+
+    if (verticalDistance > sourceHeight * 3.5) {
+      break;
+    }
+
+    const hasHorizontalAffinity =
+      candidateLine.bbox.x0 <= sourceBox.x1 + sourceHeight * 5 &&
+      candidateLine.bbox.x1 >= sourceBox.x0 - sourceHeight * 1.5;
+
+    if (!hasHorizontalAffinity) {
+      continue;
+    }
+
+    const candidate = trimAtNextLabel(cleanCandidate(candidateLine.text));
+    if (!candidate) continue;
+
+    const isOnlyLabel = ALL_LABELS.some((label) => candidate === label);
+    if (!isOnlyLabel) {
+      return candidate;
+    }
+  }
+
+  return '';
+};
+
+const extractLabeledValueFromLayout = (
+  layoutLines: OcrLayoutLine[],
+  labels: readonly string[]
+): string => {
+  for (let lineIndex = 0; lineIndex < layoutLines.length; lineIndex += 1) {
+    const line = layoutLines[lineIndex];
+
+    for (const label of labels) {
+      const match = findLabelMatchInWords(line.words, label);
+      if (!match) continue;
+
+      const nextLabelStart = findNextLabelStartInWords(line.words, match.end + 1);
+      const sameLineWords = line.words.slice(
+        match.end + 1,
+        nextLabelStart === -1 ? undefined : nextLabelStart
+      );
+      const sameLineValue = trimAtNextLabel(
+        cleanCandidate(sameLineWords.map((word) => word.text).join(' '))
+      );
+
+      if (sameLineValue && sameLineValue !== label) {
+        return sameLineValue;
+      }
+
+      const nextLineValue = findNextUsefulLayoutLine(layoutLines, lineIndex, line.bbox);
+      if (nextLineValue && nextLineValue !== label) {
+        return nextLineValue;
+      }
+    }
+  }
+
+  return '';
+};
+
 const extractPlate = (text: string): string => {
   const match = text.match(/\b[A-Z]{3}\s?\d{3}\b|\b[A-Z]{3}\s?\d{2}[A-Z]\b/);
   return match ? match[0].replace(/\s+/g, '') : '';
@@ -226,7 +426,12 @@ const extractYear = (text: string): number | null => {
 
 const normalizeBrand = (value: string, fallbackText: string): string => {
   const candidate = cleanCandidate(value);
-  if (candidate) return candidate;
+  if (candidate) {
+    const looksLikeColor = Object.keys(COLOR_ALIASES).some((color) => candidate.includes(color));
+    if (!looksLikeColor) {
+      return candidate;
+    }
+  }
 
   return KNOWN_BRANDS.find((brand) => fallbackText.includes(brand)) || '';
 };
@@ -234,12 +439,62 @@ const normalizeBrand = (value: string, fallbackText: string): string => {
 const normalizeColor = (value: string, fallbackText: string): string => {
   const candidate = cleanCandidate(value);
   if (candidate) {
+    if (KNOWN_BRANDS.includes(candidate)) {
+      const fallbackColor = Object.entries(COLOR_ALIASES).find(([key]) => fallbackText.includes(key));
+      return fallbackColor ? fallbackColor[1] : '';
+    }
+
     const colorMatch = Object.entries(COLOR_ALIASES).find(([key]) => candidate.includes(key));
     return colorMatch ? colorMatch[1] : candidate;
   }
 
   const fallbackColor = Object.entries(COLOR_ALIASES).find(([key]) => fallbackText.includes(key));
   return fallbackColor ? fallbackColor[1] : '';
+};
+
+const normalizeService = (value: string, fallbackText: string): string => {
+  const candidate = cleanCandidate(value);
+  if (candidate) {
+    const serviceMatch = Object.entries(SERVICE_ALIASES).find(([key]) => candidate.includes(key));
+    if (serviceMatch) {
+      return serviceMatch[1];
+    }
+
+    if (!/^\d{2,5}$/.test(candidate)) {
+      return candidate;
+    }
+  }
+
+  const fallbackService = Object.entries(SERVICE_ALIASES).find(([key]) => fallbackText.includes(key));
+  return fallbackService ? fallbackService[1] : '';
+};
+
+const normalizeMechanicalValue = (value: string): string => {
+  const candidate = cleanCandidate(value);
+  return candidate === 'REG' ? '' : candidate;
+};
+
+const normalizeCilindrada = (value: string): string => {
+  const candidate = cleanCandidate(value);
+  const numericMatch = candidate.match(/\b\d{2,5}\b/);
+
+  if (numericMatch) {
+    return numericMatch[0];
+  }
+
+  return candidate;
+};
+
+const normalizeOwner = (value: string): string => {
+  const candidate = cleanCandidate(value)
+    .replace(/\b(?:APELLIDOS Y NOMBRES|NOMBRES Y APELLIDOS|RAZON SOCIAL|PROPIETARIO|TITULAR)\b/g, '')
+    .trim();
+
+  if (!candidate || /\d/.test(candidate)) {
+    return '';
+  }
+
+  return candidate;
 };
 
 const inferVehicleType = (text: string): ExtractedVehicleType | null => {
@@ -340,6 +595,211 @@ const parseVehicleCardText = (rawText: string, confidence: number): VehicleCardR
   };
 };
 
+/*
+const parseVehicleCardRecognition = (
+  rawText: string,
+  confidence: number,
+  blocks?: OcrRecognitionBlock[] | null
+): VehicleCardReaderResult => {
+  const normalizedText = normalizeForSearch(rawText);
+  const lines = rawText
+    .split(/\r?\n/)
+    .map(normalizeLine)
+    .filter(Boolean);
+  const joinedLines = lines.join(' ');
+  const layoutLines = buildLayoutLines(blocks);
+
+  const extractFieldValue = (labels: readonly string[]) =>
+    extractLabeledValueFromLayout(layoutLines, labels) || extractLabeledValue(lines, labels);
+
+  const placa = extractPlate(normalizedText) || extractPlate(joinedLines);
+  const marca = normalizeBrand(extractFieldValue(LABEL_ALIASES.marca), normalizedText);
+  const linea = cleanCandidate(extractFieldValue(LABEL_ALIASES.modelo));
+  const modelo = linea;
+  const aÃ±o =
+    extractYear(extractFieldValue(LABEL_ALIASES.aÃ±o)) ||
+    extractYear(normalizedText) ||
+    null;
+  const color = normalizeColor(extractFieldValue(LABEL_ALIASES.color), normalizedText);
+  const cilindrada = normalizeCilindrada(extractFieldValue(LABEL_ALIASES.cilindrada));
+  const claseVehiculo = cleanCandidate(extractFieldValue(LABEL_ALIASES.claseVehiculo));
+  const servicio = normalizeService(extractFieldValue(LABEL_ALIASES.servicio), normalizedText);
+  const numeroMotor = normalizeMechanicalValue(extractFieldValue(LABEL_ALIASES.numeroMotor));
+  const capacidad = cleanCandidate(extractFieldValue(LABEL_ALIASES.capacidad));
+  const vinLabeled = cleanCandidate(extractFieldValue(LABEL_ALIASES.vin)).replace(/\s+/g, '');
+  const numeroChasisLabeled = normalizeMechanicalValue(
+    extractFieldValue(LABEL_ALIASES.numeroChasis)
+  );
+  const vin =
+    extractVin(vinLabeled) ||
+    extractVin(numeroChasisLabeled.replace(/\s+/g, '')) ||
+    extractVin(normalizedText) ||
+    '';
+  const numeroChasis = cleanCandidate(numeroChasisLabeled || vinLabeled || vin);
+  const tipoCarroceria = cleanCandidate(extractFieldValue(LABEL_ALIASES.carroceria));
+  const propietario = normalizeOwner(extractFieldValue(LABEL_ALIASES.propietario));
+  const identificacionLabeled = cleanCandidate(extractFieldValue(LABEL_ALIASES.identificacion));
+  const identificacionPropietario =
+    extractIdentification(identificacionLabeled) ||
+    extractIdentification(normalizedText) ||
+    '';
+  const prenda = cleanCandidate(extractFieldValue(LABEL_ALIASES.prenda));
+  const tipoVehiculo = inferVehicleType(`${tipoCarroceria} ${claseVehiculo} ${normalizedText}`);
+
+  const extracted: VehicleCardExtractedData = {
+    ...emptyExtractedData(),
+    placa,
+    marca,
+    modelo,
+    aÃ±o,
+    color,
+    vin,
+    linea,
+    cilindrada,
+    claseVehiculo,
+    servicio,
+    tipoCarroceria,
+    numeroMotor,
+    capacidad,
+    numeroChasis,
+    propietario,
+    identificacionPropietario,
+    prenda,
+    tipoVehiculo,
+  };
+
+  const detectedFields = [
+    extracted.placa,
+    extracted.marca,
+    extracted.modelo,
+    extracted.aÃ±o,
+    extracted.color,
+    extracted.vin,
+    extracted.linea,
+    extracted.cilindrada,
+    extracted.claseVehiculo,
+    extracted.servicio,
+    extracted.tipoCarroceria,
+    extracted.numeroMotor,
+    extracted.capacidad,
+    extracted.numeroChasis,
+    extracted.propietario,
+    extracted.identificacionPropietario,
+    extracted.prenda,
+    extracted.tipoVehiculo,
+  ].filter(Boolean).length;
+
+  return {
+    rawText,
+    confidence,
+    extracted,
+    detectedFields,
+  };
+};
+
+*/
+
+const parseVehicleCardRecognition = (
+  rawText: string,
+  confidence: number,
+  blocks?: OcrRecognitionBlock[] | null
+): VehicleCardReaderResult => {
+  const normalizedText = normalizeForSearch(rawText);
+  const lines = rawText
+    .split(/\r?\n/)
+    .map(normalizeLine)
+    .filter(Boolean);
+  const joinedLines = lines.join(' ');
+  const layoutLines = buildLayoutLines(blocks);
+
+  const extractFieldValue = (labels: readonly string[]) =>
+    extractLabeledValueFromLayout(layoutLines, labels) || extractLabeledValue(lines, labels);
+
+  const placa = extractPlate(normalizedText) || extractPlate(joinedLines);
+  const marca = normalizeBrand(extractFieldValue(LABEL_ALIASES.marca), normalizedText);
+  const linea = cleanCandidate(extractFieldValue(LABEL_ALIASES.modelo));
+  const modelo = linea;
+  const yearValue =
+    extractYear(extractFieldValue(LABEL_ALIASES['a\u00f1o'])) ||
+    extractYear(normalizedText) ||
+    null;
+  const color = normalizeColor(extractFieldValue(LABEL_ALIASES.color), normalizedText);
+  const cilindrada = normalizeCilindrada(extractFieldValue(LABEL_ALIASES.cilindrada));
+  const claseVehiculo = cleanCandidate(extractFieldValue(LABEL_ALIASES.claseVehiculo));
+  const servicio = normalizeService(extractFieldValue(LABEL_ALIASES.servicio), normalizedText);
+  const numeroMotor = normalizeMechanicalValue(extractFieldValue(LABEL_ALIASES.numeroMotor));
+  const capacidad = cleanCandidate(extractFieldValue(LABEL_ALIASES.capacidad));
+  const vinLabeled = cleanCandidate(extractFieldValue(LABEL_ALIASES.vin)).replace(/\s+/g, '');
+  const numeroChasisLabeled = normalizeMechanicalValue(
+    extractFieldValue(LABEL_ALIASES.numeroChasis)
+  );
+  const vin =
+    extractVin(vinLabeled) ||
+    extractVin(numeroChasisLabeled.replace(/\s+/g, '')) ||
+    extractVin(normalizedText) ||
+    '';
+  const numeroChasis = cleanCandidate(numeroChasisLabeled || vinLabeled || vin);
+  const tipoCarroceria = cleanCandidate(extractFieldValue(LABEL_ALIASES.carroceria));
+  const propietario = normalizeOwner(extractFieldValue(LABEL_ALIASES.propietario));
+  const identificacionLabeled = cleanCandidate(extractFieldValue(LABEL_ALIASES.identificacion));
+  const identificacionPropietario =
+    extractIdentification(identificacionLabeled) ||
+    extractIdentification(normalizedText) ||
+    '';
+  const prenda = cleanCandidate(extractFieldValue(LABEL_ALIASES.prenda));
+  const tipoVehiculo = inferVehicleType(`${tipoCarroceria} ${claseVehiculo} ${normalizedText}`);
+
+  const extracted: VehicleCardExtractedData = {
+    ...emptyExtractedData(),
+    placa,
+    marca,
+    modelo,
+    ['a\u00f1o']: yearValue,
+    color,
+    vin,
+    linea,
+    cilindrada,
+    claseVehiculo,
+    servicio,
+    tipoCarroceria,
+    numeroMotor,
+    capacidad,
+    numeroChasis,
+    propietario,
+    identificacionPropietario,
+    prenda,
+    tipoVehiculo,
+  };
+
+  const detectedFields = [
+    extracted.placa,
+    extracted.marca,
+    extracted.modelo,
+    extracted['a\u00f1o'],
+    extracted.color,
+    extracted.vin,
+    extracted.linea,
+    extracted.cilindrada,
+    extracted.claseVehiculo,
+    extracted.servicio,
+    extracted.tipoCarroceria,
+    extracted.numeroMotor,
+    extracted.capacidad,
+    extracted.numeroChasis,
+    extracted.propietario,
+    extracted.identificacionPropietario,
+    extracted.prenda,
+    extracted.tipoVehiculo,
+  ].filter(Boolean).length;
+
+  return {
+    rawText,
+    confidence,
+    extracted,
+    detectedFields,
+  };
+};
+
 const loadImageElement = (file: Blob): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
@@ -398,9 +858,8 @@ const renderBlobToCanvas = async (file: Blob, scaleFactor = 1): Promise<HTMLCanv
 };
 
 const getDocumentCanvasSize = (imageWidth: number, imageHeight: number) => {
-  const landscape = imageWidth > imageHeight * 1.15;
-  const baseWidth = landscape ? OCR_DOCUMENT_BASE_HEIGHT : OCR_DOCUMENT_BASE_WIDTH;
-  const baseHeight = landscape ? OCR_DOCUMENT_BASE_WIDTH : OCR_DOCUMENT_BASE_HEIGHT;
+  const baseWidth = OCR_DOCUMENT_BASE_HEIGHT;
+  const baseHeight = OCR_DOCUMENT_BASE_WIDTH;
   const usableWidth = baseWidth - OCR_DOCUMENT_MARGIN * 2;
   const usableHeight = baseHeight - OCR_DOCUMENT_MARGIN * 2;
   const fitScale = Math.min(usableWidth / imageWidth, usableHeight / imageHeight);
@@ -524,12 +983,15 @@ const runRecognition = async (
 
   const recognition = await worker.recognize(file, {
     rotateAuto: true,
+  }, {
+    blocks: true,
   });
   onProgress?.(endProgress);
 
-  return parseVehicleCardText(
+  return parseVehicleCardRecognition(
     recognition.data.text || '',
-    recognition.data.confidence || 0
+    recognition.data.confidence || 0,
+    recognition.data.blocks as OcrRecognitionBlock[] | null | undefined
   );
 };
 
