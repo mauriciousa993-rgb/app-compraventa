@@ -132,6 +132,21 @@ const SERVICE_ALIASES: Record<string, string> = {
   ESPECIAL: 'Especial',
 };
 
+const KNOWN_VEHICLE_CLASSES = [
+  'AUTOMOVIL',
+  'CAMIONETA',
+  'CAMPERO',
+  'MICROBUS',
+  'BUS',
+  'BUSETA',
+  'PICKUP',
+  'VOLQUETA',
+  'TRACTOCAMION',
+  'MOTOCICLETA',
+  'REMOLQUE',
+  'SEMIREMOLQUE',
+];
+
 const OCR_DOCUMENT_BASE_WIDTH = 1654;
 const OCR_DOCUMENT_BASE_HEIGHT = 2339;
 const OCR_DOCUMENT_MARGIN = 96;
@@ -507,6 +522,38 @@ const normalizeNumericCandidate = (
   return matches.sort((a, b) => b.length - a.length)[0] || '';
 };
 
+const countLetters = (value: string) => (value.match(/[A-Z]/g) || []).length;
+
+const countDigits = (value: string) => (value.match(/\d/g) || []).length;
+
+const pickBestExtractedValue = (
+  primary: string,
+  secondary: string,
+  strategy: 'text' | 'numeric' | 'name' | 'alphanumeric' = 'text'
+): string => {
+  const first = trimAtNextLabel(cleanCandidate(primary));
+  const second = trimAtNextLabel(cleanCandidate(secondary));
+
+  if (!first) return second;
+  if (!second) return first;
+
+  const score = (value: string) => {
+    switch (strategy) {
+      case 'numeric':
+        return countDigits(value) * 10 + value.length;
+      case 'name':
+        return countLetters(value) * 4 + value.split(' ').filter(Boolean).length * 8 - countDigits(value) * 10;
+      case 'alphanumeric':
+        return (countLetters(value) + countDigits(value)) * 4 + value.length;
+      case 'text':
+      default:
+        return countLetters(value) * 3 + value.length;
+    }
+  };
+
+  return score(second) > score(first) ? second : first;
+};
+
 const normalizePlateWindow = (value: string): { value: string; score: number } | null => {
   const normalized = normalizeForSearch(value).replace(/[^A-Z0-9]/g, '');
   if (normalized.length !== 6) {
@@ -645,15 +692,24 @@ const normalizeService = (value: string, fallbackText: string): string => {
 };
 
 const normalizeMechanicalValue = (value: string): string => {
-  const candidate = cleanCandidate(value);
-  return candidate === 'REG' ? '' : candidate;
+  const candidate = cleanCandidate(value)
+    .replace(/\bREG\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!candidate) {
+    return '';
+  }
+
+  const compact = candidate.replace(/\s+/g, '');
+  return compact.length >= 6 ? compact : candidate;
 };
 
 const normalizeCilindrada = (value: string): string => {
   return normalizeNumericCandidate(value, 2, 5);
 };
 
-const normalizeVehicleClass = (value: string): string => {
+const normalizeVehicleClass = (value: string, fallbackText = ''): string => {
   const candidate = cleanCandidate(value)
     .replace(/\b(?:CLASE|DE VEHICULO|VEHICULO)\b/g, '')
     .trim();
@@ -663,7 +719,8 @@ const normalizeVehicleClass = (value: string): string => {
   }
 
   if (candidate === 'DE' || candidate === 'VEHICULO') {
-    return '';
+    const fallback = KNOWN_VEHICLE_CLASSES.find((item) => normalizeForSearch(fallbackText).includes(item));
+    return fallback || '';
   }
 
   return candidate;
@@ -779,7 +836,7 @@ const parseVehicleCardText = (rawText: string, confidence: number): VehicleCardR
 
   return {
     rawText,
-    confidence,
+    confidence: calculateVehicleCardConfidence(extracted, confidence),
     extracted,
     detectedFields,
   };
@@ -798,30 +855,49 @@ const parseVehicleCardRecognition = (
   const joinedLines = lines.join(' ');
   const layoutLines = buildLayoutLines(blocks);
 
-  const extractFieldValue = (labels: readonly string[]) =>
-    extractLabeledValueFromLayout(layoutLines, labels) || extractLabeledValue(lines, labels);
+  const resolveFieldValue = (
+    labels: readonly string[],
+    strategy: 'text' | 'numeric' | 'name' | 'alphanumeric' = 'text',
+    preferBelow = false
+  ) => {
+    const inlineValue =
+      extractLabeledValueFromLayout(layoutLines, labels) || extractLabeledValue(lines, labels);
+    const belowValue = extractValueBelowLabel(layoutLines, lines, labels);
+
+    if (preferBelow) {
+      return pickBestExtractedValue(belowValue, inlineValue, strategy);
+    }
+
+    return pickBestExtractedValue(inlineValue, belowValue, strategy);
+  };
 
   const placa = extractPlateLoose(
-    extractFieldValue(LABEL_ALIASES.placa),
+    resolveFieldValue(LABEL_ALIASES.placa, 'alphanumeric'),
     normalizedText,
-    joinedLines
+    joinedLines,
+    ...lines
   );
-  const marca = normalizeBrand(extractFieldValue(LABEL_ALIASES.marca), normalizedText);
-  const linea = cleanCandidate(extractFieldValue(LABEL_ALIASES.modelo));
+  const marca = normalizeBrand(resolveFieldValue(LABEL_ALIASES.marca), normalizedText);
+  const linea = cleanCandidate(resolveFieldValue(LABEL_ALIASES.modelo));
   const modelo = linea;
   const yearValue =
-    extractYear(extractFieldValue(LABEL_ALIASES['a\u00f1o'])) ||
+    extractYear(resolveFieldValue(LABEL_ALIASES['a\u00f1o'], 'numeric')) ||
     extractYear(normalizedText) ||
     null;
-  const color = normalizeColor(extractFieldValue(LABEL_ALIASES.color), normalizedText);
-  const cilindrada = normalizeCilindrada(extractFieldValue(LABEL_ALIASES.cilindrada));
-  const claseVehiculo = normalizeVehicleClass(extractFieldValue(LABEL_ALIASES.claseVehiculo));
-  const servicio = normalizeService(extractFieldValue(LABEL_ALIASES.servicio), normalizedText);
-  const numeroMotor = normalizeMechanicalValue(extractFieldValue(LABEL_ALIASES.numeroMotor));
-  const capacidad = normalizeCapacity(extractFieldValue(LABEL_ALIASES.capacidad));
-  const vinLabeled = cleanCandidate(extractFieldValue(LABEL_ALIASES.vin)).replace(/\s+/g, '');
+  const color = normalizeColor(resolveFieldValue(LABEL_ALIASES.color), normalizedText);
+  const cilindrada = normalizeCilindrada(resolveFieldValue(LABEL_ALIASES.cilindrada, 'numeric'));
+  const claseVehiculo = normalizeVehicleClass(
+    resolveFieldValue(LABEL_ALIASES.claseVehiculo),
+    normalizedText
+  );
+  const servicio = normalizeService(resolveFieldValue(LABEL_ALIASES.servicio), normalizedText);
+  const numeroMotor = normalizeMechanicalValue(
+    resolveFieldValue(LABEL_ALIASES.numeroMotor, 'alphanumeric')
+  );
+  const capacidad = normalizeCapacity(resolveFieldValue(LABEL_ALIASES.capacidad, 'numeric'));
+  const vinLabeled = cleanCandidate(resolveFieldValue(LABEL_ALIASES.vin, 'alphanumeric')).replace(/\s+/g, '');
   const numeroChasisLabeled = normalizeMechanicalValue(
-    extractFieldValue(LABEL_ALIASES.numeroChasis)
+    resolveFieldValue(LABEL_ALIASES.numeroChasis, 'alphanumeric')
   );
   const vin = extractVinLoose(
     vinLabeled,
@@ -831,16 +907,18 @@ const parseVehicleCardRecognition = (
     ...lines
   );
   const numeroChasis = cleanCandidate(numeroChasisLabeled || vinLabeled || vin);
-  const tipoCarroceria = cleanCandidate(extractFieldValue(LABEL_ALIASES.carroceria));
+  const tipoCarroceria = cleanCandidate(resolveFieldValue(LABEL_ALIASES.carroceria));
   const propietario =
-    normalizeOwner(extractValueBelowLabel(layoutLines, lines, LABEL_ALIASES.propietario)) ||
-    normalizeOwner(extractFieldValue(LABEL_ALIASES.propietario));
-  const identificacionLabeled = cleanCandidate(extractFieldValue(LABEL_ALIASES.identificacion));
+    normalizeOwner(resolveFieldValue(LABEL_ALIASES.propietario, 'name', true)) ||
+    normalizeOwner(resolveFieldValue(LABEL_ALIASES.propietario, 'name'));
+  const identificacionLabeled = cleanCandidate(
+    resolveFieldValue(LABEL_ALIASES.identificacion, 'numeric')
+  );
   const identificacionPropietario =
     extractIdentification(identificacionLabeled) ||
     extractIdentification(normalizedText) ||
     '';
-  const prenda = cleanCandidate(extractFieldValue(LABEL_ALIASES.prenda));
+  const prenda = cleanCandidate(resolveFieldValue(LABEL_ALIASES.prenda));
   const tipoVehiculo = inferVehicleType(`${tipoCarroceria} ${claseVehiculo} ${normalizedText}`);
 
   const extracted: VehicleCardExtractedData = {
@@ -1141,6 +1219,49 @@ const scoreExtractedText = (field: ExtractedTextField, value: string): number =>
   }
 };
 
+const calculateYearConfidence = (value: number | null): number => {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return 0;
+  }
+
+  const currentYear = new Date().getFullYear() + 1;
+  return value >= 1900 && value <= currentYear ? 85 : 10;
+};
+
+const calculateVehicleCardConfidence = (
+  extracted: VehicleCardExtractedData,
+  ocrConfidence: number
+) => {
+  const fieldScores: number[] = [
+    scoreExtractedText('placa', extracted.placa),
+    scoreExtractedText('marca', extracted.marca),
+    scoreExtractedText('modelo', extracted.modelo),
+    calculateYearConfidence(extracted['a\u00f1o']),
+    scoreExtractedText('color', extracted.color),
+    scoreExtractedText('vin', extracted.vin),
+    scoreExtractedText('linea', extracted.linea),
+    scoreExtractedText('cilindrada', extracted.cilindrada),
+    scoreExtractedText('claseVehiculo', extracted.claseVehiculo),
+    scoreExtractedText('servicio', extracted.servicio),
+    scoreExtractedText('tipoCarroceria', extracted.tipoCarroceria),
+    scoreExtractedText('numeroMotor', extracted.numeroMotor),
+    scoreExtractedText('capacidad', extracted.capacidad),
+    scoreExtractedText('numeroChasis', extracted.numeroChasis),
+    scoreExtractedText('propietario', extracted.propietario),
+    scoreExtractedText('identificacionPropietario', extracted.identificacionPropietario),
+    scoreExtractedText('prenda', extracted.prenda),
+  ];
+  const qualityAverage = fieldScores.reduce((sum, score) => sum + score, 0) / fieldScores.length;
+  const completeness = (countDetectedFields(extracted) / 18) * 100;
+  const normalizedOcrConfidence = Math.max(0, Math.min(100, ocrConfidence));
+  const finalScore =
+    qualityAverage * 0.55 +
+    completeness * 0.3 +
+    normalizedOcrConfidence * 0.15;
+
+  return Math.round(Math.max(0, Math.min(99, finalScore)));
+};
+
 const pickPreferredText = (
   field: ExtractedTextField,
   primary: string,
@@ -1245,7 +1366,10 @@ const mergeVehicleCardResults = (
       enhancedResult.detectedFields > baseResult.detectedFields
         ? enhancedResult.rawText
         : baseResult.rawText,
-    confidence: Math.max(baseResult.confidence, enhancedResult.confidence),
+    confidence: calculateVehicleCardConfidence(
+      extracted,
+      Math.max(baseResult.confidence, enhancedResult.confidence)
+    ),
     extracted,
     detectedFields: countDetectedFields(extracted),
   };
