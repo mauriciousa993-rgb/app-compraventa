@@ -536,6 +536,7 @@ const OCR_LETTER_TO_DIGIT: Record<string, string> = {
 
 const ADMINISTRATIVE_NOISE_REGEX =
   /\b(?:REPUBLICA|COLOMBIA|MINISTERIO|TRANSPORTE|LICENCIA|TRANSITO|SERVICIO|PUBLICO|PARTICULAR)\b/;
+const VIN_NOISE_FRAGMENT_REGEX = /(REPUBL|COLOMB|MINIST|TRANSI|LICENC|SERVIC|PUBLIC)/;
 
 const normalizeNumericCandidate = (
   value: string,
@@ -688,7 +689,7 @@ const extractVinLoose = (...values: string[]): string => {
       .replace(/I/g, '1')
       .replace(/[^A-Z0-9]/g, '');
     const match = normalized.match(/[A-HJ-NPR-Z0-9]{17}/);
-    if (match) {
+    if (match && !VIN_NOISE_FRAGMENT_REGEX.test(match[0])) {
       return match[0];
     }
   }
@@ -940,12 +941,7 @@ const parseVehicleCardText = (rawText: string, confidence: number): VehicleCardR
     .filter(Boolean);
   const joinedLines = lines.join(' ');
 
-  const placa = extractPreferredPlate(
-    extractLabeledValue(lines, LABEL_ALIASES.placa),
-    normalizedText,
-    joinedLines,
-    ...lines
-  );
+  const placa = extractPreferredPlate(extractLabeledValue(lines, LABEL_ALIASES.placa), ...lines);
   const marca = normalizeBrand(extractLabeledValue(lines, LABEL_ALIASES.marca), normalizedText);
   const linea = cleanCandidate(extractLabeledValue(lines, LABEL_ALIASES.modelo));
   const modelo = linea;
@@ -1060,8 +1056,6 @@ const parseVehicleCardRecognition = (
 
   const placa = extractPreferredPlate(
     resolveFieldValue(LABEL_ALIASES.placa, 'alphanumeric'),
-    normalizedText,
-    joinedLines,
     ...lines
   );
   const marca = normalizeBrand(resolveFieldValue(LABEL_ALIASES.marca), normalizedText);
@@ -1501,6 +1495,7 @@ const scoreExtractedText = (field: ExtractedTextField, value: string): number =>
     case 'placa':
       return isValidPlate(candidate) ? 100 : 10;
     case 'vin':
+      if (VIN_NOISE_FRAGMENT_REGEX.test(candidate)) return 0;
       if (isValidVin(candidate)) return 100;
       return /^[A-Z0-9]{6,20}$/.test(candidate) ? 45 : 5;
     case 'numeroChasis':
@@ -1714,8 +1709,7 @@ const extractStructuredFieldValue = (
     case 'placa':
       return extractPreferredPlate(
         resolveFieldValueFromRegion(rawText, LABEL_ALIASES.placa, 'alphanumeric'),
-        rawText,
-        normalizedRegionText
+        rawText
       );
     case 'marca':
       return normalizeBrand(resolveFieldValueFromRegion(rawText, LABEL_ALIASES.marca), fallbackText);

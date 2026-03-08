@@ -1320,9 +1320,8 @@ const VehicleForm: React.FC = () => {
                 <div className="space-y-4">
                   <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-900">
                     La foto se recorta y corrige automaticamente antes del OCR. La app intenta aislar solo el cuadro
-                    de la tarjeta, conservar mas detalle de la imagen original, mejorar resolucion, probar varias
-                    configuraciones de color, escala de grises, blanco y negro, contraste y nitidez, y usar la
-                    version que estime mas legible.
+                    de la tarjeta, conservar mas detalle de la imagen original, mejorar resolucion, pasarla a blanco
+                    y negro, ajustar contraste y nitidez, y usar la version que estime mas legible.
                   </div>
 
                   <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
@@ -1331,7 +1330,7 @@ const VehicleForm: React.FC = () => {
                         <p className="text-sm font-semibold text-blue-900">Estado de lectura</p>
                         <p className="text-sm text-blue-700">
                           {isApplyingPropertyCardEditor
-                            ? 'Recortando la tarjeta, mejorando resolucion y probando automaticamente color, escala de grises y blanco y negro antes del OCR...'
+                            ? 'Recortando la tarjeta, mejorando resolucion y pasandola automaticamente a blanco y negro antes del OCR...'
                             : isReadingPropertyCard
                             ? `Leyendo tarjeta... ${propertyCardProgress}%`
                             : propertyCardResult

@@ -254,16 +254,6 @@ const buildAutoPropertyCardImagePresets = (
   });
 
   return [
-    { key: 'source-clean', adjustments: withUpscale(DEFAULT_PROPERTY_CARD_IMAGE_ADJUSTMENTS, 0.92) },
-    { key: 'ocr-balanced', adjustments: withUpscale(OCR_PROPERTY_CARD_IMAGE_PRESET, 1) },
-    {
-      key: 'ocr-high-contrast',
-      adjustments: withUpscale(OCR_HIGH_CONTRAST_PROPERTY_CARD_IMAGE_PRESET, 1.06),
-    },
-    {
-      key: 'ocr-grayscale',
-      adjustments: withUpscale(OCR_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET, 1.1),
-    },
     {
       key: 'ocr-soft-bw',
       adjustments: withUpscale(OCR_SOFT_BLACK_AND_WHITE_PROPERTY_CARD_IMAGE_PRESET, 1.08),
@@ -271,10 +261,6 @@ const buildAutoPropertyCardImagePresets = (
     {
       key: 'ocr-bw',
       adjustments: withUpscale(OCR_BLACK_AND_WHITE_PROPERTY_CARD_IMAGE_PRESET, 1.12),
-    },
-    {
-      key: 'ocr-soft-color',
-      adjustments: withUpscale(OCR_SOFT_COLOR_PROPERTY_CARD_IMAGE_PRESET, 0.96),
     },
   ];
 };
