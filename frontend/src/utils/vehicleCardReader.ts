@@ -73,6 +73,9 @@ const ALL_LABELS = Array.from(
 const orderLabelsByLength = (labels: readonly string[]) =>
   [...labels].sort((a, b) => b.length - a.length);
 
+const escapeRegExp = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const KNOWN_BRANDS = [
   'AUDI',
   'BMW',
@@ -216,9 +219,6 @@ const trimAtNextLabel = (candidate: string): string => {
 
   return trimmed.trim();
 };
-
-const escapeRegExp = (value: string): string =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const stripFieldLabels = (value: string, labels: readonly string[]): string => {
   const normalizedLabels = orderLabelsByLength(
@@ -502,8 +502,8 @@ const extractVin = (text: string): string => {
 };
 
 const extractIdentification = (text: string): string => {
-  const match = text.match(/\b\d{5,15}\b/);
-  return match ? match[0] : '';
+  const matches = text.match(/\b\d{5,15}\b/g) || [];
+  return matches[matches.length - 1] || '';
 };
 
 const extractYear = (text: string): number | null => {
@@ -671,6 +671,33 @@ const extractVinLoose = (...values: string[]): string => {
   return '';
 };
 
+const findKnownPhrase = (value: string, candidates: readonly string[]): string => {
+  const normalized = normalizeForSearch(value);
+
+  for (const candidate of orderLabelsByLength(candidates)) {
+    const matcher = new RegExp(`(^|\\s)${escapeRegExp(candidate)}(?=\\s|$)`);
+    if (matcher.test(normalized)) {
+      return candidate;
+    }
+  }
+
+  return '';
+};
+
+const extractNumericGroups = (value: string): string[] => {
+  const normalized = normalizeForSearch(value)
+    .replace(/[OQD]/g, '0')
+    .replace(/[IL]/g, '1');
+
+  const separatedMatches = Array.from(
+    normalized.matchAll(/\b(\d{1,2})[\s.](\d{2,3})\b/g),
+    (match) => `${match[1]}${match[2]}`
+  );
+  const compactMatches = normalized.match(/\b\d{1,5}\b/g) || [];
+
+  return Array.from(new Set([...separatedMatches, ...compactMatches]));
+};
+
 const normalizeBrand = (value: string, fallbackText: string): string => {
   const candidate = cleanCandidate(value);
   if (candidate) {
@@ -718,7 +745,12 @@ const normalizeService = (value: string, fallbackText: string): string => {
 
 const normalizeMechanicalValue = (value: string): string => {
   const candidate = cleanCandidate(value)
+    .replace(
+      /\b(?:NUMERO|NRO|NO|DE|MOTOR|VIN|CHASIS|SERIE|IDENTIFICACION|PLACA|PROPIETARIO)\b/g,
+      ' '
+    )
     .replace(/\bREG\b/g, ' ')
+    .replace(/\bCC\b/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -726,12 +758,29 @@ const normalizeMechanicalValue = (value: string): string => {
     return '';
   }
 
-  const compact = candidate.replace(/\s+/g, '');
+  const tokenMatches = candidate
+    .split(/\s+/)
+    .map((token) => token.replace(/[^A-Z0-9-]/g, ''))
+    .filter((token) => token.length >= 5 && /\d/.test(token));
+
+  if (tokenMatches.length) {
+    return tokenMatches.sort((left, right) => right.length - left.length)[0];
+  }
+
+  const compact = candidate.replace(/[^A-Z0-9-]/g, '');
   return compact.length >= 6 ? compact : candidate;
 };
 
 const normalizeCilindrada = (value: string): string => {
-  return normalizeNumericCandidate(value, 2, 5);
+  const candidates = extractNumericGroups(value)
+    .filter((candidate) => candidate.length >= 3 && candidate.length <= 4)
+    .sort((left, right) => right.length - left.length);
+
+  if (candidates.length) {
+    return candidates[0];
+  }
+
+  return normalizeNumericCandidate(value, 2, 4);
 };
 
 const normalizeVehicleClass = (value: string, fallbackText = ''): string => {
@@ -739,14 +788,19 @@ const normalizeVehicleClass = (value: string, fallbackText = ''): string => {
     .replace(/\b(?:CLASE|DE VEHICULO|VEHICULO)\b/g, '')
     .trim();
   const normalizedFallbackText = normalizeForSearch(fallbackText);
+  const matchedCandidate = findKnownPhrase(candidate, KNOWN_VEHICLE_CLASSES);
+
+  if (matchedCandidate) {
+    return matchedCandidate;
+  }
 
   if (!candidate) {
-    const fallback = KNOWN_VEHICLE_CLASSES.find((item) => normalizedFallbackText.includes(item));
+    const fallback = findKnownPhrase(normalizedFallbackText, KNOWN_VEHICLE_CLASSES);
     return fallback || '';
   }
 
   if (candidate === 'DE' || candidate === 'VEHICULO') {
-    const fallback = KNOWN_VEHICLE_CLASSES.find((item) => normalizedFallbackText.includes(item));
+    const fallback = findKnownPhrase(normalizedFallbackText, KNOWN_VEHICLE_CLASSES);
     return fallback || '';
   }
 
@@ -754,7 +808,13 @@ const normalizeVehicleClass = (value: string, fallbackText = ''): string => {
 };
 
 const normalizeCapacity = (value: string): string => {
-  return normalizeNumericCandidate(value, 1, 4);
+  const candidates = extractNumericGroups(value).filter((candidate) => candidate.length >= 1 && candidate.length <= 3);
+
+  if (candidates.length) {
+    return candidates[candidates.length - 1];
+  }
+
+  return normalizeNumericCandidate(value, 1, 3);
 };
 
 const normalizeOwner = (value: string): string => {
@@ -763,6 +823,7 @@ const normalizeOwner = (value: string): string => {
       /\b(?:APELLIDOS Y NOMBRES|APELLIDO S Y NOMBRE S|APELLIDO S Y NOMBRES|NOMBRES Y APELLIDOS|RAZON SOCIAL|PROPIETARIO|TITULAR)\b/g,
       ''
     )
+    .replace(/\b(?:IDENTIFICACION|CEDULA|DOCUMENTO|C C|CC|NO)\b/g, ' ')
     .replace(/\b\d{5,15}\b/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -809,21 +870,21 @@ type StructuredCardScanZone = {
 };
 
 const STRUCTURED_CARD_SCAN_ZONES: StructuredCardScanZone[] = [
-  { field: 'placa', x: 0.02, y: 0.225, width: 0.15, height: 0.125, scale: 2 },
-  { field: 'marca', x: 0.195, y: 0.225, width: 0.18, height: 0.125 },
-  { field: 'linea', x: 0.48, y: 0.225, width: 0.3, height: 0.125 },
-  { field: 'a\u00f1o', x: 0.84, y: 0.225, width: 0.13, height: 0.125 },
-  { field: 'cilindrada', x: 0.02, y: 0.37, width: 0.16, height: 0.115 },
-  { field: 'color', x: 0.195, y: 0.37, width: 0.34, height: 0.115 },
-  { field: 'servicio', x: 0.72, y: 0.37, width: 0.24, height: 0.115 },
-  { field: 'claseVehiculo', x: 0.02, y: 0.49, width: 0.24, height: 0.115 },
-  { field: 'tipoCarroceria', x: 0.29, y: 0.49, width: 0.22, height: 0.115 },
-  { field: 'capacidad', x: 0.79, y: 0.49, width: 0.17, height: 0.115 },
-  { field: 'numeroMotor', x: 0.02, y: 0.605, width: 0.29, height: 0.115, scale: 1.9 },
-  { field: 'vin', x: 0.52, y: 0.605, width: 0.34, height: 0.115, scale: 1.9 },
-  { field: 'numeroChasis', x: 0.52, y: 0.72, width: 0.38, height: 0.115, scale: 1.9 },
-  { field: 'propietario', x: 0.02, y: 0.83, width: 0.6, height: 0.11, scale: 1.85 },
-  { field: 'identificacionPropietario', x: 0.67, y: 0.83, width: 0.25, height: 0.11, scale: 1.85 },
+  { field: 'placa', x: 0.02, y: 0.275, width: 0.12, height: 0.07, scale: 2.25 },
+  { field: 'marca', x: 0.195, y: 0.275, width: 0.16, height: 0.07, scale: 2 },
+  { field: 'linea', x: 0.49, y: 0.275, width: 0.29, height: 0.07, scale: 1.95 },
+  { field: 'a\u00f1o', x: 0.855, y: 0.275, width: 0.1, height: 0.07, scale: 2.1 },
+  { field: 'cilindrada', x: 0.02, y: 0.405, width: 0.13, height: 0.07, scale: 2.1 },
+  { field: 'color', x: 0.195, y: 0.405, width: 0.31, height: 0.07, scale: 1.95 },
+  { field: 'servicio', x: 0.73, y: 0.405, width: 0.22, height: 0.07, scale: 2 },
+  { field: 'claseVehiculo', x: 0.02, y: 0.53, width: 0.22, height: 0.07, scale: 2.05 },
+  { field: 'tipoCarroceria', x: 0.3, y: 0.53, width: 0.16, height: 0.07, scale: 2 },
+  { field: 'capacidad', x: 0.805, y: 0.53, width: 0.08, height: 0.07, scale: 2.25 },
+  { field: 'numeroMotor', x: 0.02, y: 0.655, width: 0.27, height: 0.07, scale: 2.2 },
+  { field: 'vin', x: 0.59, y: 0.655, width: 0.28, height: 0.07, scale: 2.2 },
+  { field: 'numeroChasis', x: 0.57, y: 0.775, width: 0.31, height: 0.07, scale: 2.2 },
+  { field: 'propietario', x: 0.02, y: 0.915, width: 0.64, height: 0.06, scale: 2.3 },
+  { field: 'identificacionPropietario', x: 0.7, y: 0.915, width: 0.22, height: 0.06, scale: 2.3 },
 ];
 
 const parseVehicleCardText = (rawText: string, confidence: number): VehicleCardReaderResult => {
@@ -1395,9 +1456,13 @@ const scoreExtractedText = (field: ExtractedTextField, value: string): number =>
       if (KNOWN_BRANDS.includes(candidate)) return 95;
       return /^[A-Z ]{2,20}$/.test(candidate) ? 40 : 5;
     case 'identificacionPropietario':
-      return isValidIdentification(candidate) ? 90 : 5;
+      if (isValidIdentification(candidate)) {
+        return candidate.length <= 10 ? 92 : 78;
+      }
+      return 5;
     case 'numeroMotor':
-      return /^[A-Z0-9-]{4,25}$/.test(candidate) ? 60 + candidate.length : 5;
+      if (/^(?=.*[A-Z])(?=.*\d)[A-Z0-9-]{5,25}$/.test(candidate)) return 72 + candidate.length;
+      return /^[A-Z0-9-]{5,25}$/.test(candidate) ? 45 + candidate.length : 5;
     case 'propietario':
       if (/\d/.test(candidate)) return 5;
       return candidate.split(' ').length >= 2 && candidate.length <= 40 ? 70 : 20;
@@ -1413,7 +1478,7 @@ const scoreExtractedText = (field: ExtractedTextField, value: string): number =>
       return candidate.length >= 2 ? 55 : 10;
     case 'claseVehiculo':
       if (KNOWN_VEHICLE_CLASSES.includes(candidate)) return 75;
-      return candidate.length <= 30 ? 45 : 10;
+      return candidate.length <= 30 ? 20 : 10;
     case 'servicio':
       return Object.keys(SERVICE_ALIASES).some((service) => candidate.includes(service)) ? 70 : 20;
     case 'tipoCarroceria':
@@ -1421,6 +1486,31 @@ const scoreExtractedText = (field: ExtractedTextField, value: string): number =>
       return candidate.length <= 30 ? 45 : 10;
     default:
       return candidate.length <= 40 ? 35 : 5;
+  }
+};
+
+const pickFieldTieBreaker = (
+  field: ExtractedTextField,
+  primary: string,
+  secondary: string
+) => {
+  switch (field) {
+    case 'placa':
+      return secondary;
+    case 'propietario':
+    case 'numeroMotor':
+      return secondary.length >= primary.length ? secondary : primary;
+    case 'identificacionPropietario':
+      return secondary.length <= primary.length ? secondary : primary;
+    case 'capacidad':
+      return secondary.length <= primary.length ? secondary : primary;
+    case 'cilindrada':
+      if (secondary.length >= 3 && primary.length < 3) return secondary;
+      return secondary.length >= primary.length ? secondary : primary;
+    case 'claseVehiculo':
+      return KNOWN_VEHICLE_CLASSES.includes(secondary) ? secondary : primary;
+    default:
+      return primary;
   }
 };
 
@@ -1477,6 +1567,10 @@ const pickPreferredText = (
 
   if (secondaryScore > primaryScore) {
     return secondary;
+  }
+
+  if (secondaryScore === primaryScore && secondary && primary && secondary !== primary) {
+    return pickFieldTieBreaker(field, primary, secondary);
   }
 
   return primary;
