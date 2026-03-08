@@ -27,6 +27,14 @@ const DEFAULT_VEHICLE_YEAR = new Date().getFullYear();
 
 type PropertyCardApplyMode = 'overwrite' | 'fill-empty';
 
+type VisionAiOcrResponse = {
+  source?: string;
+  confidence?: number;
+  detectedFields?: number;
+  rawText?: string;
+  extracted?: Record<string, unknown>;
+};
+
 const hasText = (value: string | null | undefined) => Boolean(value && value.trim());
 
 const pickCardTextValue = (
@@ -126,6 +134,49 @@ const normalizePropertyCardDraft = (
     identificacionPropietario: (draft?.identificacionPropietario || '').trim(),
     prenda: (draft?.prenda || '').trim(),
     tipoVehiculo: draft?.tipoVehiculo || null,
+  };
+};
+
+const mapVisionAiExtractedToDraft = (
+  extracted: Record<string, unknown> | undefined
+): Partial<VehicleCardExtractedData> => {
+  const rawType = typeof extracted?.tipoVehiculo === 'string' ? extracted.tipoVehiculo.toLowerCase() : '';
+  const tipoVehiculo =
+    rawType === 'suv' || rawType === 'pickup' || rawType === 'sedan' || rawType === 'hatchback'
+      ? (rawType as VehicleCardExtractedData['tipoVehiculo'])
+      : null;
+  const anioCandidate =
+    typeof extracted?.anio === 'number'
+      ? extracted.anio
+      : typeof extracted?.['año'] === 'number'
+        ? extracted['año']
+        : null;
+
+  return {
+    placa: typeof extracted?.placa === 'string' ? extracted.placa : '',
+    marca: typeof extracted?.marca === 'string' ? extracted.marca : '',
+    modelo: typeof extracted?.modelo === 'string' ? extracted.modelo : '',
+    ['año']: anioCandidate,
+    color: typeof extracted?.color === 'string' ? extracted.color : '',
+    vin: typeof extracted?.vin === 'string' ? extracted.vin : '',
+    linea: typeof extracted?.linea === 'string' ? extracted.linea : '',
+    cilindrada: typeof extracted?.cilindrada === 'string' ? extracted.cilindrada : '',
+    claseVehiculo:
+      typeof extracted?.claseVehiculo === 'string' ? extracted.claseVehiculo : '',
+    servicio: typeof extracted?.servicio === 'string' ? extracted.servicio : '',
+    tipoCarroceria:
+      typeof extracted?.tipoCarroceria === 'string' ? extracted.tipoCarroceria : '',
+    numeroMotor: typeof extracted?.numeroMotor === 'string' ? extracted.numeroMotor : '',
+    capacidad: typeof extracted?.capacidad === 'string' ? extracted.capacidad : '',
+    numeroChasis:
+      typeof extracted?.numeroChasis === 'string' ? extracted.numeroChasis : '',
+    propietario: typeof extracted?.propietario === 'string' ? extracted.propietario : '',
+    identificacionPropietario:
+      typeof extracted?.identificacionPropietario === 'string'
+        ? extracted.identificacionPropietario
+        : '',
+    prenda: typeof extracted?.prenda === 'string' ? extracted.prenda : '',
+    tipoVehiculo,
   };
 };
 
@@ -690,6 +741,48 @@ const VehicleForm: React.FC = () => {
     setPropertyCardProgress(0);
   };
 
+  const readPropertyCardWithVisionAI = async (
+    file: File
+  ): Promise<VehicleCardReaderResult | null> => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await api.post<VisionAiOcrResponse>(
+      '/vehicles/ocr/property-card',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 35000,
+      }
+    );
+
+    const payload = response.data;
+    if (!payload?.extracted) {
+      return null;
+    }
+
+    const extracted = normalizePropertyCardDraft(
+      mapVisionAiExtractedToDraft(payload.extracted)
+    );
+    const detectedFields =
+      typeof payload.detectedFields === 'number' && Number.isFinite(payload.detectedFields)
+        ? payload.detectedFields
+        : Object.values(extracted).filter(Boolean).length;
+    const confidence =
+      typeof payload.confidence === 'number' && Number.isFinite(payload.confidence)
+        ? Math.max(0, Math.min(99, Math.round(payload.confidence)))
+        : Math.max(0, Math.min(99, Math.round(35 + detectedFields * 3.5)));
+
+    return {
+      rawText: typeof payload.rawText === 'string' ? payload.rawText : '',
+      confidence,
+      detectedFields,
+      extracted,
+    };
+  };
+
   const runPropertyCardReader = async (file: File, previewOverride?: string) => {
     setIsReadingPropertyCard(true);
     setPropertyCardError('');
@@ -700,7 +793,22 @@ const VehicleForm: React.FC = () => {
       const preview = previewOverride || (await readFileAsDataUrl(file));
       setPropertyCardPreview(preview);
 
-      const result = await readVehicleCard(file, setPropertyCardProgress);
+      let result: VehicleCardReaderResult | null = null;
+      setPropertyCardProgress(8);
+
+      try {
+        result = await readPropertyCardWithVisionAI(file);
+      } catch (visionErr: any) {
+        console.warn('OCR IA no disponible, se usa OCR local:', visionErr?.message || visionErr);
+      }
+
+      if (!result) {
+        setPropertyCardProgress(18);
+        result = await readVehicleCard(file, setPropertyCardProgress);
+      } else {
+        setPropertyCardProgress(100);
+      }
+
       const normalizedExtracted = normalizePropertyCardDraft(result.extracted);
       setPropertyCardDraft(normalizedExtracted);
       setPropertyCardResult({

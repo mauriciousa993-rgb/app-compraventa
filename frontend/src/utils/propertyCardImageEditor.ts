@@ -22,9 +22,9 @@ export const DEFAULT_PROPERTY_CARD_IMAGE_ADJUSTMENTS: PropertyCardImageAdjustmen
 
 export const OCR_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
   rotation: 0,
-  brightness: 106,
+  brightness: 102,
   contrast: 136,
-  saturation: 118,
+  saturation: 112,
   grayscale: 0,
   sharpen: 26,
   upscale: 1.05,
@@ -33,9 +33,9 @@ export const OCR_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
 
 export const OCR_HIGH_CONTRAST_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
   rotation: 0,
-  brightness: 110,
+  brightness: 104,
   contrast: 154,
-  saturation: 108,
+  saturation: 106,
   grayscale: 0,
   sharpen: 34,
   upscale: 1.1,
@@ -44,9 +44,9 @@ export const OCR_HIGH_CONTRAST_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdju
 
 export const OCR_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
   rotation: 0,
-  brightness: 112,
+  brightness: 103,
   contrast: 166,
-  saturation: 112,
+  saturation: 108,
   grayscale: 0,
   sharpen: 32,
   upscale: 1.14,
@@ -55,9 +55,9 @@ export const OCR_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustme
 
 export const OCR_SOFT_COLOR_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
   rotation: 0,
-  brightness: 104,
+  brightness: 100,
   contrast: 126,
-  saturation: 122,
+  saturation: 114,
   grayscale: 0,
   sharpen: 18,
   upscale: 1.02,
@@ -66,9 +66,9 @@ export const OCR_SOFT_COLOR_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustm
 
 export const OCR_SOFT_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
   rotation: 0,
-  brightness: 106,
+  brightness: 101,
   contrast: 144,
-  saturation: 120,
+  saturation: 114,
   grayscale: 0,
   sharpen: 24,
   upscale: 1.08,
@@ -77,9 +77,9 @@ export const OCR_SOFT_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdj
 
 export const OCR_DETAIL_GRAYSCALE_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
   rotation: 0,
-  brightness: 111,
+  brightness: 103,
   contrast: 165,
-  saturation: 108,
+  saturation: 106,
   grayscale: 0,
   sharpen: 32,
   upscale: 1.14,
@@ -242,9 +242,61 @@ const estimateAdaptiveUpscale = (width: number, height: number) => {
   return 1.18;
 };
 
+const estimateCanvasMeanLuma = (canvas: HTMLCanvasElement) => {
+  const context = canvas.getContext('2d');
+  if (!context) return 160;
+
+  const { width, height } = canvas;
+  const imageData = context.getImageData(0, 0, width, height).data;
+  const step = Math.max(1, Math.round(Math.max(width, height) / 900));
+  let total = 0;
+  let count = 0;
+
+  for (let y = 0; y < height; y += step) {
+    for (let x = 0; x < width; x += step) {
+      const index = (y * width + x) * 4;
+      const luma =
+        imageData[index] * 0.299 +
+        imageData[index + 1] * 0.587 +
+        imageData[index + 2] * 0.114;
+      total += luma;
+      count += 1;
+    }
+  }
+
+  return count ? total / count : 160;
+};
+
+const tuneBrightnessForSource = (
+  adjustments: PropertyCardImageAdjustments,
+  sourceMeanLuma: number
+): PropertyCardImageAdjustments => {
+  let brightnessOffset = 0;
+
+  if (sourceMeanLuma > 195) {
+    brightnessOffset = -11;
+  } else if (sourceMeanLuma > 182) {
+    brightnessOffset = -8;
+  } else if (sourceMeanLuma > 170) {
+    brightnessOffset = -5;
+  } else if (sourceMeanLuma > 160) {
+    brightnessOffset = -2;
+  } else if (sourceMeanLuma < 105) {
+    brightnessOffset = 6;
+  } else if (sourceMeanLuma < 120) {
+    brightnessOffset = 3;
+  }
+
+  return {
+    ...adjustments,
+    brightness: clamp(Math.round(adjustments.brightness + brightnessOffset), 92, 108),
+  };
+};
+
 const buildAutoPropertyCardImagePresets = (
   preparedCanvas: HTMLCanvasElement
 ): PropertyCardImagePresetOption[] => {
+  const sourceMeanLuma = estimateCanvasMeanLuma(preparedCanvas);
   const longEdge = Math.max(preparedCanvas.width, preparedCanvas.height);
   const maxAllowedUpscale = clamp(
     MAX_OUTPUT_EDGE / Math.max(1, longEdge),
@@ -268,7 +320,7 @@ const buildAutoPropertyCardImagePresets = (
     adjustments: PropertyCardImageAdjustments,
     factor: number
   ): PropertyCardImageAdjustments => ({
-    ...adjustments,
+    ...tuneBrightnessForSource(adjustments, sourceMeanLuma),
     upscale: clamp(adjustments.upscale * baseUpscale * factor, 1, maxAllowedUpscale),
   });
 
@@ -290,7 +342,7 @@ const buildAutoPropertyCardImagePresets = (
       adjustments: withUpscale(
         {
           ...OCR_HIGH_CONTRAST_PROPERTY_CARD_IMAGE_PRESET,
-          saturation: 104,
+          saturation: 102,
           grayscale: 0,
           binarizeThreshold: null,
         },
@@ -1430,7 +1482,7 @@ const calculatePropertyCardLegibilityScore = (canvas: HTMLCanvasElement): number
       sum += luma;
       sumSq += luma * luma;
       edgeSum += Math.abs(luma - right) + Math.abs(luma - bottom);
-      clippedPixels += luma < 18 || luma > 242 ? 1 : 0;
+      clippedPixels += luma < 18 || luma > 236 ? 1 : 0;
       textLikePixels += luma > 35 && luma < 215 ? 1 : 0;
       darkTextPixels += luma >= 8 && luma <= 138 ? 1 : 0;
       count += 1;
@@ -1453,6 +1505,9 @@ const calculatePropertyCardLegibilityScore = (canvas: HTMLCanvasElement): number
   const binaryBalance = 1 - Math.min(1, Math.abs(darkTextRatio - 0.22) / 0.22);
   const binaryFriendlyBonus = edge > 20 ? binaryBalance * 18 : 0;
   const clippingPenalty = clippedRatio * (darkTextRatio > 0.08 && edge > 18 ? 46 : 85);
+  const overExposurePenalty =
+    Math.max(0, mean - 186) * 1.35 +
+    Math.max(0, mean - 204) * 2.1;
 
   return (
     edge * 1.8 +
@@ -1460,6 +1515,7 @@ const calculatePropertyCardLegibilityScore = (canvas: HTMLCanvasElement): number
     exposureBalance * 0.35 +
     textRatio * 45 -
     clippingPenalty +
+    overExposurePenalty * -1 +
     resolutionBonus +
     binaryFriendlyBonus
   );

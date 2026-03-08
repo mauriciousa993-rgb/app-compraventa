@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import multer from 'multer';
 import {
   createVehicle,
   getAllVehicles,
@@ -20,6 +21,7 @@ import {
   getVehiclePhoto,
   consultarEstadoTramite,
 } from '../controllers/vehicle.controller';
+import { ocrPropertyCardWithVisionAI } from '../controllers/propertyCardOcr.controller';
 import {
   getVehicleInspectionChecklist,
   upsertVehicleInspectionChecklist,
@@ -30,6 +32,12 @@ import { authenticate, authorize } from '../middleware/auth.middleware';
 import { uploadMultiple } from '../middleware/upload.middleware';
 
 const router = Router();
+const ocrUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 12 * 1024 * 1024,
+  },
+});
 
 // Ruta pública para marketplace (sin autenticación)
 router.get('/marketplace', getMarketplaceVehicles);
@@ -48,6 +56,12 @@ router.get('/reports/monthly/export', exportMonthlyReport);
 router.get('/reports/templates/:templateType', exportBusinessTemplate);
 router.get('/expiring-documents', getVehiclesWithExpiringDocuments);
 router.get('/export', exportToExcel);
+router.post(
+  '/ocr/property-card',
+  authorize('admin', 'vendedor'),
+  ocrUpload.single('file'),
+  ocrPropertyCardWithVisionAI
+);
 router.get('/:id/inspection-checklist', getVehicleInspectionChecklist);
 router.put('/:id/inspection-checklist', authorize('admin', 'vendedor'), upsertVehicleInspectionChecklist);
 router.get('/:id', getVehicleById);
