@@ -114,7 +114,12 @@ const MAX_CROPPED_SOURCE_EDGE = 4200;
 const MAX_AUTO_UPSCALE = 3.4;
 const UPSCALE_STEP_FACTOR = 1.35;
 const MIN_TARGET_OCR_EDGE = 3600;
-const OCR_IMAGE_MIME_TYPE = 'image/png';
+const OCR_IMAGE_MIME_TYPE = 'image/jpeg';
+const OCR_IMAGE_INITIAL_QUALITY = 0.9;
+const OCR_IMAGE_MIN_QUALITY = 0.62;
+const OCR_IMAGE_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const OCR_IMAGE_REDUCE_SCALE = 0.88;
+const OCR_IMAGE_MIN_LONG_EDGE = 1500;
 const PROPERTY_CARD_TARGET_ASPECT_RATIO = 1.58;
 const PROPERTY_CARD_MIN_ASPECT_RATIO = 1.18;
 const PROPERTY_CARD_MAX_ASPECT_RATIO = 2.15;
@@ -201,6 +206,34 @@ const drawSourceToCanvas = (
   context.drawImage(source, x, y, width, height, 0, 0, targetCanvas.width, targetCanvas.height);
 
   return targetCanvas;
+};
+
+const buildUploadFriendlyOcrBlob = async (canvas: HTMLCanvasElement): Promise<Blob> => {
+  let workingCanvas = canvas;
+  let quality = OCR_IMAGE_INITIAL_QUALITY;
+  let blob = await canvasToBlob(workingCanvas, OCR_IMAGE_MIME_TYPE, quality);
+
+  for (let attempt = 0; attempt < 10 && blob.size > OCR_IMAGE_MAX_UPLOAD_BYTES; attempt += 1) {
+    const canLowerQuality = quality > OCR_IMAGE_MIN_QUALITY + 0.01;
+
+    if (canLowerQuality) {
+      quality = Math.max(OCR_IMAGE_MIN_QUALITY, quality - 0.08);
+    } else {
+      const currentLongEdge = Math.max(workingCanvas.width, workingCanvas.height);
+      if (currentLongEdge <= OCR_IMAGE_MIN_LONG_EDGE) {
+        break;
+      }
+
+      const nextWidth = Math.max(1, Math.round(workingCanvas.width * OCR_IMAGE_REDUCE_SCALE));
+      const nextHeight = Math.max(1, Math.round(workingCanvas.height * OCR_IMAGE_REDUCE_SCALE));
+      workingCanvas = drawSourceToCanvas(workingCanvas, nextWidth, nextHeight);
+      quality = Math.max(OCR_IMAGE_MIN_QUALITY, quality - 0.03);
+    }
+
+    blob = await canvasToBlob(workingCanvas, OCR_IMAGE_MIME_TYPE, quality);
+  }
+
+  return blob;
 };
 
 const progressivelyUpscaleCanvas = (
@@ -1527,7 +1560,7 @@ export const processPropertyCardImage = async (
 ): Promise<File> => {
   const preparedCanvas = await preparePropertyCardBaseCanvas(file);
   const canvas = await renderAdjustedPropertyCardCanvas(preparedCanvas, adjustments);
-  const blob = await canvasToBlob(canvas, OCR_IMAGE_MIME_TYPE);
+  const blob = await buildUploadFriendlyOcrBlob(canvas);
   return new File([blob], buildEditedFileName(file.name, OCR_IMAGE_MIME_TYPE), {
     type: OCR_IMAGE_MIME_TYPE,
     lastModified: Date.now(),
@@ -1544,7 +1577,7 @@ export const autoProcessPropertyCardImage = async (
   for (const preset of presets) {
     const canvas = await renderAdjustedPropertyCardCanvas(preparedCanvas, preset.adjustments);
     const score = calculatePropertyCardLegibilityScore(canvas);
-    const blob = await canvasToBlob(canvas, OCR_IMAGE_MIME_TYPE);
+    const blob = await buildUploadFriendlyOcrBlob(canvas);
     const processedFile = new File(
       [blob],
       buildEditedFileNameWithKey(file.name, preset.key, OCR_IMAGE_MIME_TYPE),

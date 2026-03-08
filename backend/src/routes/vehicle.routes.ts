@@ -35,7 +35,7 @@ const router = Router();
 const ocrUpload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 12 * 1024 * 1024,
+    fileSize: 20 * 1024 * 1024,
   },
 });
 

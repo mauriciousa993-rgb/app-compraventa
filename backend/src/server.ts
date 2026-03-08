@@ -103,6 +103,13 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   if (err.name === 'TokenExpiredError') {
     return res.status(401).json({ message: 'Token expirado', error: err.message });
   }
+
+  if (err?.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({
+      message: 'La imagen es demasiado pesada para procesarla. Toma otra foto con menor peso.',
+      error: 'LIMIT_FILE_SIZE',
+    });
+  }
   
   res.status(err.status || 500).json({
     message: err.message || 'Error interno del servidor',
