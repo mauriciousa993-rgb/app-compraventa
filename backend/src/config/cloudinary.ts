@@ -21,13 +21,23 @@ export const isCloudinaryConfigured = (): boolean => {
 // Configuración del almacenamiento con Cloudinary
 export const cloudinaryStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
-  params: {
-    folder: 'vehiculos',
-    allowed_formats: ['jpeg', 'jpg', 'png', 'gif', 'webp'],
-    transformation: [
-      { width: 1200, height: 1200, crop: 'limit', quality: 'auto', fetch_format: 'auto' }
-    ],
-  } as any,
+  params: async (_req: any, file: any) => {
+    const ext = ((file?.originalname || '').split('.').pop() || '').toLowerCase();
+    const isPdf = ext === 'pdf' || file?.mimetype === 'application/pdf';
+
+    return {
+      folder: 'vehiculos',
+      resource_type: 'auto',
+      allowed_formats: ['jpeg', 'jpg', 'png', 'gif', 'webp', 'pdf'],
+      ...(isPdf
+        ? {}
+        : {
+            transformation: [
+              { width: 1200, height: 1200, crop: 'limit', quality: 'auto', fetch_format: 'auto' }
+            ],
+          }),
+    };
+  },
 });
 
 // Exportar cloudinary y multer configurados

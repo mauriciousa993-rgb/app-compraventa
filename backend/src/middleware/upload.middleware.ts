@@ -20,14 +20,23 @@ const localStorage = multer.diskStorage({
 
 // Filtro de archivos (solo imágenes)
 const fileFilter = (req: any, file: any, cb: any) => {
-  const allowedTypes = /jpeg|jpg|png|gif|webp/;
-  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-  const mimetype = allowedTypes.test(file.mimetype);
+  const imageTypes = /jpeg|jpg|png|gif|webp/;
+  const pdfTypes = /pdf/;
+  const ext = path.extname(file.originalname).toLowerCase();
+  const isImage = imageTypes.test(ext) && imageTypes.test(file.mimetype);
+  const isPdf = pdfTypes.test(ext) && file.mimetype === 'application/pdf';
+  const isDocumentUpload = req.body?.tipo === 'documentos';
 
-  if (extname && mimetype) {
+  if (isImage || (isDocumentUpload && isPdf)) {
     cb(null, true);
   } else {
-    cb(new Error('Solo se permiten archivos de imagen (jpeg, jpg, png, gif, webp)'));
+    cb(
+      new Error(
+        isDocumentUpload
+          ? 'Solo se permiten imagenes o PDF para documentos.'
+          : 'Solo se permiten archivos de imagen (jpeg, jpg, png, gif, webp)'
+      )
+    );
   }
 };
 

@@ -66,28 +66,29 @@ export const OCR_SOFT_COLOR_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustm
 
 export const OCR_BLACK_AND_WHITE_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
   rotation: 0,
-  brightness: 122,
-  contrast: 188,
+  brightness: 118,
+  contrast: 176,
   saturation: 0,
   grayscale: 100,
-  sharpen: 36,
+  sharpen: 32,
   upscale: 1.16,
-  binarizeThreshold: 168,
+  binarizeThreshold: 158,
 };
 
 export const OCR_SOFT_BLACK_AND_WHITE_PROPERTY_CARD_IMAGE_PRESET: PropertyCardImageAdjustments = {
   rotation: 0,
-  brightness: 116,
-  contrast: 176,
+  brightness: 114,
+  contrast: 164,
   saturation: 0,
   grayscale: 100,
-  sharpen: 30,
+  sharpen: 28,
   upscale: 1.1,
-  binarizeThreshold: 154,
+  binarizeThreshold: 148,
 };
 
 export interface PropertyCardAutoEnhancementResult {
   file: File;
+  documentFile: File;
   adjustments: PropertyCardImageAdjustments;
   presetKey: string;
   score: number;
@@ -152,6 +153,14 @@ const canvasToBlob = (canvas: HTMLCanvasElement): Promise<Blob> =>
       'image/jpeg',
       0.92
     );
+  });
+
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve((reader.result as string) || '');
+    reader.onerror = () => reject(new Error('No se pudo convertir la imagen a PDF.'));
+    reader.readAsDataURL(blob);
   });
 
 const clamp = (value: number, min: number, max: number) =>
@@ -312,16 +321,64 @@ const applyBinarization = (canvas: HTMLCanvasElement, threshold: number | null) 
   const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
   const pixels = imageData.data;
   const normalizedThreshold = clamp(threshold, 64, 220);
+  const width = canvas.width;
+  const height = canvas.height;
+  const lumaValues = new Float32Array(width * height);
+
+  let globalSum = 0;
 
   for (let index = 0; index < pixels.length; index += 4) {
     const luma =
       pixels[index] * 0.299 +
       pixels[index + 1] * 0.587 +
       pixels[index + 2] * 0.114;
-    const value = luma >= normalizedThreshold ? 255 : 0;
-    pixels[index] = value;
-    pixels[index + 1] = value;
-    pixels[index + 2] = value;
+    lumaValues[index / 4] = luma;
+    globalSum += luma;
+  }
+
+  const globalMean = globalSum / Math.max(1, width * height);
+  const integral = buildIntegralImage(lumaValues, width, height);
+  const radius = clamp(Math.round(Math.min(width, height) * 0.028), 18, 52);
+  const adaptiveOffset = clamp((200 - normalizedThreshold) * 0.34, 7, 22);
+  const softness = clamp(Math.round((220 - normalizedThreshold) * 0.09), 10, 24);
+  const blackValue = 14;
+  const whiteValue = 246;
+
+  for (let y = 0; y < height; y += 1) {
+    const y0 = Math.max(0, y - radius);
+    const y1 = Math.min(height, y + radius + 1);
+
+    for (let x = 0; x < width; x += 1) {
+      const x0 = Math.max(0, x - radius);
+      const x1 = Math.min(width, x + radius + 1);
+      const localMean = getRectangleMeanScore(integral, width, height, x0, y0, x1, y1);
+      const stabilizedMean = localMean + (globalMean - localMean) * 0.18;
+      let adaptiveThreshold = stabilizedMean - adaptiveOffset;
+
+      if (stabilizedMean < 92) {
+        adaptiveThreshold -= 6;
+      } else if (stabilizedMean > 210) {
+        adaptiveThreshold += 4;
+      }
+
+      adaptiveThreshold = adaptiveThreshold * 0.72 + normalizedThreshold * 0.28;
+
+      const pixelIndex = (y * width + x) * 4;
+      const luma = lumaValues[y * width + x];
+      const diff = luma - adaptiveThreshold;
+
+      let value = whiteValue;
+      if (diff <= -softness) {
+        value = blackValue;
+      } else if (diff < softness) {
+        const ratio = (diff + softness) / (softness * 2);
+        value = Math.round(blackValue + ratio * (whiteValue - blackValue));
+      }
+
+      pixels[pixelIndex] = value;
+      pixels[pixelIndex + 1] = value;
+      pixels[pixelIndex + 2] = value;
+    }
   }
 
   context.putImageData(imageData, 0, 0);
@@ -828,6 +885,38 @@ const buildEditedFileNameWithKey = (fileName: string, key: string) => {
   return `${fileName.slice(0, dotIndex)}-${safeKey}.jpg`;
 };
 
+const buildPdfFileName = (fileName: string) => {
+  const dotIndex = fileName.lastIndexOf('.');
+  if (dotIndex <= 0) {
+    return `${fileName}.pdf`;
+  }
+
+  return `${fileName.slice(0, dotIndex)}.pdf`;
+};
+
+export const buildPropertyCardPdfFile = async (file: File): Promise<File> => {
+  const { jsPDF } = await import('jspdf');
+  const image = await loadImage(file);
+  const width = Math.max(1, image.width);
+  const height = Math.max(1, image.height);
+  const orientation = width >= height ? 'landscape' : 'portrait';
+  const pdf = new jsPDF({
+    orientation,
+    unit: 'px',
+    format: [width, height],
+    compress: true,
+  });
+  const imageDataUrl = await blobToDataUrl(file);
+
+  pdf.addImage(imageDataUrl, 'JPEG', 0, 0, width, height, undefined, 'FAST');
+
+  const pdfBlob = pdf.output('blob');
+  return new File([pdfBlob], buildPdfFileName(file.name), {
+    type: 'application/pdf',
+    lastModified: Date.now(),
+  });
+};
+
 export const buildPropertyCardPreviewFilter = (
   adjustments: PropertyCardImageAdjustments
 ) =>
@@ -996,7 +1085,7 @@ export const autoProcessPropertyCardImage = async (
 ): Promise<PropertyCardAutoEnhancementResult> => {
   const preparedCanvas = await preparePropertyCardBaseCanvas(file);
   const presets = buildAutoPropertyCardImagePresets(preparedCanvas);
-  let bestCandidate: PropertyCardAutoEnhancementResult | null = null;
+  let bestCandidate: Omit<PropertyCardAutoEnhancementResult, 'documentFile'> | null = null;
 
   for (const preset of presets) {
     const canvas = await renderAdjustedPropertyCardCanvas(preparedCanvas, preset.adjustments);
@@ -1011,7 +1100,7 @@ export const autoProcessPropertyCardImage = async (
       }
     );
 
-    const candidate: PropertyCardAutoEnhancementResult = {
+    const candidate: Omit<PropertyCardAutoEnhancementResult, 'documentFile'> = {
       file: processedFile,
       adjustments: preset.adjustments,
       presetKey: preset.key,
@@ -1027,5 +1116,8 @@ export const autoProcessPropertyCardImage = async (
     throw new Error('No se pudo optimizar la imagen automaticamente.');
   }
 
-  return bestCandidate;
+  return {
+    ...bestCandidate,
+    documentFile: await buildPropertyCardPdfFile(bestCandidate.file),
+  };
 };

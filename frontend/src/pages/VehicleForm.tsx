@@ -20,6 +20,7 @@ import {
 } from '../utils/vehicleCardReader';
 import {
   autoProcessPropertyCardImage,
+  buildPropertyCardPdfFile,
 } from '../utils/propertyCardImageEditor';
 
 const DEFAULT_VEHICLE_YEAR = new Date().getFullYear();
@@ -284,6 +285,7 @@ const VehicleForm: React.FC = () => {
   const [propertyCardOriginalFile, setPropertyCardOriginalFile] = useState<File | null>(null);
   const [propertyCardOriginalPreview, setPropertyCardOriginalPreview] = useState('');
   const [propertyCardFile, setPropertyCardFile] = useState<File | null>(null);
+  const [propertyCardDocumentFile, setPropertyCardDocumentFile] = useState<File | null>(null);
   const [propertyCardPreview, setPropertyCardPreview] = useState('');
   const [isApplyingPropertyCardEditor, setIsApplyingPropertyCardEditor] = useState(false);
   const [isReadingPropertyCard, setIsReadingPropertyCard] = useState(false);
@@ -735,6 +737,7 @@ const VehicleForm: React.FC = () => {
     setPropertyCardOriginalFile(file);
     setPropertyCardOriginalPreview(preview);
     setPropertyCardFile(file);
+    setPropertyCardDocumentFile(null);
     setPropertyCardPreview(preview);
     resetPropertyCardOcrState();
     await runAutomaticPropertyCardOptimization(file, preview);
@@ -755,9 +758,11 @@ const VehicleForm: React.FC = () => {
     try {
       const automaticResult = await autoProcessPropertyCardImage(sourceFile);
       const nextFile = automaticResult.file;
+      const nextDocumentFile = automaticResult.documentFile;
       const nextPreview = await readFileAsDataUrl(nextFile);
 
       setPropertyCardFile(nextFile);
+      setPropertyCardDocumentFile(nextDocumentFile);
       setPropertyCardPreview(nextPreview);
       setIsApplyingPropertyCardEditor(false);
       await runPropertyCardReader(nextFile, nextPreview);
@@ -771,6 +776,20 @@ const VehicleForm: React.FC = () => {
     } finally {
       setIsApplyingPropertyCardEditor(false);
     }
+  };
+
+  const ensurePropertyCardPdfFile = async () => {
+    if (propertyCardDocumentFile) {
+      return propertyCardDocumentFile;
+    }
+
+    if (!propertyCardFile) {
+      return null;
+    }
+
+    const generatedDocumentFile = await buildPropertyCardPdfFile(propertyCardFile);
+    setPropertyCardDocumentFile(generatedDocumentFile);
+    return generatedDocumentFile;
   };
 
   const handlePropertyCardChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -800,6 +819,7 @@ const VehicleForm: React.FC = () => {
     setPropertyCardOriginalFile(null);
     setPropertyCardOriginalPreview('');
     setPropertyCardFile(null);
+    setPropertyCardDocumentFile(null);
     setPropertyCardPreview('');
     setIsApplyingPropertyCardEditor(false);
     setPropertyCardResult(null);
@@ -1129,9 +1149,19 @@ const VehicleForm: React.FC = () => {
         }
         }
 
-        if (propertyCardFile) {
+        if (propertyCardDocumentFile || propertyCardFile) {
           try {
-            await vehiclesAPI.uploadPhotos(vehicleId, 'documentos', [propertyCardFile]);
+            const propertyCardUploadFile = await ensurePropertyCardPdfFile();
+
+            if (!propertyCardUploadFile) {
+              throw new Error('No se pudo generar el PDF de la tarjeta de propiedad.');
+            }
+
+            await vehiclesAPI.uploadPhotos(
+              vehicleId,
+              'documentos',
+              [propertyCardUploadFile]
+            );
           } catch (documentErr: any) {
             console.error('Error al subir tarjeta de propiedad:', documentErr);
             if (vehicleUpdated) {
@@ -1306,7 +1336,15 @@ const VehicleForm: React.FC = () => {
                   {propertyCardFile && (
                     <div className="space-y-1 text-xs text-gray-500">
                       <p>
-                        Archivo aplicado: <strong>{propertyCardFile.name}</strong>
+                        Imagen OCR aplicada: <strong>{propertyCardFile.name}</strong>
+                      </p>
+                      {propertyCardDocumentFile && (
+                        <p>
+                          Documento PDF a adjuntar: <strong>{propertyCardDocumentFile.name}</strong>
+                        </p>
+                      )}
+                      <p>
+                        Formato que se subira: <strong>{propertyCardDocumentFile ? 'PDF' : propertyCardFile.type || 'imagen'}</strong>
                       </p>
                       {propertyCardOriginalFile && propertyCardOriginalFile.name !== propertyCardFile.name && (
                         <p>
