@@ -534,6 +534,9 @@ const OCR_LETTER_TO_DIGIT: Record<string, string> = {
   B: '8',
 };
 
+const ADMINISTRATIVE_NOISE_REGEX =
+  /\b(?:REPUBLICA|COLOMBIA|MINISTERIO|TRANSPORTE|LICENCIA|TRANSITO|SERVICIO|PUBLICO|PARTICULAR)\b/;
+
 const normalizeNumericCandidate = (
   value: string,
   minDigits: number,
@@ -693,6 +696,22 @@ const extractVinLoose = (...values: string[]): string => {
   return '';
 };
 
+const isLikelyMechanicalCode = (value: string) => {
+  const normalized = cleanCandidate(value).replace(/[^A-Z0-9-]/g, '');
+
+  if (
+    !normalized ||
+    normalized.length < 5 ||
+    normalized.length > 25 ||
+    !/\d/.test(normalized) ||
+    ADMINISTRATIVE_NOISE_REGEX.test(normalized)
+  ) {
+    return false;
+  }
+
+  return /^[A-Z0-9-]+$/.test(normalized);
+};
+
 const findKnownPhrase = (value: string, candidates: readonly string[]): string => {
   const normalized = normalizeForSearch(value);
 
@@ -783,25 +802,14 @@ const normalizeMechanicalValue = (value: string): string => {
   const tokenMatches = candidate
     .split(/\s+/)
     .map((token) => token.replace(/[^A-Z0-9-]/g, ''))
-    .filter(
-      (token) =>
-        token.length >= 5 &&
-        token.length <= 25 &&
-        /\d/.test(token) &&
-        !/^(?:REPUBLICA|COLOMBIA|MINISTERIO|TRANSPORTE|LICENCIA|TRANSITO)+$/.test(token)
-    );
+    .filter((token) => isLikelyMechanicalCode(token));
 
   if (tokenMatches.length) {
     return tokenMatches.sort((left, right) => right.length - left.length)[0];
   }
 
   const compact = candidate.replace(/[^A-Z0-9-]/g, '');
-  if (
-    compact.length >= 5 &&
-    compact.length <= 25 &&
-    /\d/.test(compact) &&
-    !/^(?:REPUBLICA|COLOMBIA|MINISTERIO|TRANSPORTE|LICENCIA|TRANSITO)+$/.test(compact)
-  ) {
+  if (isLikelyMechanicalCode(compact)) {
     return compact;
   }
 
@@ -1496,11 +1504,12 @@ const scoreExtractedText = (field: ExtractedTextField, value: string): number =>
       if (isValidVin(candidate)) return 100;
       return /^[A-Z0-9]{6,20}$/.test(candidate) ? 45 : 5;
     case 'numeroChasis':
+      if (!isLikelyMechanicalCode(candidate)) return 0;
       if (/^(?=.*\d)(?=.*[A-Z])[A-Z0-9-]{5,25}$/.test(candidate)) {
         return 82 + Math.min(candidate.length, 10);
       }
       if (isValidVin(candidate)) return 72;
-      return /^[A-Z0-9-]{5,25}$/.test(candidate) ? 48 : 5;
+      return /^[A-Z0-9-]{5,25}$/.test(candidate) ? 48 : 0;
     case 'marca':
       if (KNOWN_BRANDS.includes(candidate)) return 95;
       return /^[A-Z ]{2,20}$/.test(candidate) ? 40 : 5;
@@ -1620,6 +1629,25 @@ const pickPreferredText = (
 
   if (secondaryScore === primaryScore && secondary && primary && secondary !== primary) {
     return pickFieldTieBreaker(field, primary, secondary);
+  }
+
+  return primary;
+};
+
+const pickPreferredStructuredText = (
+  field: ExtractedTextField,
+  primary: string,
+  secondary: string
+) => {
+  const primaryScore = scoreExtractedText(field, primary);
+  const secondaryScore = scoreExtractedText(field, secondary);
+
+  if (!secondaryScore) {
+    return primaryScore ? primary : '';
+  }
+
+  if (secondaryScore >= primaryScore) {
+    return secondary;
   }
 
   return primary;
@@ -1888,51 +1916,58 @@ const runStructuredRecognition = async (
 
 const mergeVehicleCardResults = (
   baseResult: VehicleCardReaderResult,
-  enhancedResult: VehicleCardReaderResult
+  enhancedResult: VehicleCardReaderResult,
+  options?: { preferSecondaryFields?: ExtractedTextField[] }
 ): VehicleCardReaderResult => {
+  const preferSecondaryFields = new Set(options?.preferSecondaryFields || []);
+  const pickField = (field: ExtractedTextField, primary: string, secondary: string) =>
+    preferSecondaryFields.has(field)
+      ? pickPreferredStructuredText(field, primary, secondary)
+      : pickPreferredText(field, primary, secondary);
+
   const extracted: VehicleCardExtractedData = {
     ...emptyExtractedData(),
-    placa: pickPreferredText('placa', baseResult.extracted.placa, enhancedResult.extracted.placa),
-    marca: pickPreferredText('marca', baseResult.extracted.marca, enhancedResult.extracted.marca),
-    modelo: pickPreferredText('modelo', baseResult.extracted.modelo, enhancedResult.extracted.modelo),
+    placa: pickField('placa', baseResult.extracted.placa, enhancedResult.extracted.placa),
+    marca: pickField('marca', baseResult.extracted.marca, enhancedResult.extracted.marca),
+    modelo: pickField('modelo', baseResult.extracted.modelo, enhancedResult.extracted.modelo),
     año: pickPreferredYear(baseResult.extracted.año, enhancedResult.extracted.año),
-    color: pickPreferredText('color', baseResult.extracted.color, enhancedResult.extracted.color),
-    vin: pickPreferredText('vin', baseResult.extracted.vin, enhancedResult.extracted.vin),
-    linea: pickPreferredText('linea', baseResult.extracted.linea, enhancedResult.extracted.linea),
-    cilindrada: pickPreferredText('cilindrada', baseResult.extracted.cilindrada, enhancedResult.extracted.cilindrada),
-    claseVehiculo: pickPreferredText(
+    color: pickField('color', baseResult.extracted.color, enhancedResult.extracted.color),
+    vin: pickField('vin', baseResult.extracted.vin, enhancedResult.extracted.vin),
+    linea: pickField('linea', baseResult.extracted.linea, enhancedResult.extracted.linea),
+    cilindrada: pickField('cilindrada', baseResult.extracted.cilindrada, enhancedResult.extracted.cilindrada),
+    claseVehiculo: pickField(
       'claseVehiculo',
       baseResult.extracted.claseVehiculo,
       enhancedResult.extracted.claseVehiculo
     ),
-    servicio: pickPreferredText('servicio', baseResult.extracted.servicio, enhancedResult.extracted.servicio),
-    tipoCarroceria: pickPreferredText(
+    servicio: pickField('servicio', baseResult.extracted.servicio, enhancedResult.extracted.servicio),
+    tipoCarroceria: pickField(
       'tipoCarroceria',
       baseResult.extracted.tipoCarroceria,
       enhancedResult.extracted.tipoCarroceria
     ),
-    numeroMotor: pickPreferredText(
+    numeroMotor: pickField(
       'numeroMotor',
       baseResult.extracted.numeroMotor,
       enhancedResult.extracted.numeroMotor
     ),
-    capacidad: pickPreferredText('capacidad', baseResult.extracted.capacidad, enhancedResult.extracted.capacidad),
-    numeroChasis: pickPreferredText(
+    capacidad: pickField('capacidad', baseResult.extracted.capacidad, enhancedResult.extracted.capacidad),
+    numeroChasis: pickField(
       'numeroChasis',
       baseResult.extracted.numeroChasis,
       enhancedResult.extracted.numeroChasis
     ),
-    propietario: pickPreferredText(
+    propietario: pickField(
       'propietario',
       baseResult.extracted.propietario,
       enhancedResult.extracted.propietario
     ),
-    identificacionPropietario: pickPreferredText(
+    identificacionPropietario: pickField(
       'identificacionPropietario',
       baseResult.extracted.identificacionPropietario,
       enhancedResult.extracted.identificacionPropietario
     ),
-    prenda: pickPreferredText('prenda', baseResult.extracted.prenda, enhancedResult.extracted.prenda),
+    prenda: pickField('prenda', baseResult.extracted.prenda, enhancedResult.extracted.prenda),
     tipoVehiculo: baseResult.extracted.tipoVehiculo || enhancedResult.extracted.tipoVehiculo,
   };
 
@@ -1982,7 +2017,9 @@ export const readVehicleCard = async (
       78,
       onProgress
     );
-    const mergedBaseResult = mergeVehicleCardResults(baseResult, structuredResult);
+    const mergedBaseResult = mergeVehicleCardResults(baseResult, structuredResult, {
+      preferSecondaryFields: ['placa', 'numeroChasis'],
+    });
 
     if (!shouldRetryWithEnhancedPass(mergedBaseResult)) {
       onProgress?.(100);
@@ -2021,7 +2058,9 @@ export const readVehicleCard = async (
         onProgress
       );
       onProgress?.(100);
-      const mergedEnhancedResult = mergeVehicleCardResults(enhancedResult, enhancedStructuredResult);
+      const mergedEnhancedResult = mergeVehicleCardResults(enhancedResult, enhancedStructuredResult, {
+        preferSecondaryFields: ['placa', 'numeroChasis'],
+      });
       const mergedResult = mergeVehicleCardResults(mergedBaseResult, mergedEnhancedResult);
 
       return mergedResult.detectedFields >= mergedBaseResult.detectedFields

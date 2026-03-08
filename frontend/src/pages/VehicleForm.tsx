@@ -54,6 +54,22 @@ const normalizePlateValue = (value: string) =>
 const normalizeVinValue = (value: string) =>
   value.toUpperCase().replace(/\s+/g, '');
 
+const normalizeChassisValue = (value: string) => {
+  const normalized = value.toUpperCase().replace(/\s+/g, '');
+
+  if (
+    !normalized ||
+    normalized.length < 5 ||
+    normalized.length > 25 ||
+    !/\d/.test(normalized) ||
+    /(REPUBLICA|COLOMBIA|MINISTERIO|TRANSPORTE|LICENCIA|TRANSITO)/.test(normalized)
+  ) {
+    return '';
+  }
+
+  return normalized;
+};
+
 const createEmptyPropertyCardDraft = (): VehicleCardExtractedData => ({
   placa: '',
   marca: '',
@@ -81,7 +97,7 @@ const normalizePropertyCardDraft = (
   const modelo = (draft?.modelo || draft?.linea || '').trim();
   const linea = (draft?.linea || modelo).trim();
   const vin = normalizeVinValue((draft?.vin || '').trim());
-  const numeroChasis = normalizeVinValue((draft?.numeroChasis || '').trim());
+  const numeroChasis = normalizeChassisValue((draft?.numeroChasis || '').trim());
   const año =
     typeof draft?.año === 'number' && draft.año > 0
       ? draft.año
@@ -814,7 +830,7 @@ const VehicleForm: React.FC = () => {
       | 'identificacionPropietario',
     value: string
   ) => {
-    const normalizedValue = field === 'numeroChasis' ? normalizeVinValue(value) : value;
+    const normalizedValue = field === 'numeroChasis' ? normalizeChassisValue(value) : value;
 
     setFormData((prev) => {
       const nextState = {
@@ -1055,7 +1071,7 @@ const VehicleForm: React.FC = () => {
         datosTarjetaPropiedad: {
           ...formData.datosTarjetaPropiedad,
           linea: formData.datosTarjetaPropiedad.linea.trim() || modeloUnificado,
-          numeroChasis: normalizeVinValue(formData.datosTarjetaPropiedad.numeroChasis || ''),
+          numeroChasis: normalizeChassisValue(formData.datosTarjetaPropiedad.numeroChasis || ''),
           cilindrada: formData.datosTarjetaPropiedad.cilindrada.trim(),
           claseVehiculo: formData.datosTarjetaPropiedad.claseVehiculo.trim(),
           servicio: formData.datosTarjetaPropiedad.servicio.trim(),
