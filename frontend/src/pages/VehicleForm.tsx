@@ -10,10 +10,6 @@ import {
   Trash2,
   Users,
   FileText,
-  RotateCcw,
-  RotateCw,
-  SlidersHorizontal,
-  Wand2,
 } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
 import api, { buildVehiclePhotoUrl, vehiclesAPI } from '../services/api';
@@ -23,12 +19,7 @@ import {
   VehicleCardReaderResult
 } from '../utils/vehicleCardReader';
 import {
-  buildPropertyCardPreviewFilter,
-  DEFAULT_PROPERTY_CARD_IMAGE_ADJUSTMENTS,
-  OCR_PROPERTY_CARD_IMAGE_PRESET,
-  processPropertyCardImage,
-  PropertyCardImageAdjustments,
-  rotatePropertyCardAdjustments,
+  autoProcessPropertyCardImage,
 } from '../utils/propertyCardImageEditor';
 
 const DEFAULT_VEHICLE_YEAR = new Date().getFullYear();
@@ -149,24 +140,6 @@ const PROPERTY_CARD_EDITABLE_FIELDS: Array<{
   { field: 'propietario', label: 'Propietario', placeholder: 'Nombre del propietario' },
   { field: 'identificacionPropietario', label: 'Identificacion', placeholder: 'Cedula o NIT' },
   { field: 'prenda', label: 'Prenda', placeholder: 'Sin prenda o detalle de la limitacion' },
-];
-
-type PropertyCardAdjustmentField = Exclude<
-  keyof PropertyCardImageAdjustments,
-  'rotation'
->;
-
-const PROPERTY_CARD_EDITOR_FIELDS: Array<{
-  field: PropertyCardAdjustmentField;
-  label: string;
-  min: number;
-  max: number;
-}> = [
-  { field: 'brightness', label: 'Brillo', min: 70, max: 160 },
-  { field: 'contrast', label: 'Contraste', min: 80, max: 190 },
-  { field: 'saturation', label: 'Saturacion', min: 0, max: 180 },
-  { field: 'grayscale', label: 'Escala de grises', min: 0, max: 100 },
-  { field: 'sharpen', label: 'Nitidez', min: 0, max: 100 },
 ];
 
 const VehicleForm: React.FC = () => {
@@ -296,9 +269,6 @@ const VehicleForm: React.FC = () => {
   const [propertyCardOriginalPreview, setPropertyCardOriginalPreview] = useState('');
   const [propertyCardFile, setPropertyCardFile] = useState<File | null>(null);
   const [propertyCardPreview, setPropertyCardPreview] = useState('');
-  const [propertyCardImageAdjustments, setPropertyCardImageAdjustments] =
-    useState<PropertyCardImageAdjustments>(OCR_PROPERTY_CARD_IMAGE_PRESET);
-  const [isPropertyCardEditorOpen, setIsPropertyCardEditorOpen] = useState(false);
   const [isApplyingPropertyCardEditor, setIsApplyingPropertyCardEditor] = useState(false);
   const [isReadingPropertyCard, setIsReadingPropertyCard] = useState(false);
   const [propertyCardProgress, setPropertyCardProgress] = useState(0);
@@ -760,36 +730,38 @@ const VehicleForm: React.FC = () => {
     setPropertyCardOriginalPreview(preview);
     setPropertyCardFile(file);
     setPropertyCardPreview(preview);
-    setPropertyCardImageAdjustments(OCR_PROPERTY_CARD_IMAGE_PRESET);
-    setIsPropertyCardEditorOpen(true);
     resetPropertyCardOcrState();
+    await runAutomaticPropertyCardOptimization(file, preview);
   };
 
-  const applyPropertyCardImageForOcr = async (mode: 'enhanced' | 'original') => {
-    if (!propertyCardOriginalFile) return;
+  const runAutomaticPropertyCardOptimization = async (
+    sourceFileOverride?: File,
+    sourcePreviewOverride?: string
+  ) => {
+    const sourceFile = sourceFileOverride || propertyCardOriginalFile;
+    const sourcePreview = sourcePreviewOverride || propertyCardOriginalPreview;
+
+    if (!sourceFile) return;
 
     setIsApplyingPropertyCardEditor(true);
     setPropertyCardError('');
 
     try {
-      const nextFile =
-        mode === 'enhanced'
-          ? await processPropertyCardImage(propertyCardOriginalFile, propertyCardImageAdjustments)
-          : propertyCardOriginalFile;
-      const nextPreview =
-        mode === 'original'
-          ? propertyCardOriginalPreview || (await readFileAsDataUrl(nextFile))
-          : await readFileAsDataUrl(nextFile);
+      const automaticResult = await autoProcessPropertyCardImage(sourceFile);
+      const nextFile = automaticResult.file;
+      const nextPreview = await readFileAsDataUrl(nextFile);
 
       setPropertyCardFile(nextFile);
       setPropertyCardPreview(nextPreview);
-      setIsPropertyCardEditorOpen(false);
       setIsApplyingPropertyCardEditor(false);
       await runPropertyCardReader(nextFile, nextPreview);
     } catch (err: any) {
       setPropertyCardError(
-        err?.message || 'No se pudo mejorar la foto de la tarjeta. Intenta con otra imagen.'
+        err?.message || 'No se pudo optimizar la foto de la tarjeta. Intenta con otra imagen.'
       );
+      if (sourcePreview) {
+        setPropertyCardPreview(sourcePreview);
+      }
     } finally {
       setIsApplyingPropertyCardEditor(false);
     }
@@ -813,7 +785,7 @@ const VehicleForm: React.FC = () => {
       await initializePropertyCardSelection(file);
     } catch (err: any) {
       setPropertyCardError(
-        err?.message || 'No se pudo abrir la imagen de la tarjeta para editarla.'
+        err?.message || 'No se pudo abrir la imagen de la tarjeta para procesarla automaticamente.'
       );
     }
   };
@@ -823,8 +795,6 @@ const VehicleForm: React.FC = () => {
     setPropertyCardOriginalPreview('');
     setPropertyCardFile(null);
     setPropertyCardPreview('');
-    setPropertyCardImageAdjustments(DEFAULT_PROPERTY_CARD_IMAGE_ADJUSTMENTS);
-    setIsPropertyCardEditorOpen(false);
     setIsApplyingPropertyCardEditor(false);
     setPropertyCardResult(null);
     setPropertyCardDraft(createEmptyPropertyCardDraft());
@@ -838,26 +808,6 @@ const VehicleForm: React.FC = () => {
 
   const openPropertyCardPicker = () => {
     propertyCardInputRef.current?.click();
-  };
-
-  const updatePropertyCardImageAdjustment = (
-    field: PropertyCardAdjustmentField,
-    value: number
-  ) => {
-    setPropertyCardImageAdjustments((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
-
-  const rotatePropertyCardEditor = (direction: 'left' | 'right') => {
-    setPropertyCardImageAdjustments((prev) =>
-      rotatePropertyCardAdjustments(prev, direction)
-    );
-  };
-
-  const resetPropertyCardEditor = () => {
-    setPropertyCardImageAdjustments(OCR_PROPERTY_CARD_IMAGE_PRESET);
   };
 
   const updateCardData = (
@@ -1349,15 +1299,6 @@ const VehicleForm: React.FC = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setIsPropertyCardEditorOpen((prev) => !prev)}
-                      className="inline-flex items-center gap-2 rounded-lg border border-indigo-300 px-4 py-2 text-indigo-700 hover:bg-indigo-50"
-                      disabled={isPropertyCardBusy || !propertyCardOriginalFile}
-                    >
-                      <SlidersHorizontal className="h-4 w-4" />
-                      {isPropertyCardEditorOpen ? 'Ocultar editor' : 'Editar foto'}
-                    </button>
-                    <button
-                      type="button"
                       onClick={removePropertyCardFile}
                       className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-4 py-2 text-red-700 hover:bg-red-50"
                       disabled={isPropertyCardBusy}
@@ -1381,133 +1322,11 @@ const VehicleForm: React.FC = () => {
                 </div>
 
                 <div className="space-y-4">
-                  {propertyCardOriginalFile && (
-                    <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-indigo-900">Editor de calidad</p>
-                          <p className="text-sm text-indigo-700">
-                            Ajusta la foto antes del OCR. La imagen aplicada sera la que se convierta y se adjunte al guardar.
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setIsPropertyCardEditorOpen((prev) => !prev)}
-                          className="inline-flex items-center gap-2 rounded-lg border border-indigo-300 bg-white px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
-                          disabled={isPropertyCardBusy}
-                        >
-                          <Wand2 className="h-4 w-4" />
-                          {isPropertyCardEditorOpen ? 'Ocultar ajustes' : 'Abrir ajustes'}
-                        </button>
-                      </div>
-
-                      {isPropertyCardEditorOpen && (
-                        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-                          <div className="rounded-lg border border-indigo-100 bg-white p-4">
-                            <div className="flex min-h-[320px] items-center justify-center overflow-hidden rounded-lg bg-slate-100 p-4">
-                              <img
-                                src={propertyCardOriginalPreview || propertyCardPreview}
-                                alt="Editor tarjeta de propiedad"
-                                className="max-h-[320px] max-w-full rounded-md object-contain shadow-sm transition-all duration-200"
-                                style={{
-                                  filter: buildPropertyCardPreviewFilter(propertyCardImageAdjustments),
-                                  transform: `rotate(${propertyCardImageAdjustments.rotation}deg)`,
-                                }}
-                              />
-                            </div>
-                            <p className="mt-2 text-xs text-gray-500">
-                              Vista previa de la mejora antes de procesar la tarjeta.
-                            </p>
-                          </div>
-
-                          <div className="space-y-4">
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                onClick={() => rotatePropertyCardEditor('left')}
-                                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                disabled={isPropertyCardBusy}
-                              >
-                                <RotateCcw className="h-4 w-4" />
-                                Girar izquierda
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => rotatePropertyCardEditor('right')}
-                                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                disabled={isPropertyCardBusy}
-                              >
-                                <RotateCw className="h-4 w-4" />
-                                Girar derecha
-                              </button>
-                            </div>
-
-                            <div className="grid grid-cols-1 gap-3">
-                              {PROPERTY_CARD_EDITOR_FIELDS.map(({ field, label, min, max }) => (
-                                <div key={field}>
-                                  <div className="mb-1 flex items-center justify-between text-sm text-gray-700">
-                                    <label>{label}</label>
-                                    <span className="font-medium">{propertyCardImageAdjustments[field]}%</span>
-                                  </div>
-                                  <input
-                                    type="range"
-                                    min={min}
-                                    max={max}
-                                    value={propertyCardImageAdjustments[field]}
-                                    onChange={(e) =>
-                                      updatePropertyCardImageAdjustment(field, Number(e.target.value))
-                                    }
-                                    className="w-full accent-indigo-600"
-                                    disabled={isPropertyCardBusy}
-                                  />
-                                </div>
-                              ))}
-                            </div>
-
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                onClick={resetPropertyCardEditor}
-                                className="rounded-lg border border-indigo-300 bg-white px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
-                                disabled={isPropertyCardBusy}
-                              >
-                                Preset OCR
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setPropertyCardImageAdjustments(DEFAULT_PROPERTY_CARD_IMAGE_ADJUSTMENTS)
-                                }
-                                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                                disabled={isPropertyCardBusy}
-                              >
-                                Sin filtros
-                              </button>
-                            </div>
-
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                onClick={() => applyPropertyCardImageForOcr('enhanced')}
-                                className="btn-primary"
-                                disabled={isPropertyCardBusy}
-                              >
-                                {isApplyingPropertyCardEditor ? 'Procesando imagen...' : 'Leer con mejora'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => applyPropertyCardImageForOcr('original')}
-                                className="btn-secondary"
-                                disabled={isPropertyCardBusy}
-                              >
-                                Leer original
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-900">
+                    La foto se recorta y corrige automaticamente antes del OCR. La app intenta aislar solo el cuadro
+                    de la tarjeta, prueba varias configuraciones de brillo, contraste, escala de grises y nitidez, y
+                    usa la version que estime mas legible.
+                  </div>
 
                   <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
                     <div className="flex items-center justify-between gap-4">
@@ -1515,13 +1334,13 @@ const VehicleForm: React.FC = () => {
                         <p className="text-sm font-semibold text-blue-900">Estado de lectura</p>
                         <p className="text-sm text-blue-700">
                           {isApplyingPropertyCardEditor
-                            ? 'Preparando la imagen mejorada antes del OCR...'
+                            ? 'Recortando la tarjeta y probando automaticamente la configuracion mas legible antes del OCR...'
                             : isReadingPropertyCard
                             ? `Leyendo tarjeta... ${propertyCardProgress}%`
                             : propertyCardResult
                               ? `Lectura completada con ${Math.round(propertyCardResult.confidence)}% de confianza.`
                               : propertyCardFile
-                                ? 'Ajusta la foto en el editor y luego procesa la tarjeta.'
+                                ? 'La app esta lista para procesar automaticamente la tarjeta.'
                                 : 'La lectura comenzara al seleccionar una imagen.'}
                         </p>
                       </div>
