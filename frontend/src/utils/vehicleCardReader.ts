@@ -28,6 +28,8 @@ export interface VehicleCardReaderResult {
   detectedFields: number;
 }
 
+type ExtractedTextField = Exclude<keyof VehicleCardExtractedData, 'año' | 'tipoVehiculo'>;
+
 const LABEL_ALIASES = {
   placa: ['PLACA'],
   marca: ['MARCA', 'FABRICANTE'],
@@ -162,6 +164,8 @@ const OCR_CARD_MARGIN = 36;
 const OCR_REGION_SCALE = 1.75;
 const OCR_PSM_SPARSE_TEXT = 11;
 const OCR_PSM_SINGLE_BLOCK = 6;
+const OCR_PSM_SINGLE_LINE = 7;
+const OCR_PSM_SINGLE_WORD = 8;
 
 const emptyExtractedData = (): VehicleCardExtractedData => ({
   placa: '',
@@ -915,8 +919,15 @@ type StructuredCardScanZone = {
   scale?: number;
 };
 
+type StructuredZoneOcrConfig = {
+  psm: number;
+  whitelist?: string;
+  preserveSpaces?: boolean;
+  dpi?: number;
+};
+
 const STRUCTURED_CARD_SCAN_ZONES: StructuredCardScanZone[] = [
-  { field: 'placa', x: 0.02, y: 0.275, width: 0.12, height: 0.07, scale: 2.25 },
+  { field: 'placa', x: 0.015, y: 0.268, width: 0.135, height: 0.082, scale: 2.4 },
   { field: 'marca', x: 0.195, y: 0.275, width: 0.16, height: 0.07, scale: 2 },
   { field: 'linea', x: 0.49, y: 0.275, width: 0.29, height: 0.07, scale: 1.95 },
   { field: 'a\u00f1o', x: 0.855, y: 0.275, width: 0.1, height: 0.07, scale: 2.1 },
@@ -926,12 +937,68 @@ const STRUCTURED_CARD_SCAN_ZONES: StructuredCardScanZone[] = [
   { field: 'claseVehiculo', x: 0.02, y: 0.53, width: 0.22, height: 0.07, scale: 2.05 },
   { field: 'tipoCarroceria', x: 0.3, y: 0.53, width: 0.16, height: 0.07, scale: 2 },
   { field: 'capacidad', x: 0.805, y: 0.53, width: 0.08, height: 0.07, scale: 2.25 },
-  { field: 'numeroMotor', x: 0.02, y: 0.655, width: 0.27, height: 0.07, scale: 2.2 },
-  { field: 'vin', x: 0.59, y: 0.655, width: 0.28, height: 0.07, scale: 2.2 },
-  { field: 'numeroChasis', x: 0.57, y: 0.775, width: 0.31, height: 0.07, scale: 2.2 },
-  { field: 'propietario', x: 0.02, y: 0.915, width: 0.64, height: 0.06, scale: 2.3 },
-  { field: 'identificacionPropietario', x: 0.7, y: 0.915, width: 0.22, height: 0.06, scale: 2.3 },
+  { field: 'numeroMotor', x: 0.015, y: 0.648, width: 0.295, height: 0.082, scale: 2.35 },
+  { field: 'vin', x: 0.575, y: 0.648, width: 0.305, height: 0.082, scale: 2.35 },
+  { field: 'numeroChasis', x: 0.555, y: 0.768, width: 0.335, height: 0.082, scale: 2.35 },
+  { field: 'propietario', x: 0.015, y: 0.902, width: 0.67, height: 0.075, scale: 2.4 },
+  { field: 'identificacionPropietario', x: 0.685, y: 0.902, width: 0.245, height: 0.075, scale: 2.4 },
 ];
+
+const getStructuredZoneOcrConfig = (field: StructuredScanField): StructuredZoneOcrConfig => {
+  switch (field) {
+    case 'placa':
+      return {
+        psm: OCR_PSM_SINGLE_WORD,
+        whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+        preserveSpaces: false,
+        dpi: 420,
+      };
+    case 'año':
+    case 'cilindrada':
+    case 'capacidad':
+    case 'identificacionPropietario':
+      return {
+        psm: OCR_PSM_SINGLE_WORD,
+        whitelist: '0123456789.',
+        preserveSpaces: false,
+        dpi: 430,
+      };
+    case 'vin':
+    case 'numeroMotor':
+    case 'numeroChasis':
+      return {
+        psm: OCR_PSM_SINGLE_LINE,
+        whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-',
+        preserveSpaces: false,
+        dpi: 430,
+      };
+    case 'propietario':
+      return {
+        psm: OCR_PSM_SINGLE_LINE,
+        whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ .-',
+        preserveSpaces: true,
+        dpi: 380,
+      };
+    case 'marca':
+    case 'linea':
+    case 'color':
+    case 'claseVehiculo':
+    case 'servicio':
+    case 'tipoCarroceria':
+      return {
+        psm: OCR_PSM_SINGLE_LINE,
+        whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .-',
+        preserveSpaces: true,
+        dpi: 390,
+      };
+    default:
+      return {
+        psm: OCR_PSM_SINGLE_BLOCK,
+        preserveSpaces: true,
+        dpi: 360,
+      };
+  }
+};
 
 const parseVehicleCardText = (rawText: string, confidence: number): VehicleCardReaderResult => {
   const normalizedText = normalizeForSearch(rawText);
@@ -1412,6 +1479,73 @@ const enhanceImageForOcr = async (file: Blob): Promise<Blob> => {
   return canvasToBlob(canvas);
 };
 
+const renderBlobWithFilter = async (
+  file: Blob,
+  filter: string,
+  scaleFactor = 1
+): Promise<HTMLCanvasElement> => {
+  const image = await loadImageElement(file);
+  const canvas = createCanvas(
+    Math.max(1, Math.round(image.width * scaleFactor)),
+    Math.max(1, Math.round(image.height * scaleFactor))
+  );
+  const context = canvas.getContext('2d');
+
+  if (!context) {
+    throw new Error('No se pudo preparar una zona de la tarjeta para OCR.');
+  }
+
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
+  context.filter = filter;
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  context.filter = 'none';
+
+  return canvas;
+};
+
+const enhanceStructuredZoneForOcr = async (
+  file: Blob,
+  field: StructuredScanField
+): Promise<Blob> => {
+  switch (field) {
+    case 'placa':
+    case 'vin':
+    case 'numeroMotor':
+    case 'numeroChasis':
+    case 'identificacionPropietario':
+    case 'año':
+    case 'cilindrada':
+    case 'capacidad': {
+      const canvas = await renderBlobWithFilter(
+        file,
+        'grayscale(100%) contrast(205%) brightness(112%)',
+        1.28
+      );
+      applyCanvasOcrEnhancement(canvas);
+      return canvasToBlob(canvas);
+    }
+    case 'propietario': {
+      const canvas = await renderBlobWithFilter(
+        file,
+        'grayscale(100%) contrast(170%) brightness(108%)',
+        1.18
+      );
+      return canvasToBlob(canvas);
+    }
+    default: {
+      const canvas = await renderBlobWithFilter(
+        file,
+        'grayscale(100%) contrast(182%) brightness(107%)',
+        1.18
+      );
+      return canvasToBlob(canvas);
+    }
+  }
+};
+
 type OcrProgressState = {
   start: number;
   end: number;
@@ -1437,6 +1571,7 @@ const createOcrWorker = async (progressState: OcrProgressState) => {
     tessedit_pageseg_mode: PSM.SPARSE_TEXT,
     preserve_interword_spaces: '1',
     user_defined_dpi: '300',
+    tessedit_char_whitelist: '',
   });
 
   return worker;
@@ -1460,6 +1595,7 @@ const runRecognition = async (
     tessedit_pageseg_mode: OCR_PSM_SPARSE_TEXT as never,
     preserve_interword_spaces: '1',
     user_defined_dpi: '300',
+    tessedit_char_whitelist: '',
   });
 
   const recognition = await worker.recognize(file, {
@@ -1475,8 +1611,6 @@ const runRecognition = async (
     recognition.data.blocks as OcrRecognitionBlock[] | null | undefined
   );
 };
-
-type ExtractedTextField = Exclude<keyof VehicleCardExtractedData, 'año' | 'tipoVehiculo'>;
 
 const isValidPlate = (value: string) =>
   /\b[A-Z]{3}\d{3}\b|\b[A-Z]{3}\d{2}[A-Z]\b/.test(value);
@@ -1514,11 +1648,11 @@ const scoreExtractedText = (field: ExtractedTextField, value: string): number =>
       }
       return 5;
     case 'numeroMotor':
-      if (/^(?=.*[A-Z])(?=.*\d)[A-Z0-9-]{5,25}$/.test(candidate)) return 72 + candidate.length;
-      return /^[A-Z0-9-]{5,25}$/.test(candidate) ? 45 + candidate.length : 5;
+      if (/^(?=.*[A-Z])(?=.*\d)[A-Z0-9-]{4,25}$/.test(candidate)) return 74 + candidate.length;
+      return /^[A-Z0-9-]{4,25}$/.test(candidate) ? 48 + candidate.length : 5;
     case 'propietario':
       if (/\d/.test(candidate)) return 5;
-      return candidate.split(' ').length >= 2 && candidate.length <= 40 ? 70 : 20;
+      return candidate.split(' ').length >= 2 && candidate.length <= 60 ? 82 : 24;
     case 'color':
       return Object.keys(COLOR_ALIASES).some((color) => candidate.includes(color)) ? 70 : 25;
     case 'cilindrada':
@@ -1527,8 +1661,8 @@ const scoreExtractedText = (field: ExtractedTextField, value: string): number =>
       return /^\d{1,4}(?:\s+\d{1,4})?$/.test(candidate) ? 55 : 10;
     case 'modelo':
     case 'linea':
-      if (candidate.length > 28) return 5;
-      return candidate.length >= 2 ? 55 : 10;
+      if (candidate.length > 40) return 10;
+      return candidate.length >= 2 ? 58 : 10;
     case 'claseVehiculo':
       if (KNOWN_VEHICLE_CLASSES.includes(candidate)) return 75;
       return candidate.length <= 30 ? 20 : 10;
@@ -1681,6 +1815,135 @@ const countDetectedFields = (extracted: VehicleCardExtractedData) =>
     extracted.prenda,
     extracted.tipoVehiculo,
   ].filter(Boolean).length;
+
+const extractStructuredZoneScoreValue = (
+  field: StructuredScanField,
+  rawText: string
+): string | number | null => {
+  const normalizedText = normalizeForSearch(rawText);
+
+  switch (field) {
+    case 'placa':
+      return extractPreferredPlate(stripFieldLabels(rawText, LABEL_ALIASES.placa), rawText);
+    case 'marca':
+      return normalizeBrand(stripFieldLabels(rawText, LABEL_ALIASES.marca), normalizedText);
+    case 'linea':
+      return cleanCandidate(stripFieldLabels(rawText, LABEL_ALIASES.modelo));
+    case 'año':
+      return extractYear(stripFieldLabels(rawText, LABEL_ALIASES['año'])) || extractYear(normalizedText) || null;
+    case 'color':
+      return normalizeColor(stripFieldLabels(rawText, LABEL_ALIASES.color), normalizedText);
+    case 'cilindrada':
+      return normalizeCilindrada(stripFieldLabels(rawText, LABEL_ALIASES.cilindrada) || normalizedText);
+    case 'claseVehiculo':
+      return normalizeVehicleClass(stripFieldLabels(rawText, LABEL_ALIASES.claseVehiculo), normalizedText);
+    case 'servicio':
+      return normalizeService(stripFieldLabels(rawText, LABEL_ALIASES.servicio), normalizedText);
+    case 'tipoCarroceria':
+      return cleanCandidate(stripFieldLabels(rawText, LABEL_ALIASES.carroceria));
+    case 'capacidad':
+      return normalizeCapacity(stripFieldLabels(rawText, LABEL_ALIASES.capacidad) || normalizedText);
+    case 'numeroMotor':
+      return normalizeMechanicalValue(stripFieldLabels(rawText, LABEL_ALIASES.numeroMotor) || normalizedText);
+    case 'vin':
+      return extractVinLoose(stripFieldLabels(rawText, LABEL_ALIASES.vin), normalizedText);
+    case 'numeroChasis':
+      return normalizeMechanicalValue(
+        stripFieldLabels(rawText, LABEL_ALIASES.numeroChasis) || normalizedText
+      );
+    case 'propietario':
+      return normalizeOwner(stripFieldLabels(rawText, LABEL_ALIASES.propietario) || normalizedText);
+    case 'identificacionPropietario':
+      return (
+        extractIdentification(stripFieldLabels(rawText, LABEL_ALIASES.identificacion)) ||
+        extractIdentification(normalizedText) ||
+        ''
+      );
+    default:
+      return cleanCandidate(rawText);
+  }
+};
+
+const scoreStructuredZoneTextCandidate = (
+  field: StructuredScanField,
+  rawText: string,
+  confidence: number
+) => {
+  const normalizedText = cleanCandidate(rawText);
+  if (!normalizedText) {
+    return 0;
+  }
+
+  const extractedValue = extractStructuredZoneScoreValue(field, rawText);
+  const fieldScore =
+    field === 'año'
+      ? calculateYearConfidence(
+          typeof extractedValue === 'number'
+            ? extractedValue
+            : extractYear(String(extractedValue || ''))
+        )
+      : scoreExtractedText(field as ExtractedTextField, String(extractedValue || ''));
+
+  return (
+    fieldScore * 1.75 +
+    Math.max(0, Math.min(100, confidence)) * 0.45 +
+    Math.min(20, normalizedText.length * 0.4)
+  );
+};
+
+const runStructuredZoneRecognition = async (
+  worker: OcrWorker,
+  field: StructuredScanField,
+  zoneBlob: Blob
+) => {
+  const config = getStructuredZoneOcrConfig(field);
+  const attemptBlobs = [zoneBlob];
+
+  try {
+    attemptBlobs.push(await enhanceStructuredZoneForOcr(zoneBlob, field));
+  } catch {
+    // Si la mejora puntual falla, continuamos con la zona original.
+  }
+
+  let bestText = '';
+  let bestConfidence = 0;
+  let bestScore = 0;
+
+  for (const attemptBlob of attemptBlobs) {
+    await worker.setParameters({
+      tessedit_pageseg_mode: config.psm as never,
+      preserve_interword_spaces: config.preserveSpaces ? '1' : '0',
+      user_defined_dpi: String(config.dpi || 300),
+      tessedit_char_whitelist: config.whitelist || '',
+    });
+
+    const recognition = await worker.recognize(attemptBlob, {
+      rotateAuto: false,
+    });
+    const candidateText = (recognition.data.text || '').trim();
+    const candidateConfidence = recognition.data.confidence || 0;
+    const candidateScore = scoreStructuredZoneTextCandidate(
+      field,
+      candidateText,
+      candidateConfidence
+    );
+
+    if (
+      candidateScore > bestScore ||
+      (!bestText && candidateText) ||
+      (candidateScore === bestScore && candidateConfidence > bestConfidence)
+    ) {
+      bestText = candidateText;
+      bestConfidence = candidateConfidence;
+      bestScore = candidateScore;
+    }
+  }
+
+  return {
+    text: bestText,
+    confidence: bestConfidence,
+  };
+};
 
 const resolveFieldValueFromRegion = (
   rawText: string,
@@ -1864,6 +2127,7 @@ const runStructuredRecognition = async (
     tessedit_pageseg_mode: OCR_PSM_SINGLE_BLOCK as never,
     preserve_interword_spaces: '1',
     user_defined_dpi: '300',
+    tessedit_char_whitelist: '',
   });
 
   try {
@@ -1880,22 +2144,21 @@ const runStructuredRecognition = async (
       progressState.end = zoneEnd;
       progressState.onProgress = onProgress;
 
-      const recognition = await worker.recognize(zoneBlob, {
-        rotateAuto: false,
-      });
-      const zoneText = (recognition.data.text || '').trim();
+      const recognition = await runStructuredZoneRecognition(worker, zone.field, zoneBlob);
+      const zoneText = recognition.text.trim();
 
       if (zoneText) {
         zoneTexts[zone.field] = zoneText;
       }
 
-      zoneConfidences.push(recognition.data.confidence || 0);
+      zoneConfidences.push(recognition.confidence || 0);
     }
   } finally {
     await worker.setParameters({
       tessedit_pageseg_mode: OCR_PSM_SPARSE_TEXT as never,
       preserve_interword_spaces: '1',
       user_defined_dpi: '300',
+      tessedit_char_whitelist: '',
     });
   }
 
@@ -1980,11 +2243,28 @@ const mergeVehicleCardResults = (
 };
 
 const shouldRetryWithEnhancedPass = (result: VehicleCardReaderResult) =>
-  result.detectedFields <= 4 ||
+  result.detectedFields <= 6 ||
   (
-    result.confidence < 55 &&
-    (!result.extracted.placa || !result.extracted.modelo || !result.extracted.propietario)
+    result.confidence < 68 &&
+    (
+      !result.extracted.placa ||
+      !result.extracted.vin ||
+      !result.extracted.numeroMotor ||
+      !result.extracted.propietario
+    )
   );
+
+const STRUCTURED_PREFERRED_FIELDS: ExtractedTextField[] = [
+  'placa',
+  'vin',
+  'numeroMotor',
+  'numeroChasis',
+  'propietario',
+  'identificacionPropietario',
+  'capacidad',
+  'cilindrada',
+  'claseVehiculo',
+];
 
 export const readVehicleCard = async (
   file: File,
@@ -2012,7 +2292,7 @@ export const readVehicleCard = async (
       onProgress
     );
     const mergedBaseResult = mergeVehicleCardResults(baseResult, structuredResult, {
-      preferSecondaryFields: ['placa', 'numeroChasis'],
+      preferSecondaryFields: STRUCTURED_PREFERRED_FIELDS,
     });
 
     if (!shouldRetryWithEnhancedPass(mergedBaseResult)) {
@@ -2053,7 +2333,7 @@ export const readVehicleCard = async (
       );
       onProgress?.(100);
       const mergedEnhancedResult = mergeVehicleCardResults(enhancedResult, enhancedStructuredResult, {
-        preferSecondaryFields: ['placa', 'numeroChasis'],
+        preferSecondaryFields: STRUCTURED_PREFERRED_FIELDS,
       });
       const mergedResult = mergeVehicleCardResults(mergedBaseResult, mergedEnhancedResult);
 
