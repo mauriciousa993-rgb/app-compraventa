@@ -913,7 +913,9 @@ const parseVehicleCardText = (rawText: string, confidence: number): VehicleCardR
     extractVin(normalizedText) ||
     extractVin(extractLabeledValue(lines, LABEL_ALIASES.vin).replace(/\s+/g, '')) ||
     '';
-  const numeroChasis = cleanCandidate(extractLabeledValue(lines, LABEL_ALIASES.vin)) || vin;
+  const numeroChasis = normalizeMechanicalValue(
+    extractLabeledValue(lines, LABEL_ALIASES.numeroChasis)
+  );
   const tipoCarroceria = cleanCandidate(extractLabeledValue(lines, LABEL_ALIASES.carroceria));
   const propietario = cleanCandidate(extractLabeledValue(lines, LABEL_ALIASES.propietario));
   const identificacionLabeled = cleanCandidate(
@@ -1041,7 +1043,7 @@ const parseVehicleCardRecognition = (
     joinedLines,
     ...lines
   );
-  const numeroChasis = cleanCandidate(numeroChasisLabeled || vinLabeled || vin);
+  const numeroChasis = numeroChasisLabeled;
   const tipoCarroceria = cleanCandidate(resolveFieldValue(LABEL_ALIASES.carroceria));
   const propietario =
     normalizeOwner(resolveFieldValue(LABEL_ALIASES.propietario, 'name', true)) ||
@@ -1449,9 +1451,14 @@ const scoreExtractedText = (field: ExtractedTextField, value: string): number =>
     case 'placa':
       return isValidPlate(candidate) ? 100 : 10;
     case 'vin':
-    case 'numeroChasis':
       if (isValidVin(candidate)) return 100;
       return /^[A-Z0-9]{6,20}$/.test(candidate) ? 45 : 5;
+    case 'numeroChasis':
+      if (/^(?=.*\d)(?=.*[A-Z])[A-Z0-9-]{5,25}$/.test(candidate)) {
+        return 82 + Math.min(candidate.length, 10);
+      }
+      if (isValidVin(candidate)) return 72;
+      return /^[A-Z0-9-]{5,25}$/.test(candidate) ? 48 : 5;
     case 'marca':
       if (KNOWN_BRANDS.includes(candidate)) return 95;
       return /^[A-Z ]{2,20}$/.test(candidate) ? 40 : 5;
@@ -1496,7 +1503,7 @@ const pickFieldTieBreaker = (
 ) => {
   switch (field) {
     case 'placa':
-      return secondary;
+      return isValidPlate(primary) ? primary : secondary;
     case 'propietario':
     case 'numeroMotor':
       return secondary.length >= primary.length ? secondary : primary;
@@ -1693,8 +1700,7 @@ const extractStructuredFieldValue = (
       const candidate =
         resolveFieldValueFromRegion(rawText, LABEL_ALIASES.numeroChasis, 'alphanumeric') ||
         stripFieldLabels(rawText, LABEL_ALIASES.numeroChasis);
-      const vinLike = extractVinLoose(candidate, normalizedRegionText);
-      return normalizeMechanicalValue(vinLike || candidate);
+      return normalizeMechanicalValue(candidate);
     }
     case 'propietario':
       return normalizeOwner(

@@ -80,8 +80,8 @@ const normalizePropertyCardDraft = (
 ): VehicleCardExtractedData => {
   const modelo = (draft?.modelo || draft?.linea || '').trim();
   const linea = (draft?.linea || modelo).trim();
-  const vin = normalizeVinValue((draft?.vin || draft?.numeroChasis || '').trim());
-  const numeroChasis = normalizeVinValue((draft?.numeroChasis || vin).trim());
+  const vin = normalizeVinValue((draft?.vin || '').trim());
+  const numeroChasis = normalizeVinValue((draft?.numeroChasis || '').trim());
   const año =
     typeof draft?.año === 'number' && draft.año > 0
       ? draft.año
@@ -534,13 +534,6 @@ const VehicleForm: React.FC = () => {
           };
         }
 
-        if (name === 'vin') {
-          nextState.datosTarjetaPropiedad = {
-            ...nextState.datosTarjetaPropiedad,
-            numeroChasis: String(normalizedValue)
-          };
-        }
-
         return nextState;
       });
     }
@@ -578,9 +571,10 @@ const VehicleForm: React.FC = () => {
         prev.modelo,
         mode
       );
-      const nextVin = pickCardTextValue(
-        extracted.vin || extracted.numeroChasis,
-        prev.vin,
+      const nextVin = pickCardTextValue(extracted.vin, prev.vin, mode);
+      const nextNumeroChasis = pickCardTextValue(
+        extracted.numeroChasis,
+        prev.datosTarjetaPropiedad.numeroChasis,
         mode
       );
 
@@ -633,11 +627,7 @@ const VehicleForm: React.FC = () => {
             prev.datosTarjetaPropiedad.capacidad,
             mode
           ),
-          numeroChasis: pickCardTextValue(
-            extracted.numeroChasis || nextVin,
-            prev.datosTarjetaPropiedad.numeroChasis,
-            mode
-          ),
+          numeroChasis: nextNumeroChasis,
           propietario: pickCardTextValue(
             extracted.propietario,
             prev.datosTarjetaPropiedad.propietario,
@@ -839,10 +829,6 @@ const VehicleForm: React.FC = () => {
         nextState.modelo = normalizedValue;
       }
 
-      if (field === 'numeroChasis') {
-        nextState.vin = normalizedValue;
-      }
-
       return nextState;
     });
   };
@@ -863,10 +849,6 @@ const VehicleForm: React.FC = () => {
 
       if (field === 'modelo') {
         nextDraft.linea = normalizedValue;
-      }
-
-      if (field === 'vin') {
-        nextDraft.numeroChasis = normalizedValue;
       }
 
       return nextDraft;

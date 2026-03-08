@@ -433,6 +433,255 @@ const detectProjectionBounds = (
   return { start, end };
 };
 
+const buildIntegralImage = (values: Float32Array, width: number, height: number) => {
+  const stride = width + 1;
+  const integral = new Float64Array((width + 1) * (height + 1));
+
+  for (let y = 1; y <= height; y += 1) {
+    let rowTotal = 0;
+
+    for (let x = 1; x <= width; x += 1) {
+      rowTotal += values[(y - 1) * width + (x - 1)];
+      integral[y * stride + x] = integral[(y - 1) * stride + x] + rowTotal;
+    }
+  }
+
+  return integral;
+};
+
+const getRectangleScore = (
+  integral: Float64Array,
+  width: number,
+  height: number,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number
+) => {
+  const stride = width + 1;
+  const left = clamp(Math.round(Math.min(x0, x1)), 0, width);
+  const right = clamp(Math.round(Math.max(x0, x1)), 0, width);
+  const top = clamp(Math.round(Math.min(y0, y1)), 0, height);
+  const bottom = clamp(Math.round(Math.max(y0, y1)), 0, height);
+
+  if (right <= left || bottom <= top) {
+    return 0;
+  }
+
+  return (
+    integral[bottom * stride + right] -
+    integral[top * stride + right] -
+    integral[bottom * stride + left] +
+    integral[top * stride + left]
+  );
+};
+
+const getRectangleMeanScore = (
+  integral: Float64Array,
+  width: number,
+  height: number,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number
+) => {
+  const left = clamp(Math.round(Math.min(x0, x1)), 0, width);
+  const right = clamp(Math.round(Math.max(x0, x1)), 0, width);
+  const top = clamp(Math.round(Math.min(y0, y1)), 0, height);
+  const bottom = clamp(Math.round(Math.max(y0, y1)), 0, height);
+  const area = Math.max(1, (right - left) * (bottom - top));
+
+  return getRectangleScore(integral, width, height, left, top, right, bottom) / area;
+};
+
+const refineVerticalBoundary = (
+  integral: Float64Array,
+  width: number,
+  height: number,
+  roughX: number,
+  y0: number,
+  y1: number,
+  direction: 'left' | 'right',
+  searchRadius: number,
+  bandWidth: number
+) => {
+  const minX = clamp(roughX - searchRadius, 1, width - 1);
+  const maxX = clamp(roughX + searchRadius, 1, width - 1);
+  let bestX = roughX;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (let candidate = minX; candidate <= maxX; candidate += 1) {
+    const edgeMean = getRectangleMeanScore(
+      integral,
+      width,
+      height,
+      candidate - 1,
+      y0,
+      candidate + 1,
+      y1
+    );
+    const insideMean =
+      direction === 'left'
+        ? getRectangleMeanScore(integral, width, height, candidate, y0, candidate + bandWidth, y1)
+        : getRectangleMeanScore(integral, width, height, candidate - bandWidth, y0, candidate, y1);
+    const outsideMean =
+      direction === 'left'
+        ? getRectangleMeanScore(integral, width, height, candidate - bandWidth, y0, candidate, y1)
+        : getRectangleMeanScore(integral, width, height, candidate, y0, candidate + bandWidth, y1);
+    const centerBias = 1 - Math.abs(candidate - roughX) / Math.max(1, searchRadius + 1);
+    const score =
+      edgeMean * 1.25 +
+      insideMean * 0.95 -
+      outsideMean * 0.82 +
+      centerBias * 3.5;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestX = candidate;
+    }
+  }
+
+  return bestX;
+};
+
+const refineHorizontalBoundary = (
+  integral: Float64Array,
+  width: number,
+  height: number,
+  roughY: number,
+  x0: number,
+  x1: number,
+  direction: 'top' | 'bottom',
+  searchRadius: number,
+  bandHeight: number
+) => {
+  const minY = clamp(roughY - searchRadius, 1, height - 1);
+  const maxY = clamp(roughY + searchRadius, 1, height - 1);
+  let bestY = roughY;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (let candidate = minY; candidate <= maxY; candidate += 1) {
+    const edgeMean = getRectangleMeanScore(
+      integral,
+      width,
+      height,
+      x0,
+      candidate - 1,
+      x1,
+      candidate + 1
+    );
+    const insideMean =
+      direction === 'top'
+        ? getRectangleMeanScore(integral, width, height, x0, candidate, x1, candidate + bandHeight)
+        : getRectangleMeanScore(integral, width, height, x0, candidate - bandHeight, x1, candidate);
+    const outsideMean =
+      direction === 'top'
+        ? getRectangleMeanScore(integral, width, height, x0, candidate - bandHeight, x1, candidate)
+        : getRectangleMeanScore(integral, width, height, x0, candidate, x1, candidate + bandHeight);
+    const centerBias = 1 - Math.abs(candidate - roughY) / Math.max(1, searchRadius + 1);
+    const score =
+      edgeMean * 1.25 +
+      insideMean * 0.95 -
+      outsideMean * 0.82 +
+      centerBias * 3.5;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestY = candidate;
+    }
+  }
+
+  return bestY;
+};
+
+const refinePropertyCardCropBox = (
+  integral: Float64Array,
+  width: number,
+  height: number,
+  roughCropBox: CropBox
+): CropBox => {
+  const roughRight = roughCropBox.x + roughCropBox.width;
+  const roughBottom = roughCropBox.y + roughCropBox.height;
+  const searchRadiusX = Math.max(8, Math.round(roughCropBox.width * 0.09));
+  const searchRadiusY = Math.max(8, Math.round(roughCropBox.height * 0.1));
+  const bandWidth = Math.max(6, Math.round(roughCropBox.width * 0.045));
+  const bandHeight = Math.max(6, Math.round(roughCropBox.height * 0.05));
+  const verticalTop = clamp(roughCropBox.y + Math.round(roughCropBox.height * 0.08), 0, height);
+  const verticalBottom = clamp(roughBottom - Math.round(roughCropBox.height * 0.08), 0, height);
+
+  let left = refineVerticalBoundary(
+    integral,
+    width,
+    height,
+    roughCropBox.x,
+    verticalTop,
+    verticalBottom,
+    'left',
+    searchRadiusX,
+    bandWidth
+  );
+  let right = refineVerticalBoundary(
+    integral,
+    width,
+    height,
+    roughRight,
+    verticalTop,
+    verticalBottom,
+    'right',
+    searchRadiusX,
+    bandWidth
+  );
+
+  if (right - left < roughCropBox.width * 0.45) {
+    left = roughCropBox.x;
+    right = roughRight;
+  }
+
+  const horizontalLeft = clamp(left + Math.round((right - left) * 0.06), 0, width);
+  const horizontalRight = clamp(right - Math.round((right - left) * 0.06), 0, width);
+  let top = refineHorizontalBoundary(
+    integral,
+    width,
+    height,
+    roughCropBox.y,
+    horizontalLeft,
+    horizontalRight,
+    'top',
+    searchRadiusY,
+    bandHeight
+  );
+  let bottom = refineHorizontalBoundary(
+    integral,
+    width,
+    height,
+    roughBottom,
+    horizontalLeft,
+    horizontalRight,
+    'bottom',
+    searchRadiusY,
+    bandHeight
+  );
+
+  if (bottom - top < roughCropBox.height * 0.45) {
+    top = roughCropBox.y;
+    bottom = roughBottom;
+  }
+
+  const finalPaddingX = Math.max(4, Math.round((right - left) * 0.012));
+  const finalPaddingY = Math.max(4, Math.round((bottom - top) * 0.014));
+  const x = clamp(left - finalPaddingX, 0, width - 1);
+  const y = clamp(top - finalPaddingY, 0, height - 1);
+  const x1 = clamp(right + finalPaddingX, x + 1, width);
+  const y1 = clamp(bottom + finalPaddingY, y + 1, height);
+
+  return {
+    x,
+    y,
+    width: x1 - x,
+    height: y1 - y,
+  };
+};
+
 const detectPropertyCardCropBox = (canvas: HTMLCanvasElement): CropBox | null => {
   const context = canvas.getContext('2d');
   if (!context) return null;
@@ -441,6 +690,7 @@ const detectPropertyCardCropBox = (canvas: HTMLCanvasElement): CropBox | null =>
   const imageData = context.getImageData(0, 0, width, height);
   const pixels = imageData.data;
   const background = sampleBorderColor(pixels, width, height);
+  const scoreMap = new Float32Array(width * height);
   const rowProjection = new Array<number>(height).fill(0);
   const colProjection = new Array<number>(width).fill(0);
 
@@ -470,6 +720,7 @@ const detectPropertyCardCropBox = (canvas: HTMLCanvasElement): CropBox | null =>
 
       if (score <= 0) continue;
 
+      scoreMap[y * width + x] = score;
       rowProjection[y] += score;
       colProjection[x] += score;
     }
@@ -484,12 +735,20 @@ const detectPropertyCardCropBox = (canvas: HTMLCanvasElement): CropBox | null =>
 
   const paddingX = Math.max(8, Math.round(width * 0.025));
   const paddingY = Math.max(8, Math.round(height * 0.025));
-  const x = Math.max(0, colBounds.start - paddingX);
-  const y = Math.max(0, rowBounds.start - paddingY);
-  const x1 = Math.min(width, colBounds.end + paddingX);
-  const y1 = Math.min(height, rowBounds.end + paddingY);
-  const cropWidth = x1 - x;
-  const cropHeight = y1 - y;
+  const roughCropBox: CropBox = {
+    x: Math.max(0, colBounds.start - paddingX),
+    y: Math.max(0, rowBounds.start - paddingY),
+    width: Math.min(width, colBounds.end + paddingX) - Math.max(0, colBounds.start - paddingX),
+    height: Math.min(height, rowBounds.end + paddingY) - Math.max(0, rowBounds.start - paddingY),
+  };
+  const cropBox = refinePropertyCardCropBox(
+    buildIntegralImage(scoreMap, width, height),
+    width,
+    height,
+    roughCropBox
+  );
+  const cropWidth = cropBox.width;
+  const cropHeight = cropBox.height;
 
   if (
     cropWidth < width * 0.45 ||
@@ -506,8 +765,8 @@ const detectPropertyCardCropBox = (canvas: HTMLCanvasElement): CropBox | null =>
   }
 
   return {
-    x,
-    y,
+    x: cropBox.x,
+    y: cropBox.y,
     width: cropWidth,
     height: cropHeight,
   };
