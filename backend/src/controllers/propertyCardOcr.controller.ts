@@ -131,7 +131,10 @@ export const ocrPropertyCardWithVisionAI = async (
   try {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      res.status(503).json({ message: 'OCR con IA no configurado en el servidor.' });
+      res.status(503).json({
+        message: 'OCR con IA no configurado en el servidor. Falta OPENAI_API_KEY.',
+        missingEnv: ['OPENAI_API_KEY'],
+      });
       return;
     }
 
