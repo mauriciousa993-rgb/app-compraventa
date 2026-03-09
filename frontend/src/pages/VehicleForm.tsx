@@ -12,7 +12,11 @@ import {
   FileText,
 } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
-import api, { buildVehiclePhotoUrl, vehiclesAPI } from '../services/api';
+import api, {
+  buildVehiclePhotoUrl,
+  vehiclesAPI,
+  VisionPropertyCardOcrResponse
+} from '../services/api';
 import {
   VehicleCardExtractedData,
   VehicleCardReaderResult
@@ -168,6 +172,43 @@ const mapVisionAiExtractedToDraft = (
         : '',
     prenda: typeof extracted?.prenda === 'string' ? extracted.prenda : '',
     tipoVehiculo,
+  };
+};
+
+const countDetectedCardFields = (draft: VehicleCardExtractedData) =>
+  Object.values(draft).filter((value) => {
+    if (typeof value === 'number') {
+      return Number.isFinite(value);
+    }
+
+    if (typeof value === 'string') {
+      return value.trim().length > 0;
+    }
+
+    return Boolean(value);
+  }).length;
+
+const normalizeVisionAiPropertyCardResult = (
+  payload: VisionPropertyCardOcrResponse
+): VehicleCardReaderResult => {
+  const extracted = normalizePropertyCardDraft(
+    mapVisionAiExtractedToDraft(payload?.extracted)
+  );
+  const detectedFieldsFromPayload =
+    typeof payload?.detectedFields === 'number' && Number.isFinite(payload.detectedFields)
+      ? Math.max(0, Math.round(payload.detectedFields))
+      : 0;
+  const detectedFields = Math.max(detectedFieldsFromPayload, countDetectedCardFields(extracted));
+  const confidence =
+    typeof payload?.confidence === 'number' && Number.isFinite(payload.confidence)
+      ? Math.max(0, Math.min(100, Math.round(payload.confidence)))
+      : 0;
+
+  return {
+    rawText: typeof payload?.rawText === 'string' ? payload.rawText : '',
+    confidence,
+    detectedFields,
+    extracted,
   };
 };
 
@@ -732,6 +773,61 @@ const VehicleForm: React.FC = () => {
     setPropertyCardProgress(0);
   };
 
+  const readPropertyCardWithVisionAi = async (file: File) => {
+    const response = await vehiclesAPI.readPropertyCardWithVisionAI(file);
+    return normalizeVisionAiPropertyCardResult(response);
+  };
+
+  const runPropertyCardVisionAi = async (primaryFile: File, fallbackFile?: File) => {
+    setIsReadingPropertyCard(true);
+    setPropertyCardError('');
+    setPropertyCardProgress(8);
+
+    try {
+      const primaryResult = await readPropertyCardWithVisionAi(primaryFile);
+      let bestResult = primaryResult;
+
+      setPropertyCardProgress(68);
+
+      const shouldTryFallback =
+        Boolean(fallbackFile) &&
+        fallbackFile !== primaryFile &&
+        primaryResult.detectedFields < 7;
+
+      if (shouldTryFallback && fallbackFile) {
+        const fallbackResult = await readPropertyCardWithVisionAi(fallbackFile);
+        setPropertyCardProgress(90);
+
+        if (
+          fallbackResult.detectedFields > primaryResult.detectedFields ||
+          (
+            fallbackResult.detectedFields === primaryResult.detectedFields &&
+            fallbackResult.confidence > primaryResult.confidence
+          )
+        ) {
+          bestResult = fallbackResult;
+        }
+      }
+
+      setPropertyCardResult(bestResult);
+      setPropertyCardDraft(bestResult.extracted);
+      applyPropertyCardDataWithMode(bestResult.extracted, 'fill-empty');
+      setPropertyCardProgress(100);
+    } catch (err: any) {
+      const aiErrorMessage =
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        err?.message ||
+        'No se pudo leer la tarjeta con IA.';
+      setPropertyCardResult(null);
+      setPropertyCardDraft(createEmptyPropertyCardDraft());
+      setPropertyCardProgress(0);
+      setPropertyCardError(aiErrorMessage);
+    } finally {
+      setIsReadingPropertyCard(false);
+    }
+  };
+
   const initializePropertyCardSelection = async (file: File) => {
     const preview = await readFileAsDataUrl(file);
 
@@ -768,6 +864,7 @@ const VehicleForm: React.FC = () => {
       setPropertyCardResult(null);
       setPropertyCardDraft(createEmptyPropertyCardDraft());
       setPropertyCardProgress(0);
+      await runPropertyCardVisionAi(sourceFile, nextFile);
     } catch (err: any) {
       setPropertyCardError(
         err?.message || 'No se pudo optimizar la foto de la tarjeta. Intenta con otra imagen.'
@@ -775,6 +872,7 @@ const VehicleForm: React.FC = () => {
       if (sourcePreview) {
         setPropertyCardPreview(sourcePreview);
       }
+      await runPropertyCardVisionAi(sourceFile);
     } finally {
       setIsApplyingPropertyCardEditor(false);
     }
@@ -824,6 +922,7 @@ const VehicleForm: React.FC = () => {
     setPropertyCardDocumentFile(null);
     setPropertyCardPreview('');
     setIsApplyingPropertyCardEditor(false);
+    setIsReadingPropertyCard(false);
     setPropertyCardResult(null);
     setPropertyCardDraft(createEmptyPropertyCardDraft());
     setPropertyCardError('');
@@ -1360,8 +1459,8 @@ const VehicleForm: React.FC = () => {
                 <div className="space-y-4">
                   <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-900">
                     La foto se recorta y corrige automaticamente para adjuntarla al vehiculo. La app intenta aislar
-                    solo el cuadro de la tarjeta, conservar detalle de la imagen, mejorar resolucion, ajustar contraste
-                    y nitidez.
+                    solo el cuadro de la tarjeta, conservar detalle de la imagen, mejorar resolucion, ajustar contraste,
+                    nitidez y luego leer los campos con IA para completar el formulario.
                   </div>
 
                   <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
@@ -1371,15 +1470,27 @@ const VehicleForm: React.FC = () => {
                         <p className="text-sm text-blue-700">
                           {isApplyingPropertyCardEditor
                             ? 'Recortando la tarjeta y mejorando resolucion, contraste y nitidez...'
+                            : isReadingPropertyCard
+                              ? `Leyendo datos con IA... ${Math.max(1, propertyCardProgress)}%`
+                              : propertyCardResult
+                                ? `IA detecto ${propertyCardResult.detectedFields} campos (confianza ${propertyCardResult.confidence}%). Se completaron automaticamente los campos vacios.`
                             : propertyCardFile
                               ? 'Tarjeta lista para adjuntar al guardar el vehiculo.'
                               : 'El procesamiento comenzara al seleccionar una imagen.'}
                         </p>
                       </div>
-                      {isApplyingPropertyCardEditor && (
+                      {(isApplyingPropertyCardEditor || isReadingPropertyCard) && (
                         <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
                       )}
                     </div>
+                    {isReadingPropertyCard && (
+                      <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-blue-100">
+                        <div
+                          className="h-2 rounded-full bg-blue-500 transition-all"
+                          style={{ width: `${Math.max(6, Math.min(100, propertyCardProgress))}%` }}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {propertyCardError && (
@@ -1388,7 +1499,7 @@ const VehicleForm: React.FC = () => {
                     </div>
                   )}
 
-                  {false && propertyCardResult && (
+                  {propertyCardResult && (
                     <div className="space-y-4">
                       <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
                         Revisa y corrige la lectura antes de aplicarla. Los campos compartidos quedan unificados con la seccion de
@@ -1464,7 +1575,7 @@ const VehicleForm: React.FC = () => {
                       </div>
 
                       <div>
-                        <label className="mb-2 block text-sm font-medium text-gray-700">Texto OCR detectado</label>
+                        <label className="mb-2 block text-sm font-medium text-gray-700">Texto detectado por IA</label>
                         <textarea
                           value={propertyCardResult.rawText}
                           readOnly

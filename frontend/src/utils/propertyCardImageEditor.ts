@@ -123,6 +123,11 @@ const OCR_IMAGE_MIN_LONG_EDGE = 1500;
 const PROPERTY_CARD_TARGET_ASPECT_RATIO = 1.58;
 const PROPERTY_CARD_MIN_ASPECT_RATIO = 1.18;
 const PROPERTY_CARD_MAX_ASPECT_RATIO = 2.15;
+const REFERENCE_SAFE_MARGIN_X_RATIO = 0.014;
+const REFERENCE_SAFE_MARGIN_Y_RATIO = 0.018;
+const REFERENCE_CALIBRATION_MIN_AREA_RATIO = 0.68;
+const REFERENCE_ADAPTIVE_MIN_AREA_RATIO = 0.46;
+const REFERENCE_EDGE_NEAR_RATIO = 0.03;
 
 const loadImage = (file: Blob): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
@@ -688,13 +693,13 @@ const isPlausiblePropertyCardCropBox = (
   if (
     cropWidth < width * 0.24 ||
     cropHeight < height * 0.16 ||
-    cropWidth > width * 0.988 ||
-    cropHeight > height * 0.988
+    cropWidth > width * 0.995 ||
+    cropHeight > height * 0.995
   ) {
     return false;
   }
 
-  if (areaRatio < 0.08 || areaRatio > 0.92) {
+  if (areaRatio < 0.12 || areaRatio > 0.992) {
     return false;
   }
 
@@ -702,6 +707,185 @@ const isPlausiblePropertyCardCropBox = (
     aspectRatio >= PROPERTY_CARD_MIN_ASPECT_RATIO &&
     aspectRatio <= PROPERTY_CARD_MAX_ASPECT_RATIO
   );
+};
+
+const alignCropBoxToTargetAspect = (
+  cropBox: CropBox,
+  width: number,
+  height: number
+): CropBox => {
+  const aspectRatio = cropBox.width / Math.max(1, cropBox.height);
+  const aspectDistance = Math.abs(Math.log(aspectRatio / PROPERTY_CARD_TARGET_ASPECT_RATIO));
+
+  if (aspectDistance <= 0.12) {
+    return cropBox;
+  }
+
+  if (aspectRatio > PROPERTY_CARD_TARGET_ASPECT_RATIO) {
+    const desiredHeight = Math.max(1, Math.round(cropBox.width / PROPERTY_CARD_TARGET_ASPECT_RATIO));
+    const deltaHeight = Math.max(0, desiredHeight - cropBox.height);
+
+    if (!deltaHeight) {
+      return cropBox;
+    }
+
+    return expandCropBox(cropBox, width, height, 0, Math.ceil(deltaHeight / 2));
+  }
+
+  const desiredWidth = Math.max(1, Math.round(cropBox.height * PROPERTY_CARD_TARGET_ASPECT_RATIO));
+  const deltaWidth = Math.max(0, desiredWidth - cropBox.width);
+
+  if (!deltaWidth) {
+    return cropBox;
+  }
+
+  return expandCropBox(cropBox, width, height, Math.ceil(deltaWidth / 2), 0);
+};
+
+const mergeCropBoxes = (a: CropBox, b: CropBox, width: number, height: number): CropBox => {
+  const x = clamp(Math.min(a.x, b.x), 0, width - 1);
+  const y = clamp(Math.min(a.y, b.y), 0, height - 1);
+  const x1 = clamp(
+    Math.max(a.x + a.width, b.x + b.width),
+    x + 1,
+    width
+  );
+  const y1 = clamp(
+    Math.max(a.y + a.height, b.y + b.height),
+    y + 1,
+    height
+  );
+
+  return {
+    x,
+    y,
+    width: x1 - x,
+    height: y1 - y,
+  };
+};
+
+const getEdgeTouchCount = (cropBox: CropBox, width: number, height: number) => {
+  const thresholdX = Math.max(6, Math.round(width * REFERENCE_EDGE_NEAR_RATIO));
+  const thresholdY = Math.max(6, Math.round(height * REFERENCE_EDGE_NEAR_RATIO));
+
+  return (
+    (cropBox.x <= thresholdX ? 1 : 0) +
+    (cropBox.y <= thresholdY ? 1 : 0) +
+    (cropBox.x + cropBox.width >= width - thresholdX ? 1 : 0) +
+    (cropBox.y + cropBox.height >= height - thresholdY ? 1 : 0)
+  );
+};
+
+const getAdaptiveReferenceMarginRatios = (
+  areaRatio: number,
+  edgeTouchCount: number
+) => {
+  let marginXRatio = REFERENCE_SAFE_MARGIN_X_RATIO;
+  let marginYRatio = REFERENCE_SAFE_MARGIN_Y_RATIO;
+
+  if (areaRatio >= 0.86) {
+    marginXRatio *= 0.72;
+    marginYRatio *= 0.72;
+  } else if (areaRatio >= 0.72) {
+    marginXRatio *= 0.9;
+    marginYRatio *= 0.9;
+  } else if (areaRatio >= 0.58) {
+    marginXRatio = 0.02;
+    marginYRatio = 0.026;
+  } else {
+    marginXRatio = 0.026;
+    marginYRatio = 0.033;
+  }
+
+  if (edgeTouchCount >= 2) {
+    marginXRatio *= 1.14;
+    marginYRatio *= 1.14;
+  }
+
+  return {
+    marginXRatio: clamp(marginXRatio, 0.008, 0.038),
+    marginYRatio: clamp(marginYRatio, 0.01, 0.046),
+  };
+};
+
+const applyReferenceCalibratedMargins = (
+  cropBox: CropBox,
+  width: number,
+  height: number
+): CropBox => {
+  const areaRatio = getCropBoxArea(cropBox) / Math.max(1, width * height);
+
+  if (areaRatio < REFERENCE_ADAPTIVE_MIN_AREA_RATIO) {
+    return cropBox;
+  }
+
+  const edgeTouchCount = getEdgeTouchCount(cropBox, width, height);
+  const forceReferenceSafeFrame =
+    areaRatio >= REFERENCE_CALIBRATION_MIN_AREA_RATIO || edgeTouchCount >= 2;
+  const { marginXRatio, marginYRatio } = getAdaptiveReferenceMarginRatios(areaRatio, edgeTouchCount);
+  const marginX = Math.max(8, Math.round(width * marginXRatio));
+  const marginY = Math.max(8, Math.round(height * marginYRatio));
+  const referenceSafeBox: CropBox = {
+    x: marginX,
+    y: marginY,
+    width: Math.max(1, width - marginX * 2),
+    height: Math.max(1, height - marginY * 2),
+  };
+  const merged = forceReferenceSafeFrame
+    ? mergeCropBoxes(cropBox, referenceSafeBox, width, height)
+    : cropBox;
+  const aspectAlignedMerged = alignCropBoxToTargetAspect(merged, width, height);
+
+  if (isPlausiblePropertyCardCropBox(aspectAlignedMerged, width, height)) {
+    return aspectAlignedMerged;
+  }
+
+  return isPlausiblePropertyCardCropBox(merged, width, height) ? merged : cropBox;
+};
+
+const buildConservativeDetectedCropBox = (
+  cropBox: CropBox,
+  width: number,
+  height: number
+): CropBox | null => {
+  const areaRatio = getCropBoxArea(cropBox) / Math.max(1, width * height);
+
+  if (areaRatio < 0.12) {
+    return null;
+  }
+
+  const paddingXRatio =
+    areaRatio >= 0.8 ? 0.055 :
+    areaRatio >= 0.62 ? 0.072 :
+    areaRatio >= 0.5 ? 0.086 :
+    0.1;
+  const paddingYRatio =
+    areaRatio >= 0.8 ? 0.062 :
+    areaRatio >= 0.62 ? 0.078 :
+    areaRatio >= 0.5 ? 0.094 :
+    0.11;
+  const paddingX = Math.max(12, Math.round(cropBox.width * paddingXRatio));
+  const paddingY = Math.max(12, Math.round(cropBox.height * paddingYRatio));
+  const expanded = expandCropBox(cropBox, width, height, paddingX, paddingY);
+  const alignedExpanded = alignCropBoxToTargetAspect(expanded, width, height);
+
+  if (isPlausiblePropertyCardCropBox(alignedExpanded, width, height)) {
+    return applyReferenceCalibratedMargins(alignedExpanded, width, height);
+  }
+
+  if (isPlausiblePropertyCardCropBox(expanded, width, height)) {
+    return applyReferenceCalibratedMargins(expanded, width, height);
+  }
+
+  if (isPlausiblePropertyCardCropBox(cropBox, width, height)) {
+    return applyReferenceCalibratedMargins(
+      alignCropBoxToTargetAspect(cropBox, width, height),
+      width,
+      height
+    );
+  }
+
+  return null;
 };
 
 const getCropBoxOutsideMeanScore = (
@@ -1172,8 +1356,8 @@ const refinePropertyCardCropBox = (
     bottom = roughBottom;
   }
 
-  const finalPaddingX = Math.max(4, Math.round((right - left) * 0.012));
-  const finalPaddingY = Math.max(4, Math.round((bottom - top) * 0.014));
+  const finalPaddingX = Math.max(6, Math.round((right - left) * 0.024));
+  const finalPaddingY = Math.max(6, Math.round((bottom - top) * 0.028));
   const x = clamp(left - finalPaddingX, 0, width - 1);
   const y = clamp(top - finalPaddingY, 0, height - 1);
   const x1 = clamp(right + finalPaddingX, x + 1, width);
@@ -1312,8 +1496,19 @@ const preparePropertyCardBaseCanvas = async (file: Blob) => {
         imageHeight
       ),
     };
-    const safeCropWidth = clamp(cropBox.width, 1, imageWidth - cropBox.x);
-    const safeCropHeight = clamp(cropBox.height, 1, imageHeight - cropBox.y);
+    const conservativeCropBox = buildConservativeDetectedCropBox(cropBox, imageWidth, imageHeight);
+
+    if (!conservativeCropBox) {
+      const fallbackScale = Math.min(1, MAX_CROPPED_SOURCE_EDGE / Math.max(imageWidth, imageHeight));
+      return drawSourceToCanvas(
+        image,
+        Math.max(1, Math.round(imageWidth * fallbackScale)),
+        Math.max(1, Math.round(imageHeight * fallbackScale))
+      );
+    }
+
+    const safeCropWidth = clamp(conservativeCropBox.width, 1, imageWidth - conservativeCropBox.x);
+    const safeCropHeight = clamp(conservativeCropBox.height, 1, imageHeight - conservativeCropBox.y);
     const cropScale = Math.min(
       1,
       MAX_CROPPED_SOURCE_EDGE / Math.max(safeCropWidth, safeCropHeight)
@@ -1324,7 +1519,7 @@ const preparePropertyCardBaseCanvas = async (file: Blob) => {
       Math.max(1, Math.round(safeCropWidth * cropScale)),
       Math.max(1, Math.round(safeCropHeight * cropScale)),
       {
-        ...cropBox,
+        ...conservativeCropBox,
         width: safeCropWidth,
         height: safeCropHeight,
       }

@@ -135,6 +135,14 @@ export const authAPI = {
   },
 };
 
+export interface VisionPropertyCardOcrResponse {
+  source?: string;
+  confidence: number;
+  detectedFields: number;
+  rawText: string;
+  extracted: Record<string, unknown>;
+}
+
 // Vehicles API
 export const vehiclesAPI = {
   getAll: async (filters?: { estado?: string; marca?: string; modelo?: string; año?: number }) => {
@@ -212,6 +220,19 @@ export const vehiclesAPI = {
         'Content-Type': 'multipart/form-data',
       },
     });
+    return response.data;
+  },
+
+  readPropertyCardWithVisionAI: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await api.post<VisionPropertyCardOcrResponse>('/vehicles/ocr/property-card', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
     return response.data;
   },
 
