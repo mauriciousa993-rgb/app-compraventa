@@ -295,6 +295,43 @@ export const vehiclesAPI = {
     link.remove();
   },
 
+  generateTransferFormExcelAI: async (id: string) => {
+    const response = await api.get(`/vehicles/${id}/transfer-form-excel`, {
+      responseType: 'blob',
+    });
+
+    const url = window.URL.createObjectURL(
+      new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      })
+    );
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `formulario-traspaso-${id}-ia-${Date.now()}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  },
+
+  generateTransferFormExcelAIByPlate: async (placa: string) => {
+    const normalizedPlate = placa.trim().toUpperCase();
+    const response = await api.get(`/vehicles/consulta/${encodeURIComponent(normalizedPlate)}/transfer-form-excel`, {
+      responseType: 'blob',
+    });
+
+    const url = window.URL.createObjectURL(
+      new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      })
+    );
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `formulario-traspaso-${normalizedPlate}-ia-${Date.now()}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  },
+
   getInspectionChecklist: async (id: string) => {
     const response = await api.get<VehicleInspectionChecklist>(`/vehicles/${id}/inspection-checklist`);
     return response.data;

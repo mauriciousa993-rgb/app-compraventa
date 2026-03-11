@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import axios from 'axios';
 import Vehicle, { IVehicleDocument } from '../models/Vehicle';
 import User from '../models/User';
 import { AuthRequest } from '../types';
@@ -13,6 +14,12 @@ const VEHICLE_TYPES = new Set(['suv', 'pickup', 'sedan', 'hatchback']);
 const SALE_READY_STATUS = 'listo_venta';
 const NEGOTIATION_STATUS = 'en_negociacion';
 const INVENTORY_STATUSES = ['en_proceso', SALE_READY_STATUS, NEGOTIATION_STATUS];
+const OPENAI_TEXT_MODEL = process.env.OPENAI_TEXT_MODEL || process.env.OPENAI_VISION_MODEL || 'gpt-4o-mini';
+const OPENAI_API_BASE_URL = process.env.OPENAI_API_BASE_URL || 'https://api.openai.com/v1';
+const TRANSFER_FORM_TEMPLATE_XLSX = path.join(
+  __dirname,
+  '../../templates/FORMULARIO-TRAMITES-DE-TRANSITO-DILIGENCIABLE-EXCEL.xlsx'
+);
 
 const normalizeVehicleType = (value: any): 'suv' | 'pickup' | 'sedan' | 'hatchback' => {
   const parsed = typeof value === 'string' ? value.toLowerCase().trim() : '';
@@ -369,6 +376,470 @@ const resolveVehicleDocumentInfo = (vehicle: IVehicleDocument, saleData: Vehicle
       ? getFirstString(vehicle.documentacion?.prenda?.detalles, 'Si, revisar detalle de prenda')
       : 'No registra',
   };
+};
+
+type OpenAICompletionResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string | Array<{ type?: string; text?: string }>;
+    };
+  }>;
+};
+
+type PersonNameParts = {
+  firstLastName: string;
+  secondLastName: string;
+  givenNames: string;
+};
+
+type TransferFormExcelTemplateData = {
+  organismoNombre: string;
+  organismoCiudad: string;
+  organismoCodigo: string;
+  tramiteDia: string;
+  tramiteMes: string;
+  tramiteAnio: string;
+  placaLetras: string;
+  placaNumeros: string;
+  marca: string;
+  linea: string;
+  color: string;
+  modelo: string;
+  cilindrada: string;
+  capacidad: string;
+  potenciaHp: string;
+  tipoCarroceria: string;
+  numeroMotor: string;
+  numeroChasis: string;
+  numeroSerie: string;
+  vin: string;
+  propietarioPrimerApellido: string;
+  propietarioSegundoApellido: string;
+  propietarioNombres: string;
+  propietarioDocumento: string;
+  propietarioDireccion: string;
+  propietarioCiudad: string;
+  propietarioTelefono: string;
+  compradorPrimerApellido: string;
+  compradorSegundoApellido: string;
+  compradorNombres: string;
+  compradorDocumento: string;
+  compradorDireccion: string;
+  compradorCiudad: string;
+  compradorTelefono: string;
+  observaciones: string;
+};
+
+const createHttpError = (
+  statusCode: number,
+  message: string,
+  extra?: Record<string, unknown>
+) => {
+  const error = new Error(message) as Error & {
+    statusCode?: number;
+    extra?: Record<string, unknown>;
+  };
+  error.statusCode = statusCode;
+  if (extra) error.extra = extra;
+  return error;
+};
+
+const normalizeUpperText = (value: unknown, maxLength: number): string => {
+  const text = getTrimmedString(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .toUpperCase()
+    .trim();
+
+  if (!text) return '';
+  return text.slice(0, maxLength);
+};
+
+const normalizeDigitsText = (value: unknown, maxLength: number): string => {
+  const text = String(value ?? '')
+    .replace(/\D/g, '')
+    .slice(0, maxLength);
+  return text;
+};
+
+const normalizeAlphaNumericText = (value: unknown, maxLength: number): string => {
+  const text = normalizeUpperText(value, maxLength * 2).replace(/[^A-Z0-9]/g, '');
+  return text.slice(0, maxLength);
+};
+
+const splitPersonName = (fullName: unknown): PersonNameParts => {
+  const parts = normalizeUpperText(fullName, 120)
+    .split(' ')
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return { firstLastName: '', secondLastName: '', givenNames: '' };
+  }
+
+  if (parts.length === 1) {
+    return { firstLastName: parts[0], secondLastName: '', givenNames: '' };
+  }
+
+  if (parts.length === 2) {
+    return { firstLastName: parts[0], secondLastName: '', givenNames: parts[1] };
+  }
+
+  return {
+    firstLastName: parts[0],
+    secondLastName: parts[1],
+    givenNames: parts.slice(2).join(' ').slice(0, 60),
+  };
+};
+
+const splitPlate = (value: unknown) => {
+  const plate = normalizeUpperText(value, 10).replace(/[^A-Z0-9]/g, '');
+  const letters = plate.slice(0, 3);
+  const numbers = plate.slice(3, 6);
+  return { letters, numbers };
+};
+
+const getMessageContentAsText = (responseData: OpenAICompletionResponse) => {
+  const content = responseData?.choices?.[0]?.message?.content;
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((item) => (typeof item?.text === 'string' ? item.text : ''))
+      .join('\n')
+      .trim();
+  }
+
+  return '';
+};
+
+const parseJsonFromModelContent = (content: string) => {
+  const trimmed = content
+    .trim()
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/\s*```$/i, '');
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const firstBrace = trimmed.indexOf('{');
+    const lastBrace = trimmed.lastIndexOf('}');
+
+    if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+      throw new Error('La respuesta del modelo no contiene JSON valido.');
+    }
+
+    return JSON.parse(trimmed.slice(firstBrace, lastBrace + 1));
+  }
+};
+
+const sanitizeTransferTemplateData = (
+  data: Partial<TransferFormExcelTemplateData>,
+  fallback: TransferFormExcelTemplateData
+): TransferFormExcelTemplateData => ({
+  organismoNombre: normalizeUpperText(data.organismoNombre, 80) || fallback.organismoNombre,
+  organismoCiudad: normalizeUpperText(data.organismoCiudad, 25) || fallback.organismoCiudad,
+  organismoCodigo: normalizeDigitsText(data.organismoCodigo, 8) || fallback.organismoCodigo,
+  tramiteDia: normalizeDigitsText(data.tramiteDia, 2) || fallback.tramiteDia,
+  tramiteMes: normalizeDigitsText(data.tramiteMes, 2) || fallback.tramiteMes,
+  tramiteAnio: normalizeDigitsText(data.tramiteAnio, 4) || fallback.tramiteAnio,
+  placaLetras: normalizeAlphaNumericText(data.placaLetras, 3) || fallback.placaLetras,
+  placaNumeros: normalizeAlphaNumericText(data.placaNumeros, 3) || fallback.placaNumeros,
+  marca: normalizeUpperText(data.marca, 30) || fallback.marca,
+  linea: normalizeUpperText(data.linea, 30) || fallback.linea,
+  color: normalizeUpperText(data.color, 35) || fallback.color,
+  modelo: normalizeDigitsText(data.modelo, 4) || fallback.modelo,
+  cilindrada: normalizeDigitsText(data.cilindrada, 5) || fallback.cilindrada,
+  capacidad: normalizeUpperText(data.capacidad, 8) || fallback.capacidad,
+  potenciaHp: normalizeUpperText(data.potenciaHp, 8) || fallback.potenciaHp,
+  tipoCarroceria: normalizeUpperText(data.tipoCarroceria, 25) || fallback.tipoCarroceria,
+  numeroMotor: normalizeAlphaNumericText(data.numeroMotor, 25) || fallback.numeroMotor,
+  numeroChasis: normalizeAlphaNumericText(data.numeroChasis, 25) || fallback.numeroChasis,
+  numeroSerie: normalizeAlphaNumericText(data.numeroSerie, 25) || fallback.numeroSerie,
+  vin: normalizeAlphaNumericText(data.vin, 25) || fallback.vin,
+  propietarioPrimerApellido:
+    normalizeUpperText(data.propietarioPrimerApellido, 25) || fallback.propietarioPrimerApellido,
+  propietarioSegundoApellido:
+    normalizeUpperText(data.propietarioSegundoApellido, 25) || fallback.propietarioSegundoApellido,
+  propietarioNombres: normalizeUpperText(data.propietarioNombres, 40) || fallback.propietarioNombres,
+  propietarioDocumento:
+    normalizeUpperText(data.propietarioDocumento, 24) || fallback.propietarioDocumento,
+  propietarioDireccion:
+    normalizeUpperText(data.propietarioDireccion, 55) || fallback.propietarioDireccion,
+  propietarioCiudad: normalizeUpperText(data.propietarioCiudad, 25) || fallback.propietarioCiudad,
+  propietarioTelefono:
+    normalizeUpperText(data.propietarioTelefono, 20) || fallback.propietarioTelefono,
+  compradorPrimerApellido:
+    normalizeUpperText(data.compradorPrimerApellido, 25) || fallback.compradorPrimerApellido,
+  compradorSegundoApellido:
+    normalizeUpperText(data.compradorSegundoApellido, 25) || fallback.compradorSegundoApellido,
+  compradorNombres: normalizeUpperText(data.compradorNombres, 40) || fallback.compradorNombres,
+  compradorDocumento: normalizeUpperText(data.compradorDocumento, 24) || fallback.compradorDocumento,
+  compradorDireccion: normalizeUpperText(data.compradorDireccion, 55) || fallback.compradorDireccion,
+  compradorCiudad: normalizeUpperText(data.compradorCiudad, 25) || fallback.compradorCiudad,
+  compradorTelefono: normalizeUpperText(data.compradorTelefono, 20) || fallback.compradorTelefono,
+  observaciones: normalizeUpperText(data.observaciones, 600) || fallback.observaciones,
+});
+
+const buildBaseTransferTemplateData = (
+  vehicle: IVehicleDocument,
+  saleData: VehicleSaleData,
+  vehicleInfo: ReturnType<typeof resolveVehicleDocumentInfo>
+): TransferFormExcelTemplateData => {
+  const date = saleData.transaccion?.fechaCelebracion
+    ? new Date(saleData.transaccion.fechaCelebracion)
+    : new Date();
+  const plate = splitPlate(vehicle.placa);
+  const owner = splitPersonName(saleData.vendedor?.nombre);
+  const buyer = splitPersonName(saleData.comprador?.nombre);
+  const vehicleYear = normalizeDigitsText((vehicle as any)['a\u00f1o'], 4);
+  const city = normalizeUpperText(
+    saleData.transaccion?.lugarCelebracion || process.env.DEFAULT_TRANSIT_CITY || 'BOGOTA D.C.',
+    25
+  );
+
+  const observations = [
+    normalizeUpperText(saleData.transaccion?.clausulasAdicionales, 250),
+    vehicle.documentacion?.prenda?.tiene
+      ? `PRENDA: ${normalizeUpperText(vehicle.documentacion?.prenda?.detalles || 'SI', 90)}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join(' | ');
+
+  const fallback: TransferFormExcelTemplateData = {
+    organismoNombre: normalizeUpperText(
+      process.env.DEFAULT_TRANSIT_AUTHORITY || 'SECRETARIA DE MOVILIDAD',
+      80
+    ),
+    organismoCiudad: city,
+    organismoCodigo: normalizeDigitsText(process.env.DEFAULT_TRANSIT_CODE || '11001', 8),
+    tramiteDia: String(date.getDate()).padStart(2, '0'),
+    tramiteMes: String(date.getMonth() + 1).padStart(2, '0'),
+    tramiteAnio: String(date.getFullYear()),
+    placaLetras: plate.letters,
+    placaNumeros: plate.numbers,
+    marca: normalizeUpperText(vehicle.marca, 30),
+    linea: normalizeUpperText(vehicleInfo.linea || vehicle.modelo, 30),
+    color: normalizeUpperText(vehicle.color, 35),
+    modelo: vehicleYear,
+    cilindrada: normalizeDigitsText(vehicleInfo.cilindrada, 5),
+    capacidad: normalizeUpperText(vehicleInfo.capacidad || '5', 8),
+    potenciaHp: '',
+    tipoCarroceria: normalizeUpperText(vehicleInfo.tipoCarroceria, 25),
+    numeroMotor: normalizeAlphaNumericText(vehicleInfo.numeroMotor, 25),
+    numeroChasis: normalizeAlphaNumericText(vehicleInfo.numeroChasis, 25),
+    numeroSerie: normalizeAlphaNumericText(vehicleInfo.numeroChasis || vehicleInfo.vin, 25),
+    vin: normalizeAlphaNumericText(vehicleInfo.vin, 25),
+    propietarioPrimerApellido: owner.firstLastName,
+    propietarioSegundoApellido: owner.secondLastName,
+    propietarioNombres: owner.givenNames,
+    propietarioDocumento: normalizeUpperText(saleData.vendedor?.identificacion, 24),
+    propietarioDireccion: normalizeUpperText(saleData.vendedor?.direccion, 55),
+    propietarioCiudad: city,
+    propietarioTelefono: normalizeUpperText(saleData.vendedor?.telefono, 20),
+    compradorPrimerApellido: buyer.firstLastName,
+    compradorSegundoApellido: buyer.secondLastName,
+    compradorNombres: buyer.givenNames,
+    compradorDocumento: normalizeUpperText(saleData.comprador?.identificacion, 24),
+    compradorDireccion: normalizeUpperText(saleData.comprador?.direccion, 55),
+    compradorCiudad: city,
+    compradorTelefono: normalizeUpperText(saleData.comprador?.telefono, 20),
+    observaciones: observations,
+  };
+
+  return sanitizeTransferTemplateData(fallback, fallback);
+};
+
+const enrichTransferTemplateDataWithAI = async (
+  baseData: TransferFormExcelTemplateData,
+  vehicle: IVehicleDocument,
+  saleData: VehicleSaleData,
+  vehicleInfo: ReturnType<typeof resolveVehicleDocumentInfo>
+): Promise<TransferFormExcelTemplateData> => {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw createHttpError(503, 'Diligenciamiento con IA no configurado. Falta OPENAI_API_KEY.', {
+      missingEnv: ['OPENAI_API_KEY'],
+    });
+  }
+
+  const prompt = [
+    'Completa y normaliza datos para diligenciar un formulario colombiano de traspaso vehicular.',
+    'Responde SOLO JSON valido con EXACTAMENTE estas claves:',
+    JSON.stringify(Object.keys(baseData)),
+    'Reglas:',
+    '- Mantener MAYUSCULAS sin tildes.',
+    '- No inventar informacion faltante; dejar cadena vacia.',
+    '- Separar apellidos y nombres en campos correspondientes.',
+    '- placaLetras debe tener 3 caracteres y placaNumeros 3 caracteres.',
+    '- modelo, tramiteDia, tramiteMes, tramiteAnio y organismoCodigo deben ser numericos.',
+    'Contexto:',
+    JSON.stringify(
+      {
+        vehiculo: {
+          placa: vehicle.placa,
+          marca: vehicle.marca,
+          modelo: vehicle.modelo,
+          anio: (vehicle as any)['a\u00f1o'],
+          color: vehicle.color,
+        },
+        datosVenta: saleData,
+        infoDocumento: vehicleInfo,
+        sugerenciaBase: baseData,
+      },
+      null,
+      2
+    ),
+  ].join('\n');
+
+  try {
+    const completion = await axios.post<OpenAICompletionResponse>(
+      `${OPENAI_API_BASE_URL}/chat/completions`,
+      {
+        model: OPENAI_TEXT_MODEL,
+        temperature: 0,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Eres un asistente experto en diligenciar formularios de transito de Colombia. Responde solo JSON.',
+          },
+          { role: 'user', content: prompt },
+        ],
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 30000,
+      }
+    );
+
+    const rawContent = getMessageContentAsText(completion.data);
+    if (!rawContent) {
+      throw new Error('La IA no devolvio contenido util.');
+    }
+
+    const parsed = parseJsonFromModelContent(rawContent) as Partial<TransferFormExcelTemplateData>;
+    return sanitizeTransferTemplateData(parsed, baseData);
+  } catch (error: any) {
+    console.error('Error al enriquecer el formulario Excel con IA:', error?.response?.data || error);
+    return baseData;
+  }
+};
+
+const setWorksheetValue = (worksheet: ExcelJS.Worksheet, address: string, value: string) => {
+  if (!value) return;
+  worksheet.getCell(address).value = value;
+};
+
+const applyTransferTemplateDataToWorksheet = (
+  worksheet: ExcelJS.Worksheet,
+  data: TransferFormExcelTemplateData
+) => {
+  // Selecciona "TRASPASO" en el bloque de tramite solicitado.
+  setWorksheetValue(worksheet, 'I7', 'X');
+
+  // Encabezado, placa y datos basicos del vehiculo.
+  setWorksheetValue(worksheet, 'AB2', `NOMBRE: ${data.organismoNombre}`);
+  setWorksheetValue(worksheet, 'AB4', data.organismoCiudad);
+  setWorksheetValue(worksheet, 'AD4', data.organismoCodigo);
+  setWorksheetValue(worksheet, 'AG5', data.tramiteDia);
+  setWorksheetValue(worksheet, 'AH5', data.tramiteMes);
+  setWorksheetValue(worksheet, 'AI5', data.tramiteAnio);
+  setWorksheetValue(worksheet, 'AK3', data.placaLetras);
+  setWorksheetValue(worksheet, 'AL3', data.placaNumeros);
+  setWorksheetValue(worksheet, 'X7', data.marca);
+  setWorksheetValue(worksheet, 'AA7', data.linea);
+  setWorksheetValue(worksheet, 'X10', data.color);
+  setWorksheetValue(worksheet, 'AH10', data.modelo);
+  setWorksheetValue(worksheet, 'AJ10', data.cilindrada);
+  setWorksheetValue(worksheet, 'X13', data.capacidad);
+  setWorksheetValue(worksheet, 'AJ13', data.potenciaHp);
+  setWorksheetValue(worksheet, 'X19', data.tipoCarroceria);
+
+  // Identificacion interna del vehiculo.
+  setWorksheetValue(worksheet, 'AF17', data.numeroMotor);
+  setWorksheetValue(worksheet, 'AF19', data.numeroChasis);
+  setWorksheetValue(worksheet, 'AF22', data.numeroSerie);
+  setWorksheetValue(worksheet, 'AF24', data.vin);
+
+  // Datos del propietario.
+  setWorksheetValue(worksheet, 'B24', data.propietarioPrimerApellido);
+  setWorksheetValue(worksheet, 'J24', data.propietarioSegundoApellido);
+  setWorksheetValue(worksheet, 'Q24', data.propietarioNombres);
+  setWorksheetValue(worksheet, 'T26', data.propietarioDocumento);
+  setWorksheetValue(worksheet, 'B29', data.propietarioDireccion);
+  setWorksheetValue(worksheet, 'N29', data.propietarioCiudad);
+  setWorksheetValue(worksheet, 'T29', data.propietarioTelefono);
+
+  // Datos del comprador.
+  setWorksheetValue(worksheet, 'B37', data.compradorPrimerApellido);
+  setWorksheetValue(worksheet, 'J37', data.compradorSegundoApellido);
+  setWorksheetValue(worksheet, 'Q37', data.compradorNombres);
+  setWorksheetValue(worksheet, 'T40', data.compradorDocumento);
+  setWorksheetValue(worksheet, 'B43', data.compradorDireccion);
+  setWorksheetValue(worksheet, 'N43', data.compradorCiudad);
+  setWorksheetValue(worksheet, 'T43', data.compradorTelefono);
+  setWorksheetValue(worksheet, 'X45', data.observaciones);
+};
+
+const buildTransferFormExcelBuffer = async (vehicle: IVehicleDocument): Promise<Buffer> => {
+  if (!fs.existsSync(TRANSFER_FORM_TEMPLATE_XLSX)) {
+    throw createHttpError(
+      500,
+      'No se encontro la plantilla Excel del formulario de traspaso en backend/templates.'
+    );
+  }
+
+  const saleData = resolveVehicleSaleData(vehicle);
+  const vehicleInfo = resolveVehicleDocumentInfo(vehicle, saleData);
+
+  if (
+    !saleData.comprador?.nombre ||
+    !saleData.comprador?.identificacion ||
+    !saleData.vendedor?.nombre ||
+    !saleData.vendedor?.identificacion
+  ) {
+    throw createHttpError(400, 'El vehiculo no tiene datos de venta completos para diligenciar el Excel.');
+  }
+
+  const baseData = buildBaseTransferTemplateData(vehicle, saleData, vehicleInfo);
+  const aiData = await enrichTransferTemplateDataWithAI(baseData, vehicle, saleData, vehicleInfo);
+
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(TRANSFER_FORM_TEMPLATE_XLSX);
+
+  const worksheet = workbook.getWorksheet('FUN') || workbook.worksheets[0];
+  if (!worksheet) {
+    throw createHttpError(500, 'No fue posible leer la hoja principal de la plantilla Excel.');
+  }
+
+  applyTransferTemplateDataToWorksheet(worksheet, aiData);
+
+  const output = await workbook.xlsx.writeBuffer();
+  return Buffer.isBuffer(output) ? output : Buffer.from(output as ArrayBuffer);
+};
+
+const sendTransferFormExcelResponse = async (
+  vehicle: IVehicleDocument,
+  res: Response
+): Promise<void> => {
+  const buffer = await buildTransferFormExcelBuffer(vehicle);
+  const fileName = `formulario-traspaso-${vehicle.placa}-ia-${Date.now()}.xlsx`;
+
+  res.setHeader(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  );
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+  res.send(buffer);
 };
 
 // Crear nuevo vehículo
@@ -1488,6 +1959,70 @@ export const generateTransferForm = async (req: AuthRequest, res: Response): Pro
   }
 };
 
+export const generateTransferFormExcelAI = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const vehicle = await Vehicle.findById(id);
+
+    if (!vehicle) {
+      res.status(404).json({ message: 'Vehiculo no encontrado' });
+      return;
+    }
+
+    await sendTransferFormExcelResponse(vehicle, res);
+  } catch (error: any) {
+    const statusCode =
+      typeof error?.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 600
+        ? error.statusCode
+        : 500;
+
+    res.status(statusCode).json({
+      message: error?.message || 'Error al generar formulario de traspaso en Excel con IA',
+      ...(error?.extra || {}),
+      error: statusCode >= 500 ? error?.message : undefined,
+    });
+  }
+};
+
+export const generateTransferFormExcelAIByPlate = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const placa = getTrimmedString(req.params.placa).toUpperCase();
+    if (!placa) {
+      res.status(400).json({ message: 'La placa es requerida' });
+      return;
+    }
+
+    const vehicle = await Vehicle.findOne({
+      placa,
+      estado: 'vendido',
+    });
+
+    if (!vehicle) {
+      res.status(404).json({ message: 'No se encontro un vehiculo vendido con esta placa.' });
+      return;
+    }
+
+    await sendTransferFormExcelResponse(vehicle, res);
+  } catch (error: any) {
+    const statusCode =
+      typeof error?.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 600
+        ? error.statusCode
+        : 500;
+
+    res.status(statusCode).json({
+      message:
+        error?.message || 'Error al generar formulario de traspaso en Excel con IA para esta placa',
+      ...(error?.extra || {}),
+      error: statusCode >= 500 ? error?.message : undefined,
+    });
+  }
+};
 // Exportar reporte individual de vehículo a Excel
 export const exportVehicleReport = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -1833,6 +2368,7 @@ export const consultarEstadoTramite = async (req: Request, res: Response): Promi
     const response = {
       found: true,
       vehiculo: {
+        id: vehicle._id?.toString?.() || '',
         marca: vehicle.marca,
         modelo: vehicle.modelo,
         año: vehicle.año,

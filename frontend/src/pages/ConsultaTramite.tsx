@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Search, Package, Calendar, CheckCircle2, FileText, UserCheck, TrendingUp } from 'lucide-react';
+import { Search, Package, Calendar, CheckCircle2, FileText, UserCheck, TrendingUp, FileSpreadsheet } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
-import api from '../services/api';
+import api, { vehiclesAPI } from '../services/api';
 
 interface ConsultaResponse {
   found: boolean;
   vehiculo?: {
+    id?: string;
     marca: string;
     modelo: string;
     año: number;
@@ -25,6 +26,7 @@ const ConsultaTramite: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [resultado, setResultado] = useState<ConsultaResponse | null>(null);
   const [error, setError] = useState('');
+  const [downloadingExcel, setDownloadingExcel] = useState(false);
 
   const handleConsultar = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,6 +104,25 @@ const ConsultaTramite: React.FC = () => {
   const estadoInfo = resultado?.vehiculo?.estadoTramite 
     ? getEstadoInfo(resultado.vehiculo.estadoTramite)
     : null;
+
+  const handleDownloadTransferExcel = async () => {
+    const placaVehiculo = resultado?.vehiculo?.placa || placa;
+    if (!placaVehiculo) return;
+
+    setDownloadingExcel(true);
+    setError('');
+
+    try {
+      await vehiclesAPI.generateTransferFormExcelAIByPlate(placaVehiculo);
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message ||
+        'No fue posible descargar el formulario de traspaso en Excel con IA.';
+      setError(message);
+    } finally {
+      setDownloadingExcel(false);
+    }
+  };
 
   return (
     <Layout>
@@ -274,6 +295,23 @@ const ConsultaTramite: React.FC = () => {
                     </div>
                   </div>
                 )}
+
+                <div className="p-4 bg-surface-800 rounded-lg border border-[#2f3238] flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div>
+                    <p className="text-white font-semibold">Formulario de Traspaso en Excel</p>
+                    <p className="text-sm text-ink-300">
+                      Descarga la plantilla de transito diligenciada automaticamente con IA.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleDownloadTransferExcel}
+                    disabled={downloadingExcel}
+                    className="btn-primary flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <FileSpreadsheet className="h-5 w-5" />
+                    {downloadingExcel ? 'Generando Excel IA...' : 'Descargar Excel IA'}
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="text-center py-12">

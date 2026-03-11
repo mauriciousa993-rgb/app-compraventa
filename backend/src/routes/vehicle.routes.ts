@@ -18,6 +18,8 @@ import {
   updateSeparationData,
   generateContract,
   generateTransferForm,
+  generateTransferFormExcelAI,
+  generateTransferFormExcelAIByPlate,
   getVehiclePhoto,
   consultarEstadoTramite,
 } from '../controllers/vehicle.controller';
@@ -42,6 +44,7 @@ const ocrUpload = multer({
 // Ruta pública para marketplace (sin autenticación)
 router.get('/marketplace', getMarketplaceVehicles);
 router.get('/photo/:filename', getVehiclePhoto);
+router.get('/consulta/:placa/transfer-form-excel', generateTransferFormExcelAIByPlate);
 router.get('/consulta/:placa', consultarEstadoTramite);
 
 // Todas las rutas requieren autenticación
@@ -82,5 +85,6 @@ router.put('/:id/separation-data', authorize('admin', 'vendedor'), updateSeparat
 
 router.get('/:id/contract', authorize('admin', 'vendedor'), generateContract);
 router.get('/:id/transfer-form', authorize('admin', 'vendedor'), generateTransferForm);
+router.get('/:id/transfer-form-excel', authorize('admin', 'vendedor'), generateTransferFormExcelAI);
 
 export default router;
