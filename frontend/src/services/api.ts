@@ -302,12 +302,12 @@ export const vehiclesAPI = {
 
     const url = window.URL.createObjectURL(
       new Blob([response.data], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        type: 'application/pdf',
       })
     );
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `formulario-traspaso-${id}-ia-${Date.now()}.xlsx`);
+    link.setAttribute('download', `formulario-traspaso-${id}-ia-${Date.now()}.pdf`);
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -321,12 +321,12 @@ export const vehiclesAPI = {
 
     const url = window.URL.createObjectURL(
       new Blob([response.data], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        type: 'application/pdf',
       })
     );
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `formulario-traspaso-${normalizedPlate}-ia-${Date.now()}.xlsx`);
+    link.setAttribute('download', `formulario-traspaso-${normalizedPlate}-ia-${Date.now()}.pdf`);
     document.body.appendChild(link);
     link.click();
     link.remove();

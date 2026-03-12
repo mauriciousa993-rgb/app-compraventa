@@ -136,12 +136,12 @@ const VehicleList: React.FC = () => {
         try {
           await vehiclesAPI.generateTransferFormExcelAI(selectedVehicle._id);
         } catch (error) {
-          console.error('Error al generar formulario de traspaso en Excel IA durante la venta:', error);
-          documentErrors.push('formulario de traspaso en Excel IA');
+          console.error('Error al generar formulario de traspaso en PDF IA durante la venta:', error);
+          documentErrors.push('formulario de traspaso en PDF IA');
         }
 
         if (documentErrors.length === 0) {
-          alert('Datos de venta guardados exitosamente. El vehiculo fue marcado como vendido y se descargaron contrato + formulario de traspaso en Excel IA.');
+          alert('Datos de venta guardados exitosamente. El vehiculo fue marcado como vendido y se descargaron contrato + formulario de traspaso en PDF IA.');
         } else {
           alert(`Datos de venta guardados y vehiculo marcado como vendido, pero no se pudo descargar: ${documentErrors.join(', ')}.`);
         }
@@ -187,8 +187,8 @@ const VehicleList: React.FC = () => {
     try {
       await vehiclesAPI.generateTransferFormExcelAI(vehicleId);
     } catch (error) {
-      console.error('Error al generar formulario de traspaso en Excel IA:', error);
-      alert('Error al generar el formulario de traspaso en Excel IA. Asegurate de que el vehiculo tenga datos de venta completos.');
+      console.error('Error al generar formulario de traspaso en PDF IA:', error);
+      alert('Error al generar el formulario de traspaso en PDF IA. Asegurate de que el vehiculo tenga datos de venta completos.');
     }
   };
 
@@ -892,7 +892,7 @@ const VehicleList: React.FC = () => {
                                 className="px-4 py-2 text-sm bg-[#2b1b12] text-white hover:bg-[#352217] rounded-lg transition-colors border border-[#6a4530] flex items-center gap-2"
                               >
                                 <FileText className="h-4 w-4" />
-                                Traspaso Excel IA
+                                Traspaso PDF IA
                               </button>
                             </>
                           )}

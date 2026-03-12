@@ -117,7 +117,7 @@ const ConsultaTramite: React.FC = () => {
     } catch (err: any) {
       const message =
         err?.response?.data?.message ||
-        'No fue posible descargar el formulario de traspaso en Excel con IA.';
+        'No fue posible descargar el formulario de traspaso en PDF plantilla con IA.';
       setError(message);
     } finally {
       setDownloadingExcel(false);
@@ -298,9 +298,9 @@ const ConsultaTramite: React.FC = () => {
 
                 <div className="p-4 bg-surface-800 rounded-lg border border-[#2f3238] flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                   <div>
-                    <p className="text-white font-semibold">Formulario de Traspaso en Excel</p>
+                    <p className="text-white font-semibold">Formulario de Traspaso en PDF</p>
                     <p className="text-sm text-ink-300">
-                      Descarga la plantilla de transito diligenciada automaticamente con IA.
+                      Descarga el PDF oficial diligenciado automaticamente con IA.
                     </p>
                   </div>
                   <button
@@ -309,7 +309,7 @@ const ConsultaTramite: React.FC = () => {
                     className="btn-primary flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     <FileSpreadsheet className="h-5 w-5" />
-                    {downloadingExcel ? 'Generando Excel IA...' : 'Descargar Excel IA'}
+                    {downloadingExcel ? 'Generando PDF IA...' : 'Descargar PDF IA'}
                   </button>
                 </div>
               </div>

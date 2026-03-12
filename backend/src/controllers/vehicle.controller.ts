@@ -7,6 +7,7 @@ import ExcelJS from 'exceljs';
 import path from 'path';
 import fs from 'fs';
 import PDFDocument from 'pdfkit';
+import { PDFDocument as PDFLibDocument, StandardFonts, rgb } from 'pdf-lib';
 import { ensureUploadsDir, getPhotoFileName, getUploadsDir } from '../utils/uploads';
 import { isUsingCloudinary } from '../middleware/upload.middleware';
 
@@ -16,9 +17,9 @@ const NEGOTIATION_STATUS = 'en_negociacion';
 const INVENTORY_STATUSES = ['en_proceso', SALE_READY_STATUS, NEGOTIATION_STATUS];
 const OPENAI_TEXT_MODEL = process.env.OPENAI_TEXT_MODEL || process.env.OPENAI_VISION_MODEL || 'gpt-4o-mini';
 const OPENAI_API_BASE_URL = process.env.OPENAI_API_BASE_URL || 'https://api.openai.com/v1';
-const TRANSFER_FORM_TEMPLATE_XLSX = path.join(
+const TRANSFER_FORM_TEMPLATE_PDF = path.join(
   __dirname,
-  '../../templates/FORMULARIO-TRAMITES-DE-TRANSITO-DILIGENCIABLE-EXCEL.xlsx'
+  '../../templates/Formulario traspaso de vehiculos.pdf'
 );
 
 const normalizeVehicleType = (value: any): 'suv' | 'pickup' | 'sedan' | 'hatchback' => {
@@ -729,72 +730,168 @@ const enrichTransferTemplateDataWithAI = async (
     const parsed = parseJsonFromModelContent(rawContent) as Partial<TransferFormExcelTemplateData>;
     return sanitizeTransferTemplateData(parsed, baseData);
   } catch (error: any) {
-    console.error('Error al enriquecer el formulario Excel con IA:', error?.response?.data || error);
+    console.error('Error al enriquecer el formulario PDF con IA:', error?.response?.data || error);
     return baseData;
   }
 };
 
-const setWorksheetValue = (worksheet: ExcelJS.Worksheet, address: string, value: string) => {
-  if (!value) return;
-  worksheet.getCell(address).value = value;
+type TransferPdfFieldLayout = {
+  xPct: number;
+  yPct: number;
+  size?: number;
+  bold?: boolean;
+  pageIndex?: number;
 };
 
-const applyTransferTemplateDataToWorksheet = (
-  worksheet: ExcelJS.Worksheet,
-  data: TransferFormExcelTemplateData
+const TRANSFER_PDF_FIELD_LAYOUT: Partial<Record<keyof TransferFormExcelTemplateData, TransferPdfFieldLayout>> = {
+  organismoNombre: { xPct: 0.621, yPct: 0.021, size: 7, bold: true },
+  organismoCiudad: { xPct: 0.621, yPct: 0.060, size: 7 },
+  organismoCodigo: { xPct: 0.697, yPct: 0.060, size: 7 },
+  tramiteDia: { xPct: 0.776, yPct: 0.079, size: 7, bold: true },
+  tramiteMes: { xPct: 0.813, yPct: 0.079, size: 7, bold: true },
+  tramiteAnio: { xPct: 0.850, yPct: 0.079, size: 7, bold: true },
+  placaLetras: { xPct: 0.924, yPct: 0.041, size: 10, bold: true },
+  placaNumeros: { xPct: 0.962, yPct: 0.041, size: 10, bold: true },
+  marca: { xPct: 0.449, yPct: 0.110, size: 8, bold: true },
+  linea: { xPct: 0.579, yPct: 0.110, size: 8 },
+  color: { xPct: 0.449, yPct: 0.169, size: 8 },
+  modelo: { xPct: 0.814, yPct: 0.169, size: 8, bold: true },
+  cilindrada: { xPct: 0.890, yPct: 0.169, size: 8 },
+  capacidad: { xPct: 0.449, yPct: 0.247, size: 8 },
+  potenciaHp: { xPct: 0.890, yPct: 0.247, size: 8 },
+  tipoCarroceria: { xPct: 0.449, yPct: 0.362, size: 8 },
+  numeroMotor: { xPct: 0.739, yPct: 0.333, size: 7, bold: true },
+  numeroChasis: { xPct: 0.739, yPct: 0.381, size: 7, bold: true },
+  numeroSerie: { xPct: 0.739, yPct: 0.435, size: 7, bold: true },
+  vin: { xPct: 0.739, yPct: 0.507, size: 7, bold: true },
+  propietarioPrimerApellido: { xPct: 0.000, yPct: 0.507, size: 8, bold: true },
+  propietarioSegundoApellido: { xPct: 0.135, yPct: 0.507, size: 8, bold: true },
+  propietarioNombres: { xPct: 0.293, yPct: 0.507, size: 8, bold: true },
+  propietarioDocumento: { xPct: 0.361, yPct: 0.558, size: 8, bold: true },
+  propietarioDireccion: { xPct: 0.000, yPct: 0.632, size: 8 },
+  propietarioCiudad: { xPct: 0.192, yPct: 0.632, size: 8 },
+  propietarioTelefono: { xPct: 0.361, yPct: 0.632, size: 8 },
+  compradorPrimerApellido: { xPct: 0.000, yPct: 0.820, size: 8, bold: true },
+  compradorSegundoApellido: { xPct: 0.135, yPct: 0.820, size: 8, bold: true },
+  compradorNombres: { xPct: 0.293, yPct: 0.820, size: 8, bold: true },
+  compradorDocumento: { xPct: 0.361, yPct: 0.878, size: 8, bold: true },
+  compradorDireccion: { xPct: 0.000, yPct: 0.944, size: 8 },
+  compradorCiudad: { xPct: 0.192, yPct: 0.944, size: 8 },
+  compradorTelefono: { xPct: 0.361, yPct: 0.944, size: 8 },
+  observaciones: { xPct: 0.449, yPct: 0.969, size: 6 },
+};
+
+const TRANSFER_PDF_MARKS = {
+  tramiteTraspaso: { xPct: 0.131, yPct: 0.110, pageIndex: 0 },
+  propietarioDocumentoCC: { xPct: 0.001, yPct: 0.558, pageIndex: 0 },
+  compradorDocumentoCC: { xPct: 0.001, yPct: 0.878, pageIndex: 0 },
+};
+
+const drawPdfTextByPercent = (
+  page: any,
+  value: string,
+  xPct: number,
+  yPct: number,
+  size: number,
+  font: any
 ) => {
-  // Selecciona "TRASPASO" en el bloque de tramite solicitado.
-  setWorksheetValue(worksheet, 'I7', 'X');
+  if (!value) return;
 
-  // Encabezado, placa y datos basicos del vehiculo.
-  setWorksheetValue(worksheet, 'AB2', `NOMBRE: ${data.organismoNombre}`);
-  setWorksheetValue(worksheet, 'AB4', data.organismoCiudad);
-  setWorksheetValue(worksheet, 'AD4', data.organismoCodigo);
-  setWorksheetValue(worksheet, 'AG5', data.tramiteDia);
-  setWorksheetValue(worksheet, 'AH5', data.tramiteMes);
-  setWorksheetValue(worksheet, 'AI5', data.tramiteAnio);
-  setWorksheetValue(worksheet, 'AK3', data.placaLetras);
-  setWorksheetValue(worksheet, 'AL3', data.placaNumeros);
-  setWorksheetValue(worksheet, 'X7', data.marca);
-  setWorksheetValue(worksheet, 'AA7', data.linea);
-  setWorksheetValue(worksheet, 'X10', data.color);
-  setWorksheetValue(worksheet, 'AH10', data.modelo);
-  setWorksheetValue(worksheet, 'AJ10', data.cilindrada);
-  setWorksheetValue(worksheet, 'X13', data.capacidad);
-  setWorksheetValue(worksheet, 'AJ13', data.potenciaHp);
-  setWorksheetValue(worksheet, 'X19', data.tipoCarroceria);
+  const width = page.getWidth();
+  const height = page.getHeight();
+  const paddingX = 10;
+  const paddingY = 8;
+  const usableWidth = width - paddingX * 2;
+  const usableHeight = height - paddingY * 2;
+  const x = paddingX + usableWidth * xPct;
+  const yTop = paddingY + usableHeight * yPct;
+  const y = height - yTop - size;
 
-  // Identificacion interna del vehiculo.
-  setWorksheetValue(worksheet, 'AF17', data.numeroMotor);
-  setWorksheetValue(worksheet, 'AF19', data.numeroChasis);
-  setWorksheetValue(worksheet, 'AF22', data.numeroSerie);
-  setWorksheetValue(worksheet, 'AF24', data.vin);
-
-  // Datos del propietario.
-  setWorksheetValue(worksheet, 'B24', data.propietarioPrimerApellido);
-  setWorksheetValue(worksheet, 'J24', data.propietarioSegundoApellido);
-  setWorksheetValue(worksheet, 'Q24', data.propietarioNombres);
-  setWorksheetValue(worksheet, 'T26', data.propietarioDocumento);
-  setWorksheetValue(worksheet, 'B29', data.propietarioDireccion);
-  setWorksheetValue(worksheet, 'N29', data.propietarioCiudad);
-  setWorksheetValue(worksheet, 'T29', data.propietarioTelefono);
-
-  // Datos del comprador.
-  setWorksheetValue(worksheet, 'B37', data.compradorPrimerApellido);
-  setWorksheetValue(worksheet, 'J37', data.compradorSegundoApellido);
-  setWorksheetValue(worksheet, 'Q37', data.compradorNombres);
-  setWorksheetValue(worksheet, 'T40', data.compradorDocumento);
-  setWorksheetValue(worksheet, 'B43', data.compradorDireccion);
-  setWorksheetValue(worksheet, 'N43', data.compradorCiudad);
-  setWorksheetValue(worksheet, 'T43', data.compradorTelefono);
-  setWorksheetValue(worksheet, 'X45', data.observaciones);
+  page.drawText(value, {
+    x,
+    y,
+    size,
+    font,
+    color: rgb(0, 0, 0),
+  });
 };
 
-const buildTransferFormExcelBuffer = async (vehicle: IVehicleDocument): Promise<Buffer> => {
-  if (!fs.existsSync(TRANSFER_FORM_TEMPLATE_XLSX)) {
+const applyTransferTemplateDataToPdf = (
+  pdfDoc: PDFLibDocument,
+  data: TransferFormExcelTemplateData,
+  regularFont: any,
+  boldFont: any
+) => {
+  const pages = pdfDoc.getPages();
+  if (pages.length === 0) {
+    throw createHttpError(500, 'La plantilla PDF no contiene paginas para diligenciar.');
+  }
+
+  const page0 = pages[0];
+  const drawField = (
+    fieldName: keyof TransferFormExcelTemplateData,
+    fieldValue: string
+  ) => {
+    const cfg = TRANSFER_PDF_FIELD_LAYOUT[fieldName];
+    if (!cfg) return;
+    const page = pages[cfg.pageIndex ?? 0] || page0;
+    drawPdfTextByPercent(
+      page,
+      fieldValue,
+      cfg.xPct,
+      cfg.yPct,
+      cfg.size || 8,
+      cfg.bold ? boldFont : regularFont
+    );
+  };
+
+  drawField('organismoNombre', `NOMBRE: ${data.organismoNombre}`);
+  drawField('organismoCiudad', data.organismoCiudad);
+  drawField('organismoCodigo', data.organismoCodigo);
+  drawField('tramiteDia', data.tramiteDia);
+  drawField('tramiteMes', data.tramiteMes);
+  drawField('tramiteAnio', data.tramiteAnio);
+  drawField('placaLetras', data.placaLetras);
+  drawField('placaNumeros', data.placaNumeros);
+  drawField('marca', data.marca);
+  drawField('linea', data.linea);
+  drawField('color', data.color);
+  drawField('modelo', data.modelo);
+  drawField('cilindrada', data.cilindrada);
+  drawField('capacidad', data.capacidad);
+  drawField('potenciaHp', data.potenciaHp);
+  drawField('tipoCarroceria', data.tipoCarroceria);
+  drawField('numeroMotor', data.numeroMotor);
+  drawField('numeroChasis', data.numeroChasis);
+  drawField('numeroSerie', data.numeroSerie);
+  drawField('vin', data.vin);
+  drawField('propietarioPrimerApellido', data.propietarioPrimerApellido);
+  drawField('propietarioSegundoApellido', data.propietarioSegundoApellido);
+  drawField('propietarioNombres', data.propietarioNombres);
+  drawField('propietarioDocumento', data.propietarioDocumento);
+  drawField('propietarioDireccion', data.propietarioDireccion);
+  drawField('propietarioCiudad', data.propietarioCiudad);
+  drawField('propietarioTelefono', data.propietarioTelefono);
+  drawField('compradorPrimerApellido', data.compradorPrimerApellido);
+  drawField('compradorSegundoApellido', data.compradorSegundoApellido);
+  drawField('compradorNombres', data.compradorNombres);
+  drawField('compradorDocumento', data.compradorDocumento);
+  drawField('compradorDireccion', data.compradorDireccion);
+  drawField('compradorCiudad', data.compradorCiudad);
+  drawField('compradorTelefono', data.compradorTelefono);
+  drawField('observaciones', data.observaciones);
+
+  Object.values(TRANSFER_PDF_MARKS).forEach((mark) => {
+    const page = pages[mark.pageIndex] || page0;
+    drawPdfTextByPercent(page, 'X', mark.xPct, mark.yPct, 8, boldFont);
+  });
+};
+
+const buildTransferFormTemplatePdfBuffer = async (vehicle: IVehicleDocument): Promise<Buffer> => {
+  if (!fs.existsSync(TRANSFER_FORM_TEMPLATE_PDF)) {
     throw createHttpError(
       500,
-      'No se encontro la plantilla Excel del formulario de traspaso en backend/templates.'
+      'No se encontro la plantilla PDF del formulario de traspaso en backend/templates.'
     );
   }
 
@@ -807,37 +904,31 @@ const buildTransferFormExcelBuffer = async (vehicle: IVehicleDocument): Promise<
     !saleData.vendedor?.nombre ||
     !saleData.vendedor?.identificacion
   ) {
-    throw createHttpError(400, 'El vehiculo no tiene datos de venta completos para diligenciar el Excel.');
+    throw createHttpError(400, 'El vehiculo no tiene datos de venta completos para diligenciar el PDF.');
   }
 
   const baseData = buildBaseTransferTemplateData(vehicle, saleData, vehicleInfo);
   const aiData = await enrichTransferTemplateDataWithAI(baseData, vehicle, saleData, vehicleInfo);
 
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(TRANSFER_FORM_TEMPLATE_XLSX);
+  const templateBytes = fs.readFileSync(TRANSFER_FORM_TEMPLATE_PDF);
+  const pdfDoc = await PDFLibDocument.load(templateBytes);
+  const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  const worksheet = workbook.getWorksheet('FUN') || workbook.worksheets[0];
-  if (!worksheet) {
-    throw createHttpError(500, 'No fue posible leer la hoja principal de la plantilla Excel.');
-  }
+  applyTransferTemplateDataToPdf(pdfDoc, aiData, regularFont, boldFont);
 
-  applyTransferTemplateDataToWorksheet(worksheet, aiData);
-
-  const output = await workbook.xlsx.writeBuffer();
-  return Buffer.isBuffer(output) ? output : Buffer.from(output as ArrayBuffer);
+  const output = await pdfDoc.save();
+  return Buffer.from(output);
 };
 
-const sendTransferFormExcelResponse = async (
+const sendTransferFormPdfResponse = async (
   vehicle: IVehicleDocument,
   res: Response
 ): Promise<void> => {
-  const buffer = await buildTransferFormExcelBuffer(vehicle);
-  const fileName = `formulario-traspaso-${vehicle.placa}-ia-${Date.now()}.xlsx`;
+  const buffer = await buildTransferFormTemplatePdfBuffer(vehicle);
+  const fileName = `formulario-traspaso-${vehicle.placa}-ia-${Date.now()}.pdf`;
 
-  res.setHeader(
-    'Content-Type',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-  );
+  res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
   res.send(buffer);
 };
@@ -1972,7 +2063,7 @@ export const generateTransferFormExcelAI = async (
       return;
     }
 
-    await sendTransferFormExcelResponse(vehicle, res);
+    await sendTransferFormPdfResponse(vehicle, res);
   } catch (error: any) {
     const statusCode =
       typeof error?.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 600
@@ -1980,7 +2071,7 @@ export const generateTransferFormExcelAI = async (
         : 500;
 
     res.status(statusCode).json({
-      message: error?.message || 'Error al generar formulario de traspaso en Excel con IA',
+      message: error?.message || 'Error al generar formulario de traspaso en PDF plantilla con IA',
       ...(error?.extra || {}),
       error: statusCode >= 500 ? error?.message : undefined,
     });
@@ -2008,7 +2099,7 @@ export const generateTransferFormExcelAIByPlate = async (
       return;
     }
 
-    await sendTransferFormExcelResponse(vehicle, res);
+    await sendTransferFormPdfResponse(vehicle, res);
   } catch (error: any) {
     const statusCode =
       typeof error?.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 600
@@ -2017,7 +2108,7 @@ export const generateTransferFormExcelAIByPlate = async (
 
     res.status(statusCode).json({
       message:
-        error?.message || 'Error al generar formulario de traspaso en Excel con IA para esta placa',
+        error?.message || 'Error al generar formulario de traspaso en PDF plantilla con IA para esta placa',
       ...(error?.extra || {}),
       error: statusCode >= 500 ? error?.message : undefined,
     });
