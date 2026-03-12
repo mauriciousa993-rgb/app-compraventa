@@ -179,7 +179,7 @@ const VehicleList: React.FC = () => {
       await vehiclesAPI.generateContract(vehicleId);
     } catch (error) {
       console.error('Error al generar contrato:', error);
-      alert('Error al generar el contrato. Asegurate de que el vehiculo tenga datos de venta registrados.');
+      alert('Error al generar el contrato.');
     }
   };
 
@@ -188,7 +188,7 @@ const VehicleList: React.FC = () => {
       await vehiclesAPI.generateTransferFormExcelAI(vehicleId);
     } catch (error) {
       console.error('Error al generar formulario de traspaso en PDF IA:', error);
-      alert('Error al generar el formulario de traspaso en PDF IA. Asegurate de que el vehiculo tenga datos de venta completos.');
+      alert('Error al generar el formulario de traspaso en PDF IA.');
     }
   };
 

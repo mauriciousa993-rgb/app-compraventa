@@ -200,7 +200,7 @@ export interface Vehicle {
   _id: string;
   marca: string;
   modelo: string;
-  tipoVehiculo: 'suv' | 'pickup' | 'sedan' | 'hatchback';
+  tipoVehiculo: 'suv' | 'pickup' | 'sedan' | 'hatchback' | 'motocicleta' | 'motocarro';
   año: number;
   placa: string;
   vin: string;
@@ -230,7 +230,15 @@ export interface Vehicle {
   inversionistas: Inversionista[];
   tieneInversionistas: boolean;
   estado: 'en_proceso' | 'listo_venta' | 'en_negociacion' | 'separado' | 'vendido' | 'retirado';
-  estadoTramite?: 'firma_documentos' | 'radicacion' | 'recepcion_tarjeta' | 'entrega_cliente' | 'completado';
+  estadoTramite?:
+    | 'firma_documentos'
+    | 'radicacion'
+    | 'recepcion_tarjeta'
+    | 'entrega_cliente'
+    | 'completado'
+    | 'revision_documentos'
+    | 'aprobado'
+    | 'rechazado';
   datosTarjetaPropiedad?: DatosTarjetaPropiedad;
   documentacion: {
     prenda: {
@@ -317,7 +325,7 @@ export interface Statistics {
 export interface VehicleFormData {
   marca: string;
   modelo: string;
-  tipoVehiculo: 'suv' | 'pickup' | 'sedan' | 'hatchback';
+  tipoVehiculo: 'suv' | 'pickup' | 'sedan' | 'hatchback' | 'motocicleta' | 'motocarro';
   año: number;
   placa: string;
   vin: string;

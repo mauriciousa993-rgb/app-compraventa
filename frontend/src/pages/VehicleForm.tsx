@@ -137,7 +137,12 @@ const mapVisionAiExtractedToDraft = (
 ): Partial<VehicleCardExtractedData> => {
   const rawType = typeof extracted?.tipoVehiculo === 'string' ? extracted.tipoVehiculo.toLowerCase() : '';
   const tipoVehiculo =
-    rawType === 'suv' || rawType === 'pickup' || rawType === 'sedan' || rawType === 'hatchback'
+    rawType === 'suv' ||
+    rawType === 'pickup' ||
+    rawType === 'sedan' ||
+    rawType === 'hatchback' ||
+    rawType === 'motocicleta' ||
+    rawType === 'motocarro'
       ? (rawType as VehicleCardExtractedData['tipoVehiculo'])
       : null;
   const anioCandidate =
@@ -222,6 +227,8 @@ const VEHICLE_TYPE_OPTIONS = [
   { value: 'suv', label: 'SUV' },
   { value: 'pickup', label: 'Pickup' },
   { value: 'hatchback', label: 'Hatchback' },
+  { value: 'motocicleta', label: 'Motocicleta' },
+  { value: 'motocarro', label: 'Motocarro' },
 ] as const;
 
 const PROPERTY_CARD_EDITABLE_FIELDS: Array<{
@@ -259,7 +266,13 @@ const VehicleForm: React.FC = () => {
     // Datos básicos
     marca: '',
     modelo: '',
-    tipoVehiculo: 'sedan' as 'suv' | 'pickup' | 'sedan' | 'hatchback',
+    tipoVehiculo: 'sedan' as
+      | 'suv'
+      | 'pickup'
+      | 'sedan'
+      | 'hatchback'
+      | 'motocicleta'
+      | 'motocarro',
     año: new Date().getFullYear(),
 
     placa: '',
@@ -608,7 +621,12 @@ const VehicleForm: React.FC = () => {
       }));
     } else if (name === 'tipoVehiculo') {
       const normalizedType =
-        value === 'suv' || value === 'pickup' || value === 'hatchback' || value === 'sedan'
+        value === 'suv' ||
+        value === 'pickup' ||
+        value === 'hatchback' ||
+        value === 'sedan' ||
+        value === 'motocicleta' ||
+        value === 'motocarro'
           ? value
           : 'sedan';
       setFormData(prev => ({
@@ -689,7 +707,9 @@ const VehicleForm: React.FC = () => {
         tipoVehiculo:
           mode === 'overwrite'
             ? extracted.tipoVehiculo || prev.tipoVehiculo
-            : prev.tipoVehiculo || extracted.tipoVehiculo || prev.tipoVehiculo,
+            : prev.tipoVehiculo === 'sedan' && extracted.tipoVehiculo
+              ? extracted.tipoVehiculo
+              : prev.tipoVehiculo,
         año: pickCardNumberValue(extracted.año, prev.año, mode),
         placa: pickCardTextValue(extracted.placa, prev.placa, mode),
         vin: nextVin,
@@ -1003,7 +1023,12 @@ const VehicleForm: React.FC = () => {
     setPropertyCardDraft((prev) => ({
       ...prev,
       tipoVehiculo:
-        value === 'sedan' || value === 'suv' || value === 'pickup' || value === 'hatchback'
+        value === 'sedan' ||
+        value === 'suv' ||
+        value === 'pickup' ||
+        value === 'hatchback' ||
+        value === 'motocicleta' ||
+        value === 'motocarro'
           ? value
           : null,
     }));
@@ -1182,7 +1207,9 @@ const VehicleForm: React.FC = () => {
         tipoVehiculo:
           formData.tipoVehiculo === 'suv' ||
           formData.tipoVehiculo === 'pickup' ||
-          formData.tipoVehiculo === 'hatchback'
+          formData.tipoVehiculo === 'hatchback' ||
+          formData.tipoVehiculo === 'motocicleta' ||
+          formData.tipoVehiculo === 'motocarro'
             ? formData.tipoVehiculo
             : 'sedan',
         estadoTramite:
@@ -2635,6 +2662,7 @@ const VehicleForm: React.FC = () => {
                       <option value="radicacion">Radicación</option>
                       <option value="recepcion_tarjeta">Recepción de Tarjeta de Propiedad</option>
                       <option value="entrega_cliente">Entrega de Tarjeta al Cliente</option>
+                      <option value="completado">Trámite Completado</option>
                     </select>
                     <p className="mt-2 text-xs text-green-600">
                       Seguimiento del proceso de traspaso del vehículo

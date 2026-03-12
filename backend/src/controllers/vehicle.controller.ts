@@ -11,7 +11,16 @@ import { PDFDocument as PDFLibDocument } from 'pdf-lib';
 import { ensureUploadsDir, getPhotoFileName, getUploadsDir } from '../utils/uploads';
 import { isUsingCloudinary } from '../middleware/upload.middleware';
 
-const VEHICLE_TYPES = new Set(['suv', 'pickup', 'sedan', 'hatchback']);
+type VehicleType = 'suv' | 'pickup' | 'sedan' | 'hatchback' | 'motocicleta' | 'motocarro';
+
+const VEHICLE_TYPES = new Set<VehicleType>([
+  'suv',
+  'pickup',
+  'sedan',
+  'hatchback',
+  'motocicleta',
+  'motocarro',
+]);
 const SALE_READY_STATUS = 'listo_venta';
 const NEGOTIATION_STATUS = 'en_negociacion';
 const INVENTORY_STATUSES = ['en_proceso', SALE_READY_STATUS, NEGOTIATION_STATUS];
@@ -22,9 +31,38 @@ const TRANSFER_FORM_TEMPLATE_PDF = path.join(
   '../../templates/Formulario traspaso de vehiculos (Editable.pdf'
 );
 
-const normalizeVehicleType = (value: any): 'suv' | 'pickup' | 'sedan' | 'hatchback' => {
+const normalizeVehicleType = (value: any): VehicleType => {
   const parsed = typeof value === 'string' ? value.toLowerCase().trim() : '';
-  return VEHICLE_TYPES.has(parsed) ? (parsed as 'suv' | 'pickup' | 'sedan' | 'hatchback') : 'sedan';
+  return VEHICLE_TYPES.has(parsed as VehicleType) ? (parsed as VehicleType) : 'sedan';
+};
+
+const getVehicleBodyTypeFallback = (vehicleType: VehicleType): string => {
+  if (vehicleType === 'motocicleta') return 'MOTOCICLETA';
+  if (vehicleType === 'motocarro') return 'MOTOCARRO';
+  if (vehicleType === 'pickup') return 'PICKUP';
+  if (vehicleType === 'hatchback') return 'HATCHBACK';
+  if (vehicleType === 'suv') return 'SUV';
+  return 'SEDAN';
+};
+
+const getVehicleClassFallback = (vehicleType: VehicleType): string => {
+  if (vehicleType === 'motocicleta') return 'MOTOCICLETA';
+  if (vehicleType === 'motocarro') return 'MOTOCARRO';
+  if (vehicleType === 'pickup') return 'CAMIONETA';
+  if (vehicleType === 'suv') return 'CAMPERO';
+  return 'AUTOMOVIL';
+};
+
+const getVehicleCapacityFallback = (vehicleType: VehicleType): string => {
+  if (vehicleType === 'motocicleta') return '2';
+  if (vehicleType === 'motocarro') return '3';
+  return '5';
+};
+
+const getVehicleDoorsFallback = (vehicleType: VehicleType): number => {
+  if (vehicleType === 'motocicleta') return 0;
+  if (vehicleType === 'motocarro') return 3;
+  return 4;
 };
 
 const calculateVehicleTotalExpenses = (vehicle: any): number => {
@@ -191,17 +229,66 @@ const resolveVehicleSaleData = (
   const currentSale = (vehicle.datosVenta || {}) as Partial<VehicleSaleData>;
   const incomingSale = (source || {}) as Partial<VehicleSaleData>;
   const cardData = (vehicle.datosTarjetaPropiedad || {}) as Partial<VehicleCardData>;
+  const vehicleType = normalizeVehicleType(vehicle.tipoVehiculo);
+  const sellerNameFromDocument = getFirstString(
+    cardData.propietario,
+    currentSale.transaccion?.vendedorAnterior,
+    incomingSale.transaccion?.vendedorAnterior
+  );
+  const sellerDocumentFromCard = getFirstString(
+    cardData.identificacionPropietario,
+    currentSale.transaccion?.cedulaVendedorAnterior,
+    incomingSale.transaccion?.cedulaVendedorAnterior
+  );
 
   return {
     vendedor: {
       ...defaults.vendedor,
       ...(currentSale.vendedor || {}),
       ...(incomingSale.vendedor || {}),
+      nombre: getFirstString(
+        incomingSale.vendedor?.nombre,
+        currentSale.vendedor?.nombre,
+        sellerNameFromDocument
+      ),
+      identificacion: getFirstString(
+        incomingSale.vendedor?.identificacion,
+        currentSale.vendedor?.identificacion,
+        sellerDocumentFromCard
+      ),
+      direccion: getFirstString(
+        incomingSale.vendedor?.direccion,
+        currentSale.vendedor?.direccion
+      ),
+      telefono: getFirstString(
+        incomingSale.vendedor?.telefono,
+        currentSale.vendedor?.telefono
+      ),
     },
     comprador: {
       ...defaults.comprador,
       ...(currentSale.comprador || {}),
       ...(incomingSale.comprador || {}),
+      nombre: getFirstString(
+        incomingSale.comprador?.nombre,
+        currentSale.comprador?.nombre
+      ),
+      identificacion: getFirstString(
+        incomingSale.comprador?.identificacion,
+        currentSale.comprador?.identificacion
+      ),
+      direccion: getFirstString(
+        incomingSale.comprador?.direccion,
+        currentSale.comprador?.direccion
+      ),
+      telefono: getFirstString(
+        incomingSale.comprador?.telefono,
+        currentSale.comprador?.telefono
+      ),
+      email: getFirstString(
+        incomingSale.comprador?.email,
+        currentSale.comprador?.email
+      ),
     },
     vehiculoAdicional: {
       ...defaults.vehiculoAdicional,
@@ -210,12 +297,14 @@ const resolveVehicleSaleData = (
       tipoCarroceria: getFirstString(
         incomingSale.vehiculoAdicional?.tipoCarroceria,
         currentSale.vehiculoAdicional?.tipoCarroceria,
-        cardData.tipoCarroceria
+        cardData.tipoCarroceria,
+        getVehicleBodyTypeFallback(vehicleType)
       ),
       capacidad: getFirstString(
         incomingSale.vehiculoAdicional?.capacidad,
         currentSale.vehiculoAdicional?.capacidad,
-        cardData.capacidad
+        cardData.capacidad,
+        getVehicleCapacityFallback(vehicleType)
       ),
       cilindrada: getFirstString(
         incomingSale.vehiculoAdicional?.cilindrada,
@@ -225,11 +314,13 @@ const resolveVehicleSaleData = (
       claseVehiculo: getFirstString(
         incomingSale.vehiculoAdicional?.claseVehiculo,
         currentSale.vehiculoAdicional?.claseVehiculo,
-        cardData.claseVehiculo
+        cardData.claseVehiculo,
+        getVehicleClassFallback(vehicleType)
       ),
       numeroPuertas: getFirstNumber(
         incomingSale.vehiculoAdicional?.numeroPuertas,
         currentSale.vehiculoAdicional?.numeroPuertas,
+        getVehicleDoorsFallback(vehicleType),
         defaults.vehiculoAdicional.numeroPuertas
       ),
       numeroMotor: getFirstString(
@@ -246,7 +337,8 @@ const resolveVehicleSaleData = (
       linea: getFirstString(
         incomingSale.vehiculoAdicional?.linea,
         currentSale.vehiculoAdicional?.linea,
-        cardData.linea
+        cardData.linea,
+        vehicle.modelo
       ),
       actaManifiesto: getFirstString(
         incomingSale.vehiculoAdicional?.actaManifiesto,
@@ -269,7 +361,9 @@ const resolveVehicleSaleData = (
       ...(incomingSale.transaccion || {}),
       lugarCelebracion: getFirstString(
         incomingSale.transaccion?.lugarCelebracion,
-        currentSale.transaccion?.lugarCelebracion
+        currentSale.transaccion?.lugarCelebracion,
+        incomingSale.vehiculoAdicional?.sitioMatricula,
+        currentSale.vehiculoAdicional?.sitioMatricula
       ),
       fechaCelebracion: getFirstDate(
         incomingSale.transaccion?.fechaCelebracion,
@@ -287,12 +381,14 @@ const resolveVehicleSaleData = (
       vendedorAnterior: getFirstString(
         incomingSale.transaccion?.vendedorAnterior,
         currentSale.transaccion?.vendedorAnterior,
-        cardData.propietario
+        cardData.propietario,
+        sellerNameFromDocument
       ),
       cedulaVendedorAnterior: getFirstString(
         incomingSale.transaccion?.cedulaVendedorAnterior,
         currentSale.transaccion?.cedulaVendedorAnterior,
-        cardData.identificacionPropietario
+        cardData.identificacionPropietario,
+        sellerDocumentFromCard
       ),
       diasTraspaso: getFirstNumber(
         incomingSale.transaccion?.diasTraspaso,
@@ -312,7 +408,9 @@ const resolveVehicleSaleData = (
         incomingSale.transaccion?.domicilioContractual,
         currentSale.transaccion?.domicilioContractual,
         incomingSale.transaccion?.lugarCelebracion,
-        currentSale.transaccion?.lugarCelebracion
+        currentSale.transaccion?.lugarCelebracion,
+        incomingSale.vehiculoAdicional?.sitioMatricula,
+        currentSale.vehiculoAdicional?.sitioMatricula
       ),
       clausulasAdicionales: getFirstString(
         incomingSale.transaccion?.clausulasAdicionales,
@@ -816,15 +914,6 @@ const buildTransferFormTemplatePdfBuffer = async (vehicle: IVehicleDocument): Pr
   const saleData = resolveVehicleSaleData(vehicle);
   const vehicleInfo = resolveVehicleDocumentInfo(vehicle, saleData);
 
-  if (
-    !saleData.comprador?.nombre ||
-    !saleData.comprador?.identificacion ||
-    !saleData.vendedor?.nombre ||
-    !saleData.vendedor?.identificacion
-  ) {
-    throw createHttpError(400, 'El vehiculo no tiene datos de venta completos para diligenciar el PDF.');
-  }
-
   const baseData = buildBaseTransferTemplateData(vehicle, saleData, vehicleInfo);
   const aiData = await enrichTransferTemplateDataWithAI(baseData, vehicle, saleData, vehicleInfo);
 
@@ -1023,6 +1112,10 @@ export const updateVehicle = async (req: AuthRequest, res: Response): Promise<vo
     if (updateFields.kilometraje === '') updateFields.kilometraje = 0;
     if (updateFields.precioCompra === '') updateFields.precioCompra = 0;
     if (updateFields.precioVenta === '') updateFields.precioVenta = 0;
+    if (updateFields.estadoTramite === '') updateFields.estadoTramite = undefined;
+    if (updateFields.estado && updateFields.estado !== 'vendido') {
+      updateFields.estadoTramite = undefined;
+    }
     if (updateFields.año === '') updateFields.año = 0;
 
     // Actualizar directamente los campos simples y luego guardar para los complejos
@@ -1617,6 +1710,9 @@ export const saveSaleData = async (req: AuthRequest, res: Response): Promise<voi
     const datosVenta = resolveVehicleSaleData(vehicle, datosVentaInput);
     vehicle.datosVenta = datosVenta;
     vehicle.estado = 'vendido';
+    if (!vehicle.estadoTramite) {
+      vehicle.estadoTramite = 'firma_documentos';
+    }
     
     if (!vehicle.fechaVenta) {
       vehicle.fechaVenta = new Date();
@@ -1716,15 +1812,6 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
       datosVenta.transaccion.domicilioContractual ||
       datosVenta.transaccion.lugarCelebracion;
     vehicle.datosVenta = datosVenta;
-    if (!datosVenta.comprador?.nombre ||
-        !datosVenta.comprador?.identificacion ||
-        !datosVenta.vendedor?.nombre ||
-        !datosVenta.transaccion?.lugarCelebracion) {
-      res.status(400).json({ 
-        message: 'El vehículo no tiene datos de venta completos.' 
-      });
-      return;
-    }
 
     const fechaCelebracion = datosVenta.transaccion.fechaCelebracion
       ? new Date(datosVenta.transaccion.fechaCelebracion)
@@ -1733,6 +1820,19 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
     const fechaEntrega = datosVenta.transaccion.fechaEntrega
       ? new Date(datosVenta.transaccion.fechaEntrega)
       : new Date();
+    const asDraftField = (value?: string) => getTrimmedString(value) || '________________';
+    const lugarCelebracion = asDraftField(vehicle.datosVenta.transaccion.lugarCelebracion);
+    const vendedorNombre = asDraftField(vehicle.datosVenta.vendedor.nombre);
+    const vendedorIdentificacion = asDraftField(vehicle.datosVenta.vendedor.identificacion);
+    const vendedorDireccion = asDraftField(vehicle.datosVenta.vendedor.direccion);
+    const vendedorTelefono = asDraftField(vehicle.datosVenta.vendedor.telefono);
+    const compradorNombre = asDraftField(vehicle.datosVenta.comprador.nombre);
+    const compradorIdentificacion = asDraftField(vehicle.datosVenta.comprador.identificacion);
+    const compradorDireccion = asDraftField(vehicle.datosVenta.comprador.direccion);
+    const compradorTelefono = asDraftField(vehicle.datosVenta.comprador.telefono);
+    const compradorEmail = asDraftField(vehicle.datosVenta.comprador.email);
+    const domicilioContractual = asDraftField(vehicle.datosVenta.transaccion.domicilioContractual);
+    const formaPago = asDraftField(vehicle.datosVenta.transaccion.formaPago);
 
     const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
     const mesNombre = meses[fechaCelebracion.getMonth()];
@@ -1756,30 +1856,30 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
     // LUGAR Y FECHA
     doc.fontSize(11).font('Helvetica-Bold').text('LUGAR Y FECHA DE CELEBRACION DEL CONTRATO:');
     doc.fontSize(10).font('Helvetica')
-       .text(`${vehicle.datosVenta.transaccion.lugarCelebracion}, ${fechaCelebracion.getDate()} de ${mesNombre} de ${fechaCelebracion.getFullYear()}`);
+       .text(`${lugarCelebracion}, ${fechaCelebracion.getDate()} de ${mesNombre} de ${fechaCelebracion.getFullYear()}`);
     doc.moveDown();
 
     // VENDEDOR
     doc.fontSize(11).font('Helvetica-Bold').text('VENDEDOR(ES):');
     doc.fontSize(10).font('Helvetica')
-       .text(`Nombre e Identificación: ${vehicle.datosVenta.vendedor.nombre} - ${vehicle.datosVenta.vendedor.identificacion}`)
-       .text(`Dirección: ${vehicle.datosVenta.vendedor.direccion}`)
-       .text(`Teléfono: ${vehicle.datosVenta.vendedor.telefono}`);
+       .text(`Nombre e Identificación: ${vendedorNombre} - ${vendedorIdentificacion}`)
+       .text(`Dirección: ${vendedorDireccion}`)
+       .text(`Teléfono: ${vendedorTelefono}`);
     doc.moveDown();
 
     // COMPRADOR
     doc.fontSize(11).font('Helvetica-Bold').text('COMPRADOR(ES):');
     doc.fontSize(10).font('Helvetica')
-       .text(`Nombre e Identificación: ${vehicle.datosVenta.comprador.nombre} - ${vehicle.datosVenta.comprador.identificacion}`)
-       .text(`Dirección: ${vehicle.datosVenta.comprador.direccion}`)
-       .text(`Teléfono: ${vehicle.datosVenta.comprador.telefono}`)
-       .text(`Correo electrónico: ${vehicle.datosVenta.comprador.email}`);
+       .text(`Nombre e Identificación: ${compradorNombre} - ${compradorIdentificacion}`)
+       .text(`Dirección: ${compradorDireccion}`)
+       .text(`Teléfono: ${compradorTelefono}`)
+       .text(`Correo electrónico: ${compradorEmail}`);
     doc.moveDown();
 
     // DOMICILIO CONTRACTUAL
     doc.fontSize(11).font('Helvetica-Bold').text('DOMICILIO CONTRACTUAL:');
     doc.fontSize(10).font('Helvetica')
-       .text(vehicle.datosVenta.transaccion.domicilioContractual);
+       .text(domicilioContractual);
     doc.moveDown();
 
     // INTRODUCCIÓN
@@ -1816,11 +1916,11 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
 
     // FORMA DE PAGO
     doc.fontSize(10).font('Helvetica-Bold').text('TERCERA.- FORMA DE PAGO: ', { continued: true })
-       .font('Helvetica').text(`EL COMPRADOR se compromete a pagar el precio de la siguiente forma: ${vehicle.datosVenta.transaccion.formaPago}`, { align: 'justify' });
+       .font('Helvetica').text(`EL COMPRADOR se compromete a pagar el precio de la siguiente forma: ${formaPago}`, { align: 'justify' });
     doc.moveDown();
 
     // ENTREGA
-    const horaEntrega = vehicle.datosVenta.transaccion.horaEntrega || '[HORA]';
+    const horaEntrega = asDraftField(vehicle.datosVenta.transaccion.horaEntrega);
     doc.fontSize(10).font('Helvetica-Bold').text('CUARTA.- ENTREGA: ', { continued: true })
        .font('Helvetica').text(`En la fecha ${fechaEntrega.toLocaleDateString('es-CO')} y hora ${horaEntrega} EL VENDEDOR hace entrega real y material del vehículo a EL COMPRADOR.`, { align: 'justify' });
     doc.moveDown();
@@ -1833,13 +1933,13 @@ export const generateContract = async (req: AuthRequest, res: Response): Promise
        .text('VENDEDOR', 60, signatureY, { width: 220, align: 'center' });
     doc.moveTo(60, signatureY + 30).lineTo(280, signatureY + 30).stroke();
     doc.fontSize(9).font('Helvetica')
-       .text(`C.C. ${vehicle.datosVenta.vendedor.identificacion}`, 60, signatureY + 35, { width: 220, align: 'center' });
+       .text(`C.C. ${vendedorIdentificacion}`, 60, signatureY + 35, { width: 220, align: 'center' });
 
     doc.fontSize(10).font('Helvetica-Bold')
        .text('COMPRADOR', 320, signatureY, { width: 220, align: 'center' });
     doc.moveTo(320, signatureY + 30).lineTo(540, signatureY + 30).stroke();
     doc.fontSize(9).font('Helvetica')
-       .text(`C.C. ${vehicle.datosVenta.comprador.identificacion}`, 320, signatureY + 35, { width: 220, align: 'center' });
+       .text(`C.C. ${compradorIdentificacion}`, 320, signatureY + 35, { width: 220, align: 'center' });
 
     doc.end();
 
@@ -1867,18 +1967,21 @@ export const generateTransferForm = async (req: AuthRequest, res: Response): Pro
     const datosVenta = resolveVehicleSaleData(vehicle);
     const vehicleInfo = resolveVehicleDocumentInfo(vehicle, datosVenta);
     vehicle.datosVenta = datosVenta;
-    if (!vehicle.datosVenta.comprador?.nombre ||
-        !vehicle.datosVenta.comprador?.identificacion ||
-        !vehicle.datosVenta.vendedor?.nombre) {
-      res.status(400).json({ 
-        message: 'El vehículo no tiene datos de venta completos.' 
-      });
-      return;
-    }
 
     const fechaCelebracion = vehicle.datosVenta.transaccion.fechaCelebracion 
       ? new Date(vehicle.datosVenta.transaccion.fechaCelebracion)
       : new Date();
+    const asDraftField = (value?: string) => getTrimmedString(value) || '________________';
+    const vendedorNombre = asDraftField(vehicle.datosVenta.vendedor.nombre);
+    const vendedorIdentificacion = asDraftField(vehicle.datosVenta.vendedor.identificacion);
+    const vendedorDireccion = asDraftField(vehicle.datosVenta.vendedor.direccion);
+    const vendedorTelefono = asDraftField(vehicle.datosVenta.vendedor.telefono);
+    const compradorNombre = asDraftField(vehicle.datosVenta.comprador.nombre);
+    const compradorIdentificacion = asDraftField(vehicle.datosVenta.comprador.identificacion);
+    const compradorDireccion = asDraftField(vehicle.datosVenta.comprador.direccion);
+    const compradorTelefono = asDraftField(vehicle.datosVenta.comprador.telefono);
+    const compradorEmail = asDraftField(vehicle.datosVenta.comprador.email);
+    const lugarCelebracion = asDraftField(vehicle.datosVenta.transaccion.lugarCelebracion);
 
     const doc = new PDFDocument({ 
       size: 'LEGAL',
@@ -1904,20 +2007,20 @@ export const generateTransferForm = async (req: AuthRequest, res: Response): Pro
     // VENDEDOR
     doc.fontSize(10).font('Helvetica-Bold').text('DATOS DEL VENDEDOR:');
     doc.fontSize(9).font('Helvetica')
-       .text(`Nombre: ${vehicle.datosVenta.vendedor.nombre}`)
-       .text(`Identificación: ${vehicle.datosVenta.vendedor.identificacion}`)
-       .text(`Dirección: ${vehicle.datosVenta.vendedor.direccion}`)
-       .text(`Teléfono: ${vehicle.datosVenta.vendedor.telefono}`);
+       .text(`Nombre: ${vendedorNombre}`)
+       .text(`Identificación: ${vendedorIdentificacion}`)
+       .text(`Dirección: ${vendedorDireccion}`)
+       .text(`Teléfono: ${vendedorTelefono}`);
     doc.moveDown();
 
     // COMPRADOR
     doc.fontSize(10).font('Helvetica-Bold').text('DATOS DEL COMPRADOR:');
     doc.fontSize(9).font('Helvetica')
-       .text(`Nombre: ${vehicle.datosVenta.comprador.nombre}`)
-       .text(`Identificación: ${vehicle.datosVenta.comprador.identificacion}`)
-       .text(`Dirección: ${vehicle.datosVenta.comprador.direccion}`)
-       .text(`Teléfono: ${vehicle.datosVenta.comprador.telefono}`)
-       .text(`Email: ${vehicle.datosVenta.comprador.email}`);
+       .text(`Nombre: ${compradorNombre}`)
+       .text(`Identificación: ${compradorIdentificacion}`)
+       .text(`Dirección: ${compradorDireccion}`)
+       .text(`Teléfono: ${compradorTelefono}`)
+       .text(`Email: ${compradorEmail}`);
     doc.moveDown();
 
     // VEHÍCULO
@@ -1940,7 +2043,7 @@ export const generateTransferForm = async (req: AuthRequest, res: Response): Pro
     // Fecha y lugar
     doc.fontSize(10).font('Helvetica-Bold').text('LUGAR Y FECHA:');
     doc.fontSize(9).font('Helvetica')
-       .text(`${vehicle.datosVenta.transaccion.lugarCelebracion}, ${fechaCelebracion.toLocaleDateString('es-CO')}`);
+       .text(`${lugarCelebracion}, ${fechaCelebracion.toLocaleDateString('es-CO')}`);
     doc.moveDown(2);
 
     // Firmas
@@ -1948,11 +2051,11 @@ export const generateTransferForm = async (req: AuthRequest, res: Response): Pro
     doc.fontSize(9).font('Helvetica')
        .text('_______________________', 40, signatureY)
        .text('Firma Vendedor', 40, signatureY + 15)
-       .text(`C.C. ${vehicle.datosVenta.vendedor.identificacion}`, 40, signatureY + 30);
+       .text(`C.C. ${vendedorIdentificacion}`, 40, signatureY + 30);
 
     doc.text('_______________________', 300, signatureY)
        .text('Firma Comprador', 300, signatureY + 15)
-       .text(`C.C. ${vehicle.datosVenta.comprador.identificacion}`, 300, signatureY + 30);
+       .text(`C.C. ${compradorIdentificacion}`, 300, signatureY + 30);
 
     doc.end();
 
