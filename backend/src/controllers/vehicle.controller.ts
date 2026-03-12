@@ -678,6 +678,7 @@ const enrichTransferTemplateDataWithAI = async (
     '- Separar apellidos y nombres en campos correspondientes.',
     '- placaLetras debe tener 3 caracteres y placaNumeros 3 caracteres.',
     '- modelo, tramiteDia, tramiteMes, tramiteAnio y organismoCodigo deben ser numericos.',
+    '- Los campos propietario* (vendedor) deben salir SOLO de datosVenta.vendedor, nunca de infoDocumento.propietario.',
     'Contexto:',
     JSON.stringify(
       {
@@ -728,7 +729,20 @@ const enrichTransferTemplateDataWithAI = async (
     }
 
     const parsed = parseJsonFromModelContent(rawContent) as Partial<TransferFormExcelTemplateData>;
-    return sanitizeTransferTemplateData(parsed, baseData);
+    const aiSanitized = sanitizeTransferTemplateData(parsed, baseData);
+
+    // Mantener vendedor exactamente como viene de datosVenta.vendedor (baseData)
+    // para evitar que el modelo tome por error al propietario anterior del documento.
+    return {
+      ...aiSanitized,
+      propietarioPrimerApellido: baseData.propietarioPrimerApellido,
+      propietarioSegundoApellido: baseData.propietarioSegundoApellido,
+      propietarioNombres: baseData.propietarioNombres,
+      propietarioDocumento: baseData.propietarioDocumento,
+      propietarioDireccion: baseData.propietarioDireccion,
+      propietarioCiudad: baseData.propietarioCiudad,
+      propietarioTelefono: baseData.propietarioTelefono,
+    };
   } catch (error: any) {
     console.error('Error al enriquecer el formulario PDF con IA:', error?.response?.data || error);
     return baseData;
