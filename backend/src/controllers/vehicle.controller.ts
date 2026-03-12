@@ -7,7 +7,7 @@ import ExcelJS from 'exceljs';
 import path from 'path';
 import fs from 'fs';
 import PDFDocument from 'pdfkit';
-import { PDFDocument as PDFLibDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument as PDFLibDocument } from 'pdf-lib';
 import { ensureUploadsDir, getPhotoFileName, getUploadsDir } from '../utils/uploads';
 import { isUsingCloudinary } from '../middleware/upload.middleware';
 
@@ -19,7 +19,7 @@ const OPENAI_TEXT_MODEL = process.env.OPENAI_TEXT_MODEL || process.env.OPENAI_VI
 const OPENAI_API_BASE_URL = process.env.OPENAI_API_BASE_URL || 'https://api.openai.com/v1';
 const TRANSFER_FORM_TEMPLATE_PDF = path.join(
   __dirname,
-  '../../templates/Formulario traspaso de vehiculos.pdf'
+  '../../templates/Formulario traspaso de vehiculos (Editable.pdf'
 );
 
 const normalizeVehicleType = (value: any): 'suv' | 'pickup' | 'sedan' | 'hatchback' => {
@@ -735,156 +735,60 @@ const enrichTransferTemplateDataWithAI = async (
   }
 };
 
-type TransferPdfFieldLayout = {
-  xPct: number;
-  yPct: number;
-  size?: number;
-  bold?: boolean;
-  pageIndex?: number;
+const TRANSFER_FORM_EDITABLE_FIELD_MAP: Record<string, keyof TransferFormExcelTemplateData> = {
+  text_27talf: 'placaLetras',
+  text_28pszl: 'placaNumeros',
+  text_15dims: 'marca',
+  text_16ishi: 'linea',
+  text_17gt: 'color',
+  text_18yelw: 'capacidad',
+  text_19bqzf: 'modelo',
+  text_20ahqf: 'cilindrada',
+  text_21plkh: 'tipoCarroceria',
+  text_22mabc: 'numeroMotor',
+  text_23anzm: 'numeroChasis',
+  text_24wrk: 'numeroSerie',
+  text_25qsfc: 'vin',
+  text_1cebd: 'propietarioPrimerApellido',
+  text_2zdud: 'propietarioSegundoApellido',
+  text_3dxnw: 'propietarioNombres',
+  text_7dztw: 'propietarioDocumento',
+  text_4rcmx: 'propietarioDireccion',
+  text_5vuko: 'propietarioCiudad',
+  text_6lsms: 'propietarioTelefono',
+  text_8nlhe: 'compradorPrimerApellido',
+  text_9mwir: 'compradorSegundoApellido',
+  text_10ndyp: 'compradorNombres',
+  text_11kmlk: 'compradorDocumento',
+  text_12fkbe: 'compradorDireccion',
+  text_13yto: 'compradorCiudad',
+  text_14odhp: 'compradorTelefono',
 };
 
-const TRANSFER_PDF_FIELD_LAYOUT: Partial<Record<keyof TransferFormExcelTemplateData, TransferPdfFieldLayout>> = {
-  organismoNombre: { xPct: 0.621, yPct: 0.021, size: 7, bold: true },
-  organismoCiudad: { xPct: 0.621, yPct: 0.060, size: 7 },
-  organismoCodigo: { xPct: 0.697, yPct: 0.060, size: 7 },
-  tramiteDia: { xPct: 0.776, yPct: 0.079, size: 7, bold: true },
-  tramiteMes: { xPct: 0.813, yPct: 0.079, size: 7, bold: true },
-  tramiteAnio: { xPct: 0.850, yPct: 0.079, size: 7, bold: true },
-  placaLetras: { xPct: 0.924, yPct: 0.041, size: 10, bold: true },
-  placaNumeros: { xPct: 0.962, yPct: 0.041, size: 10, bold: true },
-  marca: { xPct: 0.449, yPct: 0.110, size: 8, bold: true },
-  linea: { xPct: 0.579, yPct: 0.110, size: 8 },
-  color: { xPct: 0.449, yPct: 0.169, size: 8 },
-  modelo: { xPct: 0.814, yPct: 0.169, size: 8, bold: true },
-  cilindrada: { xPct: 0.890, yPct: 0.169, size: 8 },
-  capacidad: { xPct: 0.449, yPct: 0.247, size: 8 },
-  potenciaHp: { xPct: 0.890, yPct: 0.247, size: 8 },
-  tipoCarroceria: { xPct: 0.449, yPct: 0.362, size: 8 },
-  numeroMotor: { xPct: 0.739, yPct: 0.333, size: 7, bold: true },
-  numeroChasis: { xPct: 0.739, yPct: 0.381, size: 7, bold: true },
-  numeroSerie: { xPct: 0.739, yPct: 0.435, size: 7, bold: true },
-  vin: { xPct: 0.739, yPct: 0.507, size: 7, bold: true },
-  propietarioPrimerApellido: { xPct: 0.000, yPct: 0.507, size: 8, bold: true },
-  propietarioSegundoApellido: { xPct: 0.135, yPct: 0.507, size: 8, bold: true },
-  propietarioNombres: { xPct: 0.293, yPct: 0.507, size: 8, bold: true },
-  propietarioDocumento: { xPct: 0.361, yPct: 0.558, size: 8, bold: true },
-  propietarioDireccion: { xPct: 0.000, yPct: 0.632, size: 8 },
-  propietarioCiudad: { xPct: 0.192, yPct: 0.632, size: 8 },
-  propietarioTelefono: { xPct: 0.361, yPct: 0.632, size: 8 },
-  compradorPrimerApellido: { xPct: 0.000, yPct: 0.820, size: 8, bold: true },
-  compradorSegundoApellido: { xPct: 0.135, yPct: 0.820, size: 8, bold: true },
-  compradorNombres: { xPct: 0.293, yPct: 0.820, size: 8, bold: true },
-  compradorDocumento: { xPct: 0.361, yPct: 0.878, size: 8, bold: true },
-  compradorDireccion: { xPct: 0.000, yPct: 0.944, size: 8 },
-  compradorCiudad: { xPct: 0.192, yPct: 0.944, size: 8 },
-  compradorTelefono: { xPct: 0.361, yPct: 0.944, size: 8 },
-  observaciones: { xPct: 0.449, yPct: 0.969, size: 6 },
-};
-
-const TRANSFER_PDF_MARKS = {
-  tramiteTraspaso: { xPct: 0.131, yPct: 0.110, pageIndex: 0 },
-  propietarioDocumentoCC: { xPct: 0.001, yPct: 0.558, pageIndex: 0 },
-  compradorDocumentoCC: { xPct: 0.001, yPct: 0.878, pageIndex: 0 },
-};
-
-const drawPdfTextByPercent = (
-  page: any,
-  value: string,
-  xPct: number,
-  yPct: number,
-  size: number,
-  font: any
+const setEditablePdfTextField = (
+  form: ReturnType<PDFLibDocument['getForm']>,
+  fieldName: string,
+  value: string
 ) => {
-  if (!value) return;
-
-  const width = page.getWidth();
-  const height = page.getHeight();
-  const paddingX = 10;
-  const paddingY = 8;
-  const usableWidth = width - paddingX * 2;
-  const usableHeight = height - paddingY * 2;
-  const x = paddingX + usableWidth * xPct;
-  const yTop = paddingY + usableHeight * yPct;
-  const y = height - yTop - size;
-
-  page.drawText(value, {
-    x,
-    y,
-    size,
-    font,
-    color: rgb(0, 0, 0),
-  });
-};
-
-const applyTransferTemplateDataToPdf = (
-  pdfDoc: PDFLibDocument,
-  data: TransferFormExcelTemplateData,
-  regularFont: any,
-  boldFont: any
-) => {
-  const pages = pdfDoc.getPages();
-  if (pages.length === 0) {
-    throw createHttpError(500, 'La plantilla PDF no contiene paginas para diligenciar.');
+  try {
+    const field = form.getTextField(fieldName);
+    field.setText(value || '');
+  } catch {
+    // Ignorar campos faltantes para no romper por cambios de plantilla.
   }
+};
 
-  const page0 = pages[0];
-  const drawField = (
-    fieldName: keyof TransferFormExcelTemplateData,
-    fieldValue: string
-  ) => {
-    const cfg = TRANSFER_PDF_FIELD_LAYOUT[fieldName];
-    if (!cfg) return;
-    const page = pages[cfg.pageIndex ?? 0] || page0;
-    drawPdfTextByPercent(
-      page,
-      fieldValue,
-      cfg.xPct,
-      cfg.yPct,
-      cfg.size || 8,
-      cfg.bold ? boldFont : regularFont
-    );
-  };
+const applyTransferTemplateDataToEditablePdf = (
+  pdfDoc: PDFLibDocument,
+  data: TransferFormExcelTemplateData
+) => {
+  const form = pdfDoc.getForm();
 
-  drawField('organismoNombre', `NOMBRE: ${data.organismoNombre}`);
-  drawField('organismoCiudad', data.organismoCiudad);
-  drawField('organismoCodigo', data.organismoCodigo);
-  drawField('tramiteDia', data.tramiteDia);
-  drawField('tramiteMes', data.tramiteMes);
-  drawField('tramiteAnio', data.tramiteAnio);
-  drawField('placaLetras', data.placaLetras);
-  drawField('placaNumeros', data.placaNumeros);
-  drawField('marca', data.marca);
-  drawField('linea', data.linea);
-  drawField('color', data.color);
-  drawField('modelo', data.modelo);
-  drawField('cilindrada', data.cilindrada);
-  drawField('capacidad', data.capacidad);
-  drawField('potenciaHp', data.potenciaHp);
-  drawField('tipoCarroceria', data.tipoCarroceria);
-  drawField('numeroMotor', data.numeroMotor);
-  drawField('numeroChasis', data.numeroChasis);
-  drawField('numeroSerie', data.numeroSerie);
-  drawField('vin', data.vin);
-  drawField('propietarioPrimerApellido', data.propietarioPrimerApellido);
-  drawField('propietarioSegundoApellido', data.propietarioSegundoApellido);
-  drawField('propietarioNombres', data.propietarioNombres);
-  drawField('propietarioDocumento', data.propietarioDocumento);
-  drawField('propietarioDireccion', data.propietarioDireccion);
-  drawField('propietarioCiudad', data.propietarioCiudad);
-  drawField('propietarioTelefono', data.propietarioTelefono);
-  drawField('compradorPrimerApellido', data.compradorPrimerApellido);
-  drawField('compradorSegundoApellido', data.compradorSegundoApellido);
-  drawField('compradorNombres', data.compradorNombres);
-  drawField('compradorDocumento', data.compradorDocumento);
-  drawField('compradorDireccion', data.compradorDireccion);
-  drawField('compradorCiudad', data.compradorCiudad);
-  drawField('compradorTelefono', data.compradorTelefono);
-  drawField('observaciones', data.observaciones);
-
-  Object.values(TRANSFER_PDF_MARKS).forEach((mark) => {
-    const page = pages[mark.pageIndex] || page0;
-    drawPdfTextByPercent(page, 'X', mark.xPct, mark.yPct, 8, boldFont);
+  Object.entries(TRANSFER_FORM_EDITABLE_FIELD_MAP).forEach(([pdfFieldName, dataKey]) => {
+    setEditablePdfTextField(form, pdfFieldName, data[dataKey] || '');
   });
+
+  form.updateFieldAppearances();
 };
 
 const buildTransferFormTemplatePdfBuffer = async (vehicle: IVehicleDocument): Promise<Buffer> => {
@@ -912,10 +816,7 @@ const buildTransferFormTemplatePdfBuffer = async (vehicle: IVehicleDocument): Pr
 
   const templateBytes = fs.readFileSync(TRANSFER_FORM_TEMPLATE_PDF);
   const pdfDoc = await PDFLibDocument.load(templateBytes);
-  const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-  applyTransferTemplateDataToPdf(pdfDoc, aiData, regularFont, boldFont);
+  applyTransferTemplateDataToEditablePdf(pdfDoc, aiData);
 
   const output = await pdfDoc.save();
   return Buffer.from(output);
