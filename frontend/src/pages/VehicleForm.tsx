@@ -487,7 +487,15 @@ const VehicleForm: React.FC = () => {
           tapiceria: vehicle.gastos?.tapiceria || 0,
           transporte: vehicle.gastos?.transporte || 0,
           varios: vehicle.gastos?.varios || 0,
-          total: vehicle.gastos?.total || 0
+          // total local = solo gastos generales (los de inversionistas se suman aparte en el costo del carro)
+          total:
+            (vehicle.gastos?.pintura || 0) +
+            (vehicle.gastos?.mecanica || 0) +
+            (vehicle.gastos?.traspaso || 0) +
+            (vehicle.gastos?.alistamiento || 0) +
+            (vehicle.gastos?.tapiceria || 0) +
+            (vehicle.gastos?.transporte || 0) +
+            (vehicle.gastos?.varios || 0)
         },
         inversionistas: vehicle.inversionistas || [],
         tieneInversionistas: vehicle.tieneInversionistas || false,
@@ -2122,39 +2130,55 @@ const VehicleForm: React.FC = () => {
             </div>
 
             {/* Resumen Financiero */}
-            <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Resumen Financiero</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                <div>
-                  <p className="text-gray-600">Costo Total:</p>
-                  <p className="text-lg font-semibold text-gray-900">
-                    ${(formData.precioCompra + formData.gastos.total).toLocaleString('es-CO', { minimumFractionDigits: 2 })}
-                  </p>
-                  <p className="text-xs text-gray-500">(Compra + Gastos)</p>
+            {(() => {
+              // Gastos de inversionistas (se incluyen en el costo del carro)
+              const gastosInversionistas = formData.inversionistas.reduce((sum, inv) => {
+                const totalGastosInv = inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0;
+                return sum + totalGastosInv;
+              }, 0);
+              // Gastos totales = gastos generales + gastos de inversionistas
+              const gastosTotales = formData.gastos.total + gastosInversionistas;
+              const costoTotal = formData.precioCompra + gastosTotales;
+              const utilidad = formData.precioVenta - costoTotal;
+
+              return (
+                <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Resumen Financiero</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-600">Costo Total:</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        ${costoTotal.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {gastosInversionistas > 0
+                          ? '(Compra + Gastos + Gastos Inversionistas)'
+                          : '(Compra + Gastos)'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Precio de Venta:</p>
+                      <p className="text-lg font-semibold text-green-600">
+                        ${formData.precioVenta.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Utilidad Estimada:</p>
+                      <p className={`text-lg font-semibold ${
+                        utilidad >= 0 ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        ${utilidad.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {costoTotal > 0
+                          ? `(${((utilidad / costoTotal) * 100).toFixed(1)}%)`
+                          : '(0%)'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-gray-600">Precio de Venta:</p>
-                  <p className="text-lg font-semibold text-green-600">
-                    ${formData.precioVenta.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-gray-600">Utilidad Estimada:</p>
-                  <p className={`text-lg font-semibold ${
-                    (formData.precioVenta - formData.precioCompra - formData.gastos.total) >= 0 
-                      ? 'text-green-600' 
-                      : 'text-red-600'
-                  }`}>
-                    ${(formData.precioVenta - formData.precioCompra - formData.gastos.total).toLocaleString('es-CO', { minimumFractionDigits: 2 })}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {formData.precioCompra + formData.gastos.total > 0 
-                      ? `(${(((formData.precioVenta - formData.precioCompra - formData.gastos.total) / (formData.precioCompra + formData.gastos.total)) * 100).toFixed(1)}%)`
-                      : '(0%)'}
-                  </p>
-                </div>
-              </div>
-            </div>
+              );
+            })()}
           </div>
 
           {/* Inversionistas */}

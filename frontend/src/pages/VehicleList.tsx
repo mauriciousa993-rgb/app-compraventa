@@ -567,14 +567,8 @@ const VehicleList: React.FC = () => {
                         <div className="flex justify-between text-sm">
                           <span className="text-ink-200">Gastos Totales:</span>
                           <span className="font-medium text-orange-600">
-                            {formatCurrency((() => {
-                              const gastosVehiculo = vehicle.gastos?.total || 0;
-                              const gastosInversionistas = vehicle.inversionistas?.reduce((sum, inv) => {
-                                const totalGastosInv = inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0;
-                                return sum + totalGastosInv;
-                              }, 0) || 0;
-                              return gastosVehiculo + gastosInversionistas;
-                            })())}
+                            {/* gastos.total ya incluye los gastos de inversionistas (calculado en backend) */}
+                            {formatCurrency(vehicle.gastos?.total || 0)}
                           </span>
                         </div>
                         <div className="flex justify-between text-sm border-t pt-2">
