@@ -196,6 +196,38 @@ export interface VehicleInspectionChecklistPayload {
   generalObservations: string;
 }
 
+export type FormaPagoNegociacion =
+  | ''
+  | 'efectivo'
+  | 'consignacion'
+  | 'transferencia'
+  | 'credito'
+  | 'mixto';
+
+export interface DatosNegociacion {
+  formaPago: FormaPagoNegociacion;
+  montoEfectivo: number;
+  montoConsignacion: number;
+  montoTransferencia: number;
+  montoCredito: number;
+  financiera: string;
+  cliente: string;
+  telefonoCliente: string;
+  notas: string;
+}
+
+export type UbicacionVehiculo =
+  | ''
+  | 'vitrina'
+  | 'taller_mecanico'
+  | 'pintura'
+  | 'latoneria'
+  | 'tapiceria'
+  | 'alistamiento'
+  | 'parqueadero'
+  | 'tramites'
+  | 'otro';
+
 export interface Vehicle {
   _id: string;
   marca: string;
@@ -282,8 +314,14 @@ export interface Vehicle {
   fechaIngreso: string;
   fechaVenta?: string;
   fechaListoVenta?: string;
+  fechaInicioNegociacion?: string;
+  diasEnVitrina?: number;
+  diasEnNegociacion?: number;
+  ubicacionActual?: UbicacionVehiculo;
+  ubicacionDetalle?: string;
   datosVenta?: DatosVenta;
   datosSeparacion?: DatosSeparacion;
+  datosNegociacion?: DatosNegociacion;
   inspectionChecklist?: VehicleInspectionChecklist;
   registradoPor: {
     _id: string;
@@ -296,6 +334,7 @@ export interface Vehicle {
 
 export interface Statistics {
   totalVehiculos: number;
+  totalVehiculosHistorico?: number;
   vehiculosListos: number;
   vehiculosEnNegociacion?: number;
   vehiculosPendientes: number;

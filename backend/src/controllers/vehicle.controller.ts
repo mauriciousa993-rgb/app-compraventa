@@ -944,6 +944,18 @@ export const createVehicle = async (req: AuthRequest, res: Response): Promise<vo
     vehicleData.tipoVehiculo = normalizeVehicleType(vehicleData.tipoVehiculo);
     vehicleData.registradoPor = req.user?.userId;
 
+    if (vehicleData.estado === SALE_READY_STATUS && !vehicleData.fechaListoVenta) {
+      vehicleData.fechaListoVenta = new Date();
+    }
+
+    // Si se registra directamente en negociación, se inicia el conteo correspondiente
+    if (vehicleData.estado === NEGOTIATION_STATUS && !vehicleData.fechaInicioNegociacion) {
+      if (!vehicleData.fechaListoVenta) {
+        vehicleData.fechaListoVenta = vehicleData.fechaIngreso || new Date();
+      }
+      vehicleData.fechaInicioNegociacion = new Date();
+    }
+
     const vehicle = new Vehicle(vehicleData);
     await vehicle.save();
 
@@ -1090,9 +1102,30 @@ export const updateVehicle = async (req: AuthRequest, res: Response): Promise<vo
     // Detectar cambio de estado a 'listo_venta' y establecer fechaListoVenta
     const nuevoEstado = req.body.estado;
     const estadoAnterior = vehicle.estado;
-    
+
     if (nuevoEstado === 'listo_venta' && estadoAnterior !== 'listo_venta') {
       req.body.fechaListoVenta = new Date();
+    }
+
+    // Al entrar en negociación se congela el conteo de días en vitrina y arranca
+    // un conteo nuevo de días en negociación.
+    if (nuevoEstado === NEGOTIATION_STATUS && estadoAnterior !== NEGOTIATION_STATUS) {
+      if (!vehicle.fechaListoVenta) {
+        // Si nunca pasó por vitrina, se toma el ingreso como inicio para no perder el histórico
+        req.body.fechaListoVenta = vehicle.fechaIngreso || new Date();
+      }
+      req.body.fechaInicioNegociacion = new Date();
+    }
+
+    // Si sale de negociación sin venderse, el vehículo vuelve a contar días en vitrina
+    if (
+      nuevoEstado &&
+      nuevoEstado !== NEGOTIATION_STATUS &&
+      nuevoEstado !== 'vendido' &&
+      nuevoEstado !== 'separado' &&
+      estadoAnterior === NEGOTIATION_STATUS
+    ) {
+      req.body.fechaInicioNegociacion = null;
     }
 
     // Usar una aproximación mixta: actualizar con findByIdAndUpdate pero mantener el documento
@@ -1245,7 +1278,10 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
     const userId = req.user?.userId;
     const userRole = req.user?.rol;
 
-    const totalVehiculos = await Vehicle.countDocuments();
+    // Total de vehículos = solo inventario activo (en proceso + listos + en negociación).
+    // Los vendidos/retirados se reportan aparte para no inflar el inventario.
+    const totalVehiculos = await Vehicle.countDocuments({ estado: { $in: INVENTORY_STATUSES } });
+    const totalVehiculosHistorico = await Vehicle.countDocuments();
     const vehiculosListos = await Vehicle.countDocuments({ estado: SALE_READY_STATUS });
     const vehiculosEnNegociacion = await Vehicle.countDocuments({ estado: NEGOTIATION_STATUS });
     const vehiculosPendientes = await Vehicle.countDocuments({ estado: 'en_proceso' });
@@ -1443,6 +1479,7 @@ export const getStatistics = async (req: AuthRequest, res: Response): Promise<vo
 
     res.json({
       totalVehiculos,
+      totalVehiculosHistorico,
       vehiculosListos,
       vehiculosEnNegociacion,
       vehiculosPendientes,

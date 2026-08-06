@@ -1,12 +1,28 @@
 ﻿﻿import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search, Car, Edit, Trash2, FileDown, X, ChevronDown, ChevronUp, FileText, DollarSign, Edit2, ClipboardCheck } from 'lucide-react';
+import { Plus, Search, Car, Edit, Trash2, FileDown, X, ChevronDown, ChevronUp, FileText, DollarSign, Edit2, ClipboardCheck, CreditCard, MapPin } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
 import api from '../services/api';
-import { Vehicle, DatosVenta, DatosSeparacion } from '../types';
+import { Vehicle, DatosVenta, DatosSeparacion, DatosNegociacion, UbicacionVehiculo } from '../types';
 import SaleDataModal from '../components/SaleDataModal';
 import SeparationModal from '../components/SeparationModal';
+import NegotiationModal from '../components/NegotiationModal';
 import { vehiclesAPI } from '../services/api';
+import {
+  UBICACIONES_VEHICULO,
+  formatDias,
+  getDiasEnNegociacion,
+  getDiasEnProceso,
+  getDiasEnVitrina,
+  getFormaPagoLabel,
+  getTotalNegociacion,
+  getUbicacionLabel,
+  normalizeDatosNegociacion,
+  tieneDatosNegociacion,
+} from '../constants/vehicleOptions';
+
+// Estados que componen el inventario activo (no incluye vendidos ni retirados)
+const ESTADOS_INVENTARIO = ['en_proceso', 'listo_venta', 'en_negociacion', 'separado'];
 
 const VehicleList: React.FC = () => {
   const navigate = useNavigate();
@@ -19,8 +35,11 @@ const VehicleList: React.FC = () => {
   const [expandedVehicles, setExpandedVehicles] = useState<Set<string>>(new Set());
   const [saleModalOpen, setSaleModalOpen] = useState(false);
   const [separationModalOpen, setSeparationModalOpen] = useState(false);
+  const [negotiationModalOpen, setNegotiationModalOpen] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [isSavingSeparation, setIsSavingSeparation] = useState(false);
+  const [isSavingNegotiation, setIsSavingNegotiation] = useState(false);
+  const [savingUbicacionId, setSavingUbicacionId] = useState<string | null>(null);
 
   useEffect(() => {
     loadVehicles();
@@ -50,10 +69,14 @@ const VehicleList: React.FC = () => {
 
   const isListoParaVenta = (estado?: string) => normalizeEstado(estado) === 'listo_venta';
 
+  const isEnInventario = (estado?: string) => ESTADOS_INVENTARIO.includes(normalizeEstado(estado));
+
   const filterVehicles = () => {
     let filtered = vehicles;
 
-    if (filterEstado !== 'todos') {
+    if (filterEstado === 'inventario') {
+      filtered = filtered.filter(v => isEnInventario(v.estado));
+    } else if (filterEstado !== 'todos') {
       filtered = filtered.filter(v => normalizeEstado(v.estado) === filterEstado);
     }
 
@@ -88,8 +111,9 @@ const VehicleList: React.FC = () => {
 
   const getEstadoLabel = (estado: string) => {
     const labels: Record<string, string> = {
+      inventario: 'Vehiculos en inventario',
       listo_venta: 'Listos para Venta',
-      en_proceso: 'En Proceso',
+      en_proceso: 'Con Pendientes',
       en_negociacion: 'En Negociacion',
       vendido: 'Vendidos',
       retirado: 'Retirados'
@@ -238,6 +262,65 @@ const VehicleList: React.FC = () => {
     setSeparationModalOpen(true);
   };
 
+  const handleOpenNegotiationModal = (vehicle: Vehicle) => {
+    setSelectedVehicle(vehicle);
+    setNegotiationModalOpen(true);
+  };
+
+  const handleSaveNegotiationData = async (data: DatosNegociacion) => {
+    if (!selectedVehicle) return;
+
+    setIsSavingNegotiation(true);
+
+    try {
+      await vehiclesAPI.update(selectedVehicle._id, { datosNegociacion: data });
+      setNegotiationModalOpen(false);
+      setSelectedVehicle(null);
+      await loadVehicles();
+    } catch (error: any) {
+      console.error('Error al guardar la forma de pago:', error);
+      alert(error.response?.data?.message || 'Error al guardar la forma de pago de la negociacion');
+    } finally {
+      setIsSavingNegotiation(false);
+    }
+  };
+
+  const handleUbicacionChange = async (vehicle: Vehicle, ubicacion: UbicacionVehiculo) => {
+    setSavingUbicacionId(vehicle._id);
+
+    // Actualizacion optimista para que el selector responda de inmediato
+    setVehicles(prev =>
+      prev.map(v => (v._id === vehicle._id ? { ...v, ubicacionActual: ubicacion } : v))
+    );
+
+    try {
+      await vehiclesAPI.update(vehicle._id, {
+        ubicacionActual: ubicacion,
+        ...(ubicacion === 'otro' ? {} : { ubicacionDetalle: '' }),
+      });
+    } catch (error: any) {
+      console.error('Error al actualizar la ubicacion:', error);
+      alert(error.response?.data?.message || 'Error al actualizar la ubicacion del vehiculo');
+      await loadVehicles();
+    } finally {
+      setSavingUbicacionId(null);
+    }
+  };
+
+  const handleUbicacionDetalleBlur = async (vehicle: Vehicle, detalle: string) => {
+    if ((vehicle.ubicacionDetalle || '') === detalle) return;
+
+    try {
+      await vehiclesAPI.update(vehicle._id, { ubicacionDetalle: detalle });
+      setVehicles(prev =>
+        prev.map(v => (v._id === vehicle._id ? { ...v, ubicacionDetalle: detalle } : v))
+      );
+    } catch (error: any) {
+      console.error('Error al actualizar el detalle de ubicacion:', error);
+      alert(error.response?.data?.message || 'Error al actualizar la ubicacion del vehiculo');
+    }
+  };
+
   const getEstadoBadge = (estado: string) => {
     const badges: Record<string, { class: string; text: string }> = {
       en_proceso: { class: 'badge-warning', text: 'En Proceso' },
@@ -259,6 +342,8 @@ const VehicleList: React.FC = () => {
     }).format(amount);
   };
 
+  // El total solo suma el inventario activo: listos, en negociacion y con pendientes
+  const totalVehiculosInventario = vehicles.filter(v => isEnInventario(v.estado)).length;
   const totalVehiculosListos = vehicles.filter(v => isListoParaVenta(v.estado)).length;
   const totalVehiculosEnNegociacion = vehicles.filter(
     v => normalizeEstado(v.estado) === 'en_negociacion'
@@ -342,6 +427,7 @@ const VehicleList: React.FC = () => {
                 className="input-field"
               >
                 <option value="todos">Todos los Estados</option>
+                <option value="inventario">En inventario (sin vendidos)</option>
                 <option value="listo_venta">Listos para Venta</option>
                 <option value="en_proceso">Con Pendientes</option>
                 <option value="en_negociacion">En Negociación</option>
@@ -357,18 +443,21 @@ const VehicleList: React.FC = () => {
         <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
           <button
             onClick={() => {
-              setFilterEstado('todos');
-              setSearchParams({});
+              setFilterEstado('inventario');
+              setSearchParams({ estado: 'inventario' });
             }}
             className={`card transition-all ${
-              filterEstado === 'todos'
+              filterEstado === 'inventario'
                 ? 'bg-[#2b1215] border-primary-500 ring-2 ring-primary-500'
                 : 'bg-[#1c1f26] border-[#30343d] hover:border-primary-700'
             }`}
           >
             <p className="text-sm text-ink-200 font-medium">Total Vehículos</p>
 
-            <p className="text-2xl font-bold text-white">{vehicles.length}</p>
+            <p className="text-2xl font-bold text-white">{totalVehiculosInventario}</p>
+            <p className="mt-1 text-[11px] text-ink-300">
+              Listos + en negociación + con pendientes
+            </p>
           </button>
           <button
             onClick={() => {
@@ -484,38 +573,31 @@ const VehicleList: React.FC = () => {
                           {vehicle.marca} {vehicle.modelo}
                         </h3>
                         <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                          vehicle.estado === 'vendido' 
-                            ? 'bg-[#311418] text-primary-300 border border-primary-700/60' 
+                          vehicle.estado === 'vendido'
+                            ? 'bg-[#311418] text-primary-300 border border-primary-700/60'
                             : vehicle.estado === 'en_proceso'
                               ? 'bg-[#2b2116] text-[#f4c26b] border border-[#7e6642]'
                               : 'bg-[#1a2129] text-silver border border-[#4d5663]'
                         }`}>
-                          {(() => {
-                            // Vehículos en proceso: tiempo desde fechaIngreso hasta ahora
-                            if (vehicle.estado === 'en_proceso') {
-                              const fechaIngreso = new Date(vehicle.fechaIngreso);
-                              const fechaFinal = new Date();
-                              const diasEnProceso = Math.floor((fechaFinal.getTime() - fechaIngreso.getTime()) / (1000 * 60 * 60 * 24));
-                              return `${diasEnProceso} día${diasEnProceso !== 1 ? 's' : ''} en proceso`;
-                            }
-                            
-                            // Vehículos listos para venta, en negociación o vendidos: tiempo en vitrina
-                            // Usar fechaListoVenta si está disponible, si no, usar fechaIngreso
-                            const fechaInicioVitrina = vehicle.fechaListoVenta 
-                              ? new Date(vehicle.fechaListoVenta) 
-                              : new Date(vehicle.fechaIngreso);
-                            const fechaFinal = vehicle.estado === 'vendido' && vehicle.fechaVenta 
-                              ? new Date(vehicle.fechaVenta) 
-                              : new Date();
-                            const diasEnVitrina = Math.floor((fechaFinal.getTime() - fechaInicioVitrina.getTime()) / (1000 * 60 * 60 * 24));
-                            
-                            if (vehicle.estado === 'vendido') {
-                              return `${diasEnVitrina} día${diasEnVitrina !== 1 ? 's' : ''} en vitrina`;
-                            }
-                            return `${diasEnVitrina} día${diasEnVitrina !== 1 ? 's' : ''} en vitrina`;
-                          })()}
+                          {vehicle.estado === 'en_proceso'
+                            ? formatDias(getDiasEnProceso(vehicle), 'en proceso')
+                            : formatDias(getDiasEnVitrina(vehicle), 'en vitrina')}
                         </span>
 
+                        {/* Al entrar en negociación se congelan los días en vitrina
+                            y arranca un conteo nuevo de días en negociación */}
+                        {vehicle.fechaInicioNegociacion && vehicle.estado !== 'en_proceso' && (
+                          <span className="text-xs px-2 py-1 rounded-full font-medium bg-[#152027] text-[#8fd5e5] border border-[#4e8896]">
+                            {formatDias(getDiasEnNegociacion(vehicle), 'en negociación')}
+                          </span>
+                        )}
+
+                        {vehicle.estado === 'en_proceso' && vehicle.ubicacionActual && (
+                          <span className="hidden sm:inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium bg-[#221a12] text-[#f4c26b] border border-[#7e6642]">
+                            <MapPin className="h-3 w-3" />
+                            {getUbicacionLabel(vehicle.ubicacionActual)}
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm text-ink-200">
                         {vehicle.año} • <span className="font-medium">{vehicle.placa}</span>
@@ -642,6 +724,151 @@ const VehicleList: React.FC = () => {
                         </div>
                       </div>
                     </div>
+
+                    {/* Ubicación del vehículo (vehículos con pendientes) */}
+                    {vehicle.estado === 'en_proceso' && (
+                      <div className="rounded-lg border border-[#3b3125] bg-[#221a12] p-3">
+                        <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#f4c26b]">
+                          <MapPin className="h-4 w-4" />
+                          ¿Dónde está el vehículo?
+                        </h4>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <select
+                            value={vehicle.ubicacionActual || ''}
+                            disabled={savingUbicacionId === vehicle._id}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              handleUbicacionChange(vehicle, e.target.value as UbicacionVehiculo);
+                            }}
+                            className="input-field"
+                          >
+                            {UBICACIONES_VEHICULO.map((opcion) => (
+                              <option key={opcion.value || 'sin-definir'} value={opcion.value}>
+                                {opcion.label}
+                              </option>
+                            ))}
+                          </select>
+
+                          {vehicle.ubicacionActual === 'otro' && (
+                            <input
+                              type="text"
+                              defaultValue={vehicle.ubicacionDetalle || ''}
+                              onClick={(e) => e.stopPropagation()}
+                              onBlur={(e) => handleUbicacionDetalleBlur(vehicle, e.target.value)}
+                              placeholder="Especifica el lugar (taller de Juan, grúa, etc.)"
+                              className="input-field"
+                            />
+                          )}
+                        </div>
+                        <p className="mt-2 text-xs text-ink-300">
+                          {savingUbicacionId === vehicle._id
+                            ? 'Guardando ubicación...'
+                            : `Ubicación actual: ${getUbicacionLabel(vehicle.ubicacionActual)}${
+                                vehicle.ubicacionActual === 'otro' && vehicle.ubicacionDetalle
+                                  ? ` (${vehicle.ubicacionDetalle})`
+                                  : ''
+                              }`}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Forma de pago de la negociación */}
+                    {vehicle.estado === 'en_negociacion' && (
+                      <div className="rounded-lg border border-[#2d3f47] bg-[#152027] p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <h4 className="flex items-center gap-2 text-sm font-semibold text-[#8fd5e5]">
+                            <CreditCard className="h-4 w-4" />
+                            Forma de Pago
+                          </h4>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenNegotiationModal(vehicle);
+                            }}
+                            className="rounded-lg border border-[#4e8896] px-3 py-1 text-xs text-[#8fd5e5] transition-colors hover:bg-[#16242c]"
+                          >
+                            {tieneDatosNegociacion(vehicle.datosNegociacion) ? 'Editar' : 'Registrar'}
+                          </button>
+                        </div>
+
+                        {tieneDatosNegociacion(vehicle.datosNegociacion) ? (
+                          (() => {
+                            const negociacion = normalizeDatosNegociacion(vehicle.datosNegociacion);
+                            return (
+                              <div className="space-y-1 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-ink-200">Forma de pago:</span>
+                                  <span className="font-medium text-white">
+                                    {getFormaPagoLabel(negociacion.formaPago)}
+                                  </span>
+                                </div>
+                                {negociacion.montoEfectivo > 0 && (
+                                  <div className="flex justify-between">
+                                    <span className="text-ink-200">Efectivo:</span>
+                                    <span className="font-medium text-white">
+                                      {formatCurrency(negociacion.montoEfectivo)}
+                                    </span>
+                                  </div>
+                                )}
+                                {negociacion.montoConsignacion > 0 && (
+                                  <div className="flex justify-between">
+                                    <span className="text-ink-200">Consignación:</span>
+                                    <span className="font-medium text-white">
+                                      {formatCurrency(negociacion.montoConsignacion)}
+                                    </span>
+                                  </div>
+                                )}
+                                {negociacion.montoTransferencia > 0 && (
+                                  <div className="flex justify-between">
+                                    <span className="text-ink-200">Transferencia:</span>
+                                    <span className="font-medium text-white">
+                                      {formatCurrency(negociacion.montoTransferencia)}
+                                    </span>
+                                  </div>
+                                )}
+                                {negociacion.montoCredito > 0 && (
+                                  <div className="flex justify-between">
+                                    <span className="text-ink-200">Crédito:</span>
+                                    <span className="font-medium text-white">
+                                      {formatCurrency(negociacion.montoCredito)}
+                                    </span>
+                                  </div>
+                                )}
+                                {negociacion.financiera && (
+                                  <div className="flex justify-between">
+                                    <span className="text-ink-200">Financiera:</span>
+                                    <span className="font-medium text-white">{negociacion.financiera}</span>
+                                  </div>
+                                )}
+                                {negociacion.cliente && (
+                                  <div className="flex justify-between">
+                                    <span className="text-ink-200">Cliente:</span>
+                                    <span className="font-medium text-white">
+                                      {negociacion.cliente}
+                                      {negociacion.telefonoCliente ? ` · ${negociacion.telefonoCliente}` : ''}
+                                    </span>
+                                  </div>
+                                )}
+                                <div className="flex justify-between border-t border-[#2d3f47] pt-2">
+                                  <span className="font-semibold text-ink-200">Total acordado:</span>
+                                  <span className="font-semibold text-[#8fd5e5]">
+                                    {formatCurrency(getTotalNegociacion(negociacion))}
+                                  </span>
+                                </div>
+                                {negociacion.notas && (
+                                  <p className="pt-2 text-xs text-ink-200">{negociacion.notas}</p>
+                                )}
+                              </div>
+                            );
+                          })()
+                        ) : (
+                          <p className="text-sm text-ink-200">
+                            Aún no se ha registrado la forma de pago de esta negociación.
+                          </p>
+                        )}
+                      </div>
+                    )}
 
                     {/* Desglose de Gastos */}
                     {vehicle.gastos && (vehicle.gastos.pintura > 0 || vehicle.gastos.mecanica > 0 || vehicle.gastos.traspaso > 0 || 
@@ -798,6 +1025,19 @@ const VehicleList: React.FC = () => {
                     {/* Acciones */}
                     <div className="flex flex-wrap justify-end gap-2 pt-2 border-t">
                       {/* Botones para vehículos NO vendidos ni separados */}
+
+                      {vehicle.estado === 'en_negociacion' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenNegotiationModal(vehicle);
+                          }}
+                          className="px-4 py-2 text-sm bg-[#16242c] text-[#8fd5e5] hover:bg-[#1b2f39] rounded-lg transition-colors border border-[#4e8896] flex items-center gap-2"
+                        >
+                          <CreditCard className="h-4 w-4" />
+                          Forma de Pago
+                        </button>
+                      )}
 
                       {vehicle.estado !== 'vendido' && vehicle.estado !== 'separado' && (
                         <>
@@ -973,6 +1213,22 @@ const VehicleList: React.FC = () => {
             isEditMode={selectedVehicle.estado === 'vendido' && !!selectedVehicle.datosVenta}
           />
         </>
+      )}
+
+      {/* Modal de Forma de Pago de la Negociación */}
+      {selectedVehicle && (
+        <NegotiationModal
+          isOpen={negotiationModalOpen}
+          onClose={() => {
+            setNegotiationModalOpen(false);
+            setSelectedVehicle(null);
+          }}
+          onSubmit={handleSaveNegotiationData}
+          vehiclePlaca={selectedVehicle.placa}
+          vehiclePrecioVenta={selectedVehicle.precioVenta}
+          initialData={selectedVehicle.datosNegociacion}
+          isSubmitting={isSavingNegotiation}
+        />
       )}
 
       {/* Modal de Separación */}

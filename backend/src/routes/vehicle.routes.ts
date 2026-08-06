@@ -23,9 +23,14 @@ import {
   getVehiclePhoto,
   consultarEstadoTramite,
 } from '../controllers/vehicle.controller';
+import {
+  getDocumentsCalendarFeed,
+  getCalendarSubscriptionInfo,
+} from '../controllers/documentsCalendar.controller';
 import { ocrPropertyCardWithVisionAI } from '../controllers/propertyCardOcr.controller';
 import {
   getVehicleInspectionChecklist,
+  generateVehicleInspectionChecklistPdfAI,
   upsertVehicleInspectionChecklist,
 } from '../controllers/vehicleInspectionChecklist.controller';
 import { getMarketplaceVehicles } from '../controllers/marketplace.controller';
@@ -44,6 +49,8 @@ const ocrUpload = multer({
 // Ruta pública para marketplace (sin autenticación)
 router.get('/marketplace', getMarketplaceVehicles);
 router.get('/photo/:filename', getVehiclePhoto);
+// Feed de calendario (Google Calendar lo consulta sin encabezados: se protege con token)
+router.get('/documents-calendar.ics', getDocumentsCalendarFeed);
 router.get('/consulta/:placa/transfer-form-excel', generateTransferFormExcelAIByPlate);
 router.get('/consulta/:placa', consultarEstadoTramite);
 
@@ -58,6 +65,7 @@ router.get('/reports/monthly', getMonthlyReports);
 router.get('/reports/monthly/export', exportMonthlyReport);
 router.get('/reports/templates/:templateType', exportBusinessTemplate);
 router.get('/expiring-documents', getVehiclesWithExpiringDocuments);
+router.get('/calendar-subscription', getCalendarSubscriptionInfo);
 router.get('/export', exportToExcel);
 router.post(
   '/ocr/property-card',
@@ -67,6 +75,11 @@ router.post(
 );
 router.get('/:id/inspection-checklist', getVehicleInspectionChecklist);
 router.put('/:id/inspection-checklist', authorize('admin', 'vendedor'), upsertVehicleInspectionChecklist);
+router.get(
+  '/:id/inspection-checklist/pdf-ai',
+  authorize('admin', 'vendedor'),
+  generateVehicleInspectionChecklistPdfAI
+);
 router.get('/:id', getVehicleById);
 router.get('/:id/export', exportVehicleReport);
 router.put('/:id', authorize('admin', 'vendedor'), updateVehicle);

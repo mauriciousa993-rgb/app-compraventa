@@ -561,135 +561,22 @@ const VehicleInspectionChecklist: React.FC = () => {
       return;
     }
 
-    if (!viewerRef.current) {
-      alert('El visor 3D no esta disponible para capturar imagenes');
-      return;
-    }
-
     setIsExportingPdf(true);
     try {
-      const { jsPDF } = await import('jspdf');
-      const captures = await viewerRef.current.captureDamageViews();
-
-      const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-      const pageWidth = doc.internal.pageSize.getWidth();
-      let y = 14;
-
-      doc.setFontSize(16);
-      doc.setFont('helvetica', 'bold');
-      doc.text('CHECKLIST DE INGRESO VEHICULAR', pageWidth / 2, y, { align: 'center' });
-      y += 8;
-
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'normal');
-      doc.text(
-        `Vehiculo: ${selectedVehicle.marca} ${selectedVehicle.modelo} (${selectedVehicle.placa})`,
-        14,
-        y
-      );
-      y += 6;
-      doc.text(`Inspector: ${inspectorName || 'No especificado'} | Fecha: ${inspectionDate}`, 14, y);
-      y += 4;
-
-      const imageWidth = 87;
-      const imageHeight = 52;
-      const leftX = 14;
-      const rightX = 109;
-      const firstRowY = y + 4;
-      const secondRowY = firstRowY + imageHeight + 12;
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10);
-      doc.text('Frente', leftX, firstRowY - 2);
-      doc.text('Trasera', rightX, firstRowY - 2);
-      doc.text('Lado derecho', leftX, secondRowY - 2);
-      doc.text('Lado izquierdo', rightX, secondRowY - 2);
-
-      doc.addImage(captures.frente, 'PNG', leftX, firstRowY, imageWidth, imageHeight);
-      doc.addImage(captures.trasera, 'PNG', rightX, firstRowY, imageWidth, imageHeight);
-      doc.addImage(captures.derecha, 'PNG', leftX, secondRowY, imageWidth, imageHeight);
-      doc.addImage(captures.izquierda, 'PNG', rightX, secondRowY, imageWidth, imageHeight);
-
-      y = secondRowY + imageHeight + 10;
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.text('Resumen completo del checklist', 14, y);
-      y += 6;
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      const summaryText = summaryLines || 'Sin observaciones registradas.';
-      const pageHeight = doc.internal.pageSize.getHeight();
-      const lineHeight = 5;
-      const topMargin = 14;
-      const bottomMargin = 14;
-
-      const ensureLineSpace = () => {
-        if (y + lineHeight > pageHeight - bottomMargin) {
-          doc.addPage();
-          y = topMargin;
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(10);
-        }
-      };
-
-      summaryText.split('\n').forEach((line) => {
-        if (!line.trim()) {
-          ensureLineSpace();
-          y += lineHeight / 2;
-          return;
-        }
-        const wrappedLines = doc.splitTextToSize(line, pageWidth - 28) as string[];
-        wrappedLines.forEach((wrappedLine) => {
-          ensureLineSpace();
-          doc.text(wrappedLine, 14, y);
-          y += lineHeight;
-        });
+      await vehiclesAPI.saveInspectionChecklist(selectedVehicleId, {
+        inspectorName,
+        inspectionDate,
+        deliveredByName,
+        deliveredBySignature,
+        items,
+        damageZones,
+        generalObservations,
       });
 
-      y += 4;
-      if (y + 40 > pageHeight - bottomMargin) {
-        doc.addPage();
-        y = topMargin;
-      }
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.text('Firma de quien entrega el vehiculo', 14, y);
-      y += 6;
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      doc.text(`Nombre: ${deliveredByName || 'No especificado'}`, 14, y);
-      y += 5;
-
-      if (deliveredBySignature) {
-        const signatureBoxWidth = 90;
-        const signatureBoxHeight = 30;
-        if (y + signatureBoxHeight + 8 > pageHeight - bottomMargin) {
-          doc.addPage();
-          y = topMargin;
-        }
-        doc.rect(14, y, signatureBoxWidth, signatureBoxHeight);
-        try {
-          doc.addImage(deliveredBySignature, 'PNG', 16, y + 2, signatureBoxWidth - 4, signatureBoxHeight - 4);
-          y += signatureBoxHeight + 4;
-          doc.setFontSize(9);
-          doc.text('Firma capturada en dispositivo movil', 14, y);
-        } catch (signatureError) {
-          y += signatureBoxHeight + 2;
-          doc.setFontSize(9);
-          doc.text('Firma registrada, pero no se pudo renderizar la imagen en el PDF.', 14, y);
-        }
-      } else {
-        doc.setFontSize(9);
-        doc.text('Firma: no registrada', 14, y);
-      }
-
-      doc.save(`checklist-${selectedVehicle.placa}-${Date.now()}.pdf`);
+      await vehiclesAPI.generateInspectionChecklistPdfAI(selectedVehicleId);
     } catch (error: any) {
       console.error('Error al exportar PDF del checklist:', error);
-      alert(error?.message || 'No se pudo generar el PDF del checklist');
+      alert(error?.response?.data?.message || error?.message || 'No se pudo generar el PDF del checklist');
     } finally {
       setIsExportingPdf(false);
     }

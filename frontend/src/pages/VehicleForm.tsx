@@ -25,6 +25,14 @@ import {
   autoProcessPropertyCardImage,
   buildPropertyCardPdfFile,
 } from '../utils/propertyCardImageEditor';
+import {
+  FORMAS_PAGO_NEGOCIACION,
+  UBICACIONES_VEHICULO,
+  createEmptyDatosNegociacion,
+  getTotalNegociacion,
+  normalizeDatosNegociacion,
+} from '../constants/vehicleOptions';
+import { DatosNegociacion, FormaPagoNegociacion, UbicacionVehiculo } from '../types';
 
 const DEFAULT_VEHICLE_YEAR = new Date().getFullYear();
 
@@ -319,6 +327,14 @@ const VehicleForm: React.FC = () => {
     estado: 'en_proceso',
     estadoTramite: '',
     fechaVenta: '',
+
+    // Ubicacion (para vehiculos con pendientes)
+    ubicacionActual: '' as UbicacionVehiculo,
+    ubicacionDetalle: '',
+
+    // Datos de la negociacion (forma de pago)
+    datosNegociacion: createEmptyDatosNegociacion(),
+
     datosTarjetaPropiedad: {
       linea: '',
       cilindrada: '',
@@ -501,9 +517,12 @@ const VehicleForm: React.FC = () => {
         tieneInversionistas: vehicle.tieneInversionistas || false,
         estado: vehicle.estado || 'en_proceso',
         estadoTramite: vehicle.estadoTramite || '',
-        fechaVenta: vehicle.fechaVenta 
+        fechaVenta: vehicle.fechaVenta
           ? new Date(vehicle.fechaVenta).toISOString().split('T')[0]
           : '',
+        ubicacionActual: (vehicle.ubicacionActual || '') as UbicacionVehiculo,
+        ubicacionDetalle: vehicle.ubicacionDetalle || '',
+        datosNegociacion: normalizeDatosNegociacion(vehicle.datosNegociacion),
         datosTarjetaPropiedad: {
           linea: vehicle.datosTarjetaPropiedad?.linea || modeloUnificado,
           cilindrada: vehicle.datosTarjetaPropiedad?.cilindrada || '',
@@ -667,6 +686,44 @@ const VehicleForm: React.FC = () => {
         return nextState;
       });
     }
+  };
+
+  const updateNegociacion = (campo: keyof DatosNegociacion, valor: string | number) => {
+    setFormData(prev => ({
+      ...prev,
+      datosNegociacion: { ...prev.datosNegociacion, [campo]: valor } as DatosNegociacion
+    }));
+  };
+
+  // Con pago mixto se piden todos los montos; con pago simple solo el que aplica
+  const mostrarCampoNegociacion = (medio: 'efectivo' | 'consignacion' | 'transferencia' | 'credito') => {
+    const formaPago = formData.datosNegociacion.formaPago;
+    return formaPago === 'mixto' || formaPago === medio;
+  };
+
+  const handleFormaPagoChange = (formaPago: FormaPagoNegociacion) => {
+    setFormData(prev => ({
+      ...prev,
+      datosNegociacion: {
+        ...prev.datosNegociacion,
+        formaPago,
+        // Se limpian los montos que dejan de aplicar con la nueva forma de pago
+        montoEfectivo:
+          formaPago === 'efectivo' || formaPago === 'mixto' ? prev.datosNegociacion.montoEfectivo : 0,
+        montoConsignacion:
+          formaPago === 'consignacion' || formaPago === 'mixto'
+            ? prev.datosNegociacion.montoConsignacion
+            : 0,
+        montoTransferencia:
+          formaPago === 'transferencia' || formaPago === 'mixto'
+            ? prev.datosNegociacion.montoTransferencia
+            : 0,
+        montoCredito:
+          formaPago === 'credito' || formaPago === 'mixto' ? prev.datosNegociacion.montoCredito : 0,
+        financiera:
+          formaPago === 'credito' || formaPago === 'mixto' ? prev.datosNegociacion.financiera : ''
+      }
+    }));
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1916,203 +1973,56 @@ const VehicleForm: React.FC = () => {
             </div>
           </div>
 
-          {/* Gastos */}
+          {/* Gastos: se registran dentro de cada inversionista y suman al costo del vehiculo */}
           <div className="card">
             <h2 className="text-xl font-semibold mb-4 text-gray-900">Gastos del Vehículo</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Gastos en Pintura
-                </label>
-                <input
-                  type="text"
-                  name="gastos.pintura"
-                  value={formatNumber(formData.gastos.pintura)}
-                  onChange={(e) => {
-                    const numValue = parseFormattedNumber(e.target.value);
-                    setFormData(prev => {
-                      const newGastos = { ...prev.gastos, pintura: numValue };
-                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + 
-                                       newGastos.alistamiento + newGastos.tapiceria + newGastos.transporte + newGastos.varios;
-                      return { ...prev, gastos: newGastos };
-                    });
-                  }}
-                  className="input-field"
-                  placeholder="Ej: 2,000,000"
-                />
-              </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Los gastos se registran en la sección <strong>Inversionistas</strong>, usando la lista
+              desplegable de categoría (pintura, mecánica, traspaso, alistamiento, tapicería,
+              transporte, varios). Todo lo que se registre allí suma al costo de este vehículo.
+            </p>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Gastos en Mecánica
-                </label>
-                <input
-                  type="text"
-                  name="gastos.mecanica"
-                  value={formatNumber(formData.gastos.mecanica)}
-                  onChange={(e) => {
-                    const numValue = parseFormattedNumber(e.target.value);
-                    setFormData(prev => {
-                      const newGastos = { ...prev.gastos, mecanica: numValue };
-                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + 
-                                       newGastos.alistamiento + newGastos.tapiceria + newGastos.transporte + newGastos.varios;
-                      return { ...prev, gastos: newGastos };
-                    });
-                  }}
-                  className="input-field"
-                  placeholder="Ej: 1,500,000"
-                />
-              </div>
+            {(() => {
+              const gastosInversionistas = formData.inversionistas.reduce((sum, inv) => {
+                const totalGastosInv = inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0;
+                return sum + totalGastosInv;
+              }, 0);
+              // Gastos generales cargados antes de mover todo a los inversionistas
+              const gastosHistoricos = formData.gastos.total || 0;
+              const totalGeneral = gastosHistoricos + gastosInversionistas;
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Gastos de Traspaso
-                </label>
-                <input
-                  type="text"
-                  name="gastos.traspaso"
-                  value={formatNumber(formData.gastos.traspaso)}
-                  onChange={(e) => {
-                    const numValue = parseFormattedNumber(e.target.value);
-                    setFormData(prev => {
-                      const newGastos = { ...prev.gastos, traspaso: numValue };
-                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + 
-                                       newGastos.alistamiento + newGastos.tapiceria + newGastos.transporte + newGastos.varios;
-                      return { ...prev, gastos: newGastos };
-                    });
-                  }}
-                  className="input-field"
-                  placeholder="Ej: 800,000"
-                />
-              </div>
+              return (
+                <div className="space-y-3">
+                  <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+                    <label className="block text-sm font-medium text-orange-700 mb-1">
+                      Gastos de Inversionistas
+                    </label>
+                    <p className="text-2xl font-bold text-orange-900">
+                      ${gastosInversionistas.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-xs text-orange-600 mt-1">
+                      {formData.inversionistas.length === 0
+                        ? 'Agrega un inversionista más abajo para registrar los gastos del vehículo'
+                        : 'Suma de todos los gastos registrados por los inversionistas'}
+                    </p>
+                  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Gastos de Alistamiento
-                </label>
-                <input
-                  type="text"
-                  name="gastos.alistamiento"
-                  value={formatNumber(formData.gastos.alistamiento)}
-                  onChange={(e) => {
-                    const numValue = parseFormattedNumber(e.target.value);
-                    setFormData(prev => {
-                      const newGastos = { ...prev.gastos, alistamiento: numValue };
-                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + 
-                                       newGastos.alistamiento + newGastos.tapiceria + newGastos.transporte + newGastos.varios;
-                      return { ...prev, gastos: newGastos };
-                    });
-                  }}
-                  className="input-field"
-                  placeholder="Ej: 300,000"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Gastos de Tapicería
-                </label>
-                <input
-                  type="text"
-                  name="gastos.tapiceria"
-                  value={formatNumber(formData.gastos.tapiceria)}
-                  onChange={(e) => {
-                    const numValue = parseFormattedNumber(e.target.value);
-                    setFormData(prev => {
-                      const newGastos = { ...prev.gastos, tapiceria: numValue };
-                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + 
-                                       newGastos.alistamiento + newGastos.tapiceria + newGastos.transporte + newGastos.varios;
-                      return { ...prev, gastos: newGastos };
-                    });
-                  }}
-                  className="input-field"
-                  placeholder="Ej: 400,000"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Gastos de Transporte
-                </label>
-                <input
-                  type="text"
-                  name="gastos.transporte"
-                  value={formatNumber(formData.gastos.transporte)}
-                  onChange={(e) => {
-                    const numValue = parseFormattedNumber(e.target.value);
-                    setFormData(prev => {
-                      const newGastos = { ...prev.gastos, transporte: numValue };
-                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + 
-                                       newGastos.alistamiento + newGastos.tapiceria + newGastos.transporte + newGastos.varios;
-                      return { ...prev, gastos: newGastos };
-                    });
-                  }}
-                  className="input-field"
-                  placeholder="Ej: 200,000"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Gastos Varios
-                </label>
-                <input
-                  type="text"
-                  name="gastos.varios"
-                  value={formatNumber(formData.gastos.varios)}
-                  onChange={(e) => {
-                    const numValue = parseFormattedNumber(e.target.value);
-                    setFormData(prev => {
-                      const newGastos = { ...prev.gastos, varios: numValue };
-                      newGastos.total = newGastos.pintura + newGastos.mecanica + newGastos.traspaso + 
-                                       newGastos.alistamiento + newGastos.tapiceria + newGastos.transporte + newGastos.varios;
-                      return { ...prev, gastos: newGastos };
-                    });
-                  }}
-                  className="input-field"
-                  placeholder="Ej: 500,000"
-                />
-              </div>
-
-              <div className="md:col-span-2 space-y-3">
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <label className="block text-sm font-medium text-blue-700 mb-1">
-                    Gastos del Vehículo
-                  </label>
-                  <p className="text-2xl font-bold text-blue-900">
-                    ${formData.gastos.total.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
-                  </p>
-                </div>
-                
-                {formData.inversionistas.length > 0 && (() => {
-                  const gastosInversionistas = formData.inversionistas.reduce((sum, inv) => {
-                    const totalGastosInv = inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0;
-                    return sum + totalGastosInv;
-                  }, 0);
-                  
-                  return gastosInversionistas > 0 ? (
-                    <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
-                      <label className="block text-sm font-medium text-orange-700 mb-1">
-                        Gastos de Inversionistas
+                  {gastosHistoricos > 0 && (
+                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Gastos registrados anteriormente
                       </label>
-                      <p className="text-2xl font-bold text-orange-900">
-                        ${gastosInversionistas.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
+                      <p className="text-2xl font-bold text-gray-900">
+                        ${gastosHistoricos.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
                       </p>
-                      <p className="text-xs text-orange-600 mt-1">
-                        Suma de todos los gastos de inversionistas
+                      <p className="text-xs text-gray-500 mt-1">
+                        Gastos generales cargados antes de este cambio. Se conservan y siguen sumando
+                        al costo del vehículo.
                       </p>
                     </div>
-                  ) : null;
-                })()}
-                
-                {formData.inversionistas.length > 0 && (() => {
-                  const gastosInversionistas = formData.inversionistas.reduce((sum, inv) => {
-                    const totalGastosInv = inv.gastos?.reduce((s, g) => s + (g.monto || 0), 0) || 0;
-                    return sum + totalGastosInv;
-                  }, 0);
-                  const totalGeneral = formData.gastos.total + gastosInversionistas;
-                  
-                  return gastosInversionistas > 0 ? (
+                  )}
+
+                  {gastosHistoricos > 0 && gastosInversionistas > 0 && (
                     <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                       <label className="block text-sm font-medium text-purple-700 mb-1">
                         Total General de Gastos
@@ -2121,13 +2031,13 @@ const VehicleForm: React.FC = () => {
                         ${totalGeneral.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
                       </p>
                       <p className="text-xs text-purple-600 mt-1">
-                        Gastos del Vehículo + Gastos de Inversionistas
+                        Gastos de Inversionistas + gastos registrados anteriormente
                       </p>
                     </div>
-                  ) : null;
-                })()}
-              </div>
-            </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Resumen Financiero */}
             {(() => {
@@ -2151,9 +2061,9 @@ const VehicleForm: React.FC = () => {
                         ${costoTotal.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {gastosInversionistas > 0
-                          ? '(Compra + Gastos + Gastos Inversionistas)'
-                          : '(Compra + Gastos)'}
+                        {gastosTotales > 0
+                          ? '(Precio de compra + gastos registrados)'
+                          : '(Solo precio de compra)'}
                       </p>
                     </div>
                     <div>
@@ -2631,6 +2541,219 @@ const VehicleForm: React.FC = () => {
                   <option value="vendido">Vendido</option>
                 </select>
               </div>
+
+              {/* Ubicacion del vehiculo: solo cuando tiene pendientes */}
+              {formData.estado === 'en_proceso' && (
+                <div className="space-y-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-amber-800">
+                      ¿Dónde está el vehículo?
+                    </label>
+                    <select
+                      name="ubicacionActual"
+                      value={formData.ubicacionActual}
+                      onChange={handleChange}
+                      className="input-field"
+                    >
+                      {UBICACIONES_VEHICULO.map((opcion) => (
+                        <option key={opcion.value || 'sin-definir'} value={opcion.value}>
+                          {opcion.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-2 text-xs text-amber-700">
+                      Sirve para saber si está en el taller, en pintura, en el parqueadero, etc.
+                    </p>
+                  </div>
+
+                  {formData.ubicacionActual === 'otro' && (
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-amber-800">
+                        Especifica el lugar
+                      </label>
+                      <input
+                        type="text"
+                        name="ubicacionDetalle"
+                        value={formData.ubicacionDetalle}
+                        onChange={handleChange}
+                        className="input-field"
+                        placeholder="Ej: taller de Juan, grúa, casa del cliente..."
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Forma de pago: solo cuando el vehiculo esta en negociacion */}
+              {formData.estado === 'en_negociacion' && (
+                <div className="space-y-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                  <h3 className="text-sm font-semibold text-blue-800">
+                    Forma de pago de la negociación
+                  </h3>
+
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-blue-800">
+                        Forma de pago
+                      </label>
+                      <select
+                        value={formData.datosNegociacion.formaPago}
+                        onChange={(e) =>
+                          handleFormaPagoChange(e.target.value as FormaPagoNegociacion)
+                        }
+                        className="input-field"
+                      >
+                        {FORMAS_PAGO_NEGOCIACION.map((opcion) => (
+                          <option key={opcion.value || 'sin-definir'} value={opcion.value}>
+                            {opcion.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-blue-800">
+                        Cliente interesado
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.datosNegociacion.cliente}
+                        onChange={(e) => updateNegociacion('cliente', e.target.value)}
+                        className="input-field"
+                        placeholder="Nombre del cliente"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-blue-800">
+                        Teléfono del cliente
+                      </label>
+                      <input
+                        type="tel"
+                        value={formData.datosNegociacion.telefonoCliente}
+                        onChange={(e) => updateNegociacion('telefonoCliente', e.target.value)}
+                        className="input-field"
+                        placeholder="Número de contacto"
+                      />
+                    </div>
+
+                    {mostrarCampoNegociacion('efectivo') && (
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-blue-800">
+                          Monto en efectivo
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={formData.datosNegociacion.montoEfectivo || ''}
+                          onChange={(e) =>
+                            updateNegociacion('montoEfectivo', parseFloat(e.target.value) || 0)
+                          }
+                          className="input-field"
+                          placeholder="0"
+                        />
+                      </div>
+                    )}
+
+                    {mostrarCampoNegociacion('consignacion') && (
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-blue-800">
+                          Monto en consignación
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={formData.datosNegociacion.montoConsignacion || ''}
+                          onChange={(e) =>
+                            updateNegociacion('montoConsignacion', parseFloat(e.target.value) || 0)
+                          }
+                          className="input-field"
+                          placeholder="0"
+                        />
+                      </div>
+                    )}
+
+                    {mostrarCampoNegociacion('transferencia') && (
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-blue-800">
+                          Monto en transferencia
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={formData.datosNegociacion.montoTransferencia || ''}
+                          onChange={(e) =>
+                            updateNegociacion('montoTransferencia', parseFloat(e.target.value) || 0)
+                          }
+                          className="input-field"
+                          placeholder="0"
+                        />
+                      </div>
+                    )}
+
+                    {mostrarCampoNegociacion('credito') && (
+                      <>
+                        <div>
+                          <label className="mb-1 block text-sm font-medium text-blue-800">
+                            Monto financiado (crédito)
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            value={formData.datosNegociacion.montoCredito || ''}
+                            onChange={(e) =>
+                              updateNegociacion('montoCredito', parseFloat(e.target.value) || 0)
+                            }
+                            className="input-field"
+                            placeholder="0"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-1 block text-sm font-medium text-blue-800">
+                            Financiera / Entidad
+                          </label>
+                          <input
+                            type="text"
+                            value={formData.datosNegociacion.financiera}
+                            onChange={(e) => updateNegociacion('financiera', e.target.value)}
+                            className="input-field"
+                            placeholder="Ej: Banco de Bogotá, Sufi, Finandina..."
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    <div className="md:col-span-2">
+                      <label className="mb-1 block text-sm font-medium text-blue-800">
+                        Notas de la negociación
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={formData.datosNegociacion.notas}
+                        onChange={(e) => updateNegociacion('notas', e.target.value)}
+                        className="input-field"
+                        placeholder="Detalles del acuerdo, fechas de desembolso, condiciones..."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-blue-300 bg-white p-3">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Total registrado</span>
+                      <span className="font-semibold text-gray-900">
+                        ${getTotalNegociacion(formData.datosNegociacion).toLocaleString('es-CO')}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Precio de venta</span>
+                      <span className="font-semibold text-gray-900">
+                        ${(formData.precioVenta || 0).toLocaleString('es-CO')}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Mostrar campo de fecha de venta solo si el estado es "vendido" */}
               {formData.estado === 'vendido' && (

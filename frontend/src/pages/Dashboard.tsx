@@ -62,6 +62,7 @@ const Dashboard: React.FC = () => {
 
   const statCards = [
     {
+      // Solo inventario activo: listos para venta + en negociacion + con pendientes
       title: 'Total Vehiculos',
       value: stats?.totalVehiculos || 0,
       icon: Car,
@@ -69,7 +70,8 @@ const Dashboard: React.FC = () => {
       iconBg: 'bg-[#2a1114]',
       valueColor: 'text-white',
       clickable: true,
-      estado: undefined,
+      estado: 'inventario',
+      subtitle: 'Listos + en negociacion + con pendientes',
     },
     {
       title: 'Listos para Venta',
@@ -92,7 +94,7 @@ const Dashboard: React.FC = () => {
       estado: 'en_negociacion',
     },
     {
-      title: 'En Proceso',
+      title: 'Con Pendientes',
       value: stats?.vehiculosPendientes || 0,
       icon: Clock,
       iconColor: 'text-[#f4c26b]',
@@ -250,6 +252,9 @@ const Dashboard: React.FC = () => {
                   <div>
                     <p className="text-sm font-medium text-ink-200">{stat.title}</p>
                     <p className={`text-3xl font-bold mt-2 ${stat.valueColor}`}>{stat.value}</p>
+                    {(stat as any).subtitle && (
+                      <p className="text-xs text-ink-300 mt-1">{(stat as any).subtitle}</p>
+                    )}
                     {stat.clickable && <p className="text-xs text-ink-300 mt-1">Click para ver detalles</p>}
                   </div>
                   <div className={`${stat.iconBg} p-3 rounded-xl border border-[#30333a]`}>

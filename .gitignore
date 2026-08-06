@@ -40,3 +40,6 @@ temp/
 # OS
 Thumbs.db
 .DS_Store
+
+# Frontend demo: vive en su propio repositorio (compraventademo)
+autotech-frontend-demo/

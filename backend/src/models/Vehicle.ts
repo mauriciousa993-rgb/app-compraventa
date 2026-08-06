@@ -16,6 +16,38 @@ export interface IInversionista {
   utilidadCorrespondiente: number;
 }
 
+export type FormaPagoNegociacion =
+  | ''
+  | 'efectivo'
+  | 'consignacion'
+  | 'transferencia'
+  | 'credito'
+  | 'mixto';
+
+export interface IDatosNegociacion {
+  formaPago: FormaPagoNegociacion;
+  montoEfectivo: number;
+  montoConsignacion: number;
+  montoTransferencia: number;
+  montoCredito: number;
+  financiera: string;
+  cliente: string;
+  telefonoCliente: string;
+  notas: string;
+}
+
+export type UbicacionVehiculo =
+  | ''
+  | 'vitrina'
+  | 'taller_mecanico'
+  | 'pintura'
+  | 'latoneria'
+  | 'tapiceria'
+  | 'alistamiento'
+  | 'parqueadero'
+  | 'tramites'
+  | 'otro';
+
 export interface IDatosSeparacion {
   cliente: {
     nombre: string;
@@ -110,6 +142,7 @@ export interface IVehicleDocument extends Document {
   precioVenta: number;
   fechaIngreso: Date;
   fechaListoVenta?: Date;
+  fechaInicioNegociacion?: Date;
   fechaVenta?: Date;
   gastos: {
     pintura: number;
@@ -145,6 +178,9 @@ export interface IVehicleDocument extends Document {
   datosTarjetaPropiedad?: IDatosTarjetaPropiedad;
   datosVenta?: IDatosVenta;
   datosSeparacion?: IDatosSeparacion;
+  datosNegociacion?: IDatosNegociacion;
+  ubicacionActual?: UbicacionVehiculo;
+  ubicacionDetalle?: string;
   fotos: {
     exteriores: string[];
     interiores: string[];
@@ -230,6 +266,7 @@ const vehicleSchema = new Schema<IVehicleDocument>({
   precioVenta: { type: Number, required: true },
   fechaIngreso: { type: Date, default: Date.now },
   fechaListoVenta: { type: Date },
+  fechaInicioNegociacion: { type: Date },
   fechaVenta: { type: Date },
   gastos: {
     pintura: { type: Number, default: 0 },
@@ -329,6 +366,38 @@ const vehicleSchema = new Schema<IVehicleDocument>({
       descripcion: { type: String, default: '' },
     },
   },
+  datosNegociacion: {
+    formaPago: {
+      type: String,
+      enum: ['', 'efectivo', 'consignacion', 'transferencia', 'credito', 'mixto'],
+      default: '',
+    },
+    montoEfectivo: { type: Number, default: 0 },
+    montoConsignacion: { type: Number, default: 0 },
+    montoTransferencia: { type: Number, default: 0 },
+    montoCredito: { type: Number, default: 0 },
+    financiera: { type: String, default: '' },
+    cliente: { type: String, default: '' },
+    telefonoCliente: { type: String, default: '' },
+    notas: { type: String, default: '' },
+  },
+  ubicacionActual: {
+    type: String,
+    enum: [
+      '',
+      'vitrina',
+      'taller_mecanico',
+      'pintura',
+      'latoneria',
+      'tapiceria',
+      'alistamiento',
+      'parqueadero',
+      'tramites',
+      'otro',
+    ],
+    default: '',
+  },
+  ubicacionDetalle: { type: String, default: '' },
   datosSeparacion: {
     cliente: {
       nombre: { type: String, default: '' },
@@ -456,13 +525,28 @@ vehicleSchema.virtual('diasEnProceso').get(function () {
   return Math.floor(diffTime / (1000 * 60 * 60 * 24));
 });
 
-// Método virtual para calcular días en vitrina
+// Método virtual para calcular días en vitrina.
+// El conteo se congela cuando el vehículo entra en negociación (a partir de ahí
+// corre el contador de días en negociación) y también cuando se vende.
 vehicleSchema.virtual('diasEnVitrina').get(function () {
-  if (!this.fechaListoVenta) return 0;
   const fechaInicio = this.fechaListoVenta;
-  const fechaFin = this.fechaVenta || new Date();
-  if (!fechaInicio || !fechaFin) return 0;
+  if (!fechaInicio) return 0;
+
+  const fechaFin = this.fechaInicioNegociacion || this.fechaVenta || new Date();
+
   const diffTime = fechaFin.getTime() - fechaInicio.getTime();
+  if (diffTime <= 0) return 0;
+  return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+});
+
+// Método virtual para calcular días en negociación (conteo nuevo e independiente)
+vehicleSchema.virtual('diasEnNegociacion').get(function () {
+  const fechaInicio = this.fechaInicioNegociacion;
+  if (!fechaInicio) return 0;
+
+  const fechaFin = this.fechaVenta || new Date();
+  const diffTime = fechaFin.getTime() - fechaInicio.getTime();
+  if (diffTime <= 0) return 0;
   return Math.floor(diffTime / (1000 * 60 * 60 * 24));
 });
 

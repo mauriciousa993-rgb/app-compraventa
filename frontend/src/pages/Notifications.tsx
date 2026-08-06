@@ -11,13 +11,87 @@ interface NotificationItem {
   severity: 'critical' | 'warning' | 'info' | 'expired';
 }
 
+interface CalendarSubscription {
+  feedUrl: string;
+  webcalUrl: string;
+  googleCalendarUrl: string;
+  diasAvisoPrevio: number[];
+}
+
+// Días de anticipación del recordatorio que se crea en Google Calendar
+const DIAS_AVISO_PREVIO = 2;
+
+const toGoogleDate = (date: Date): string => date.toISOString().slice(0, 10).replace(/-/g, '');
+
+const addDays = (date: Date, days: number): Date => {
+  const result = new Date(date.getTime());
+  result.setDate(result.getDate() + days);
+  return result;
+};
+
+/**
+ * Construye el enlace "Agregar a Google Calendar" con un evento de día completo
+ * ubicado DIAS_AVISO_PREVIO días antes del vencimiento, para que el recordatorio
+ * llegue a tiempo a la cuenta de Gmail del usuario.
+ */
+const buildGoogleCalendarUrl = (
+  documento: string,
+  vehicle: Vehicle,
+  fechaVencimiento: Date
+): string => {
+  const fechaAviso = addDays(fechaVencimiento, -DIAS_AVISO_PREVIO);
+  const inicio = toGoogleDate(fechaAviso);
+  const fin = toGoogleDate(addDays(fechaAviso, 1));
+
+  const titulo = `Recordatorio: ${documento} de ${vehicle.placa} vence en ${DIAS_AVISO_PREVIO} días`;
+  const detalles = [
+    `${documento} del vehículo ${vehicle.marca} ${vehicle.modelo} ${vehicle.año} (placa ${vehicle.placa}).`,
+    `Fecha de vencimiento: ${fechaVencimiento.toLocaleDateString('es-CO')}.`,
+    'Recuerda renovarlo antes de la fecha para evitar sanciones.',
+  ].join('\n');
+
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: titulo,
+    dates: `${inicio}/${fin}`,
+    details: detalles,
+  });
+
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+};
+
 const Notifications: React.FC = () => {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [calendarInfo, setCalendarInfo] = useState<CalendarSubscription | null>(null);
+  const [calendarCopied, setCalendarCopied] = useState(false);
 
   useEffect(() => {
     loadNotifications();
+    loadCalendarInfo();
   }, []);
+
+  const loadCalendarInfo = async () => {
+    try {
+      const info = await vehiclesAPI.getCalendarSubscription();
+      setCalendarInfo(info);
+    } catch (error) {
+      // Si el backend aún no expone el feed, la página sigue funcionando sin esta sección
+      console.error('Error al obtener la configuración del calendario:', error);
+    }
+  };
+
+  const handleCopyFeedUrl = async () => {
+    if (!calendarInfo) return;
+
+    try {
+      await navigator.clipboard.writeText(calendarInfo.feedUrl);
+      setCalendarCopied(true);
+      setTimeout(() => setCalendarCopied(false), 3000);
+    } catch (error) {
+      window.prompt('Copia esta URL y agrégala en Google Calendar:', calendarInfo.feedUrl);
+    }
+  };
 
   const loadNotifications = async () => {
     try {
@@ -147,6 +221,53 @@ const Notifications: React.FC = () => {
           </p>
         </div>
 
+        {/* Sincronización con Google Calendar */}
+        {calendarInfo && (
+          <div className="mb-8 rounded-lg border border-[#2f3238] bg-surface-800 p-6">
+            <h2 className="text-lg font-semibold text-white">Conectar con Google Calendar</h2>
+            <p className="mt-1 text-sm text-ink-300">
+              Suscribe este calendario en tu cuenta de Gmail y verás los vencimientos de SOAT y
+              Tecnomecánica con un recordatorio {calendarInfo.diasAvisoPrevio.join(' y ')} días antes.
+              El calendario se actualiza solo cuando registras o cambias un vehículo.
+            </p>
+
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <code className="flex-1 overflow-x-auto rounded border border-[#2f3238] bg-[#15181d] px-3 py-2 text-xs text-ink-200">
+                {calendarInfo.feedUrl}
+              </code>
+              <button
+                onClick={handleCopyFeedUrl}
+                className="rounded-md border border-[#3d434e] px-4 py-2 text-sm text-white transition-colors hover:bg-[#252930]"
+              >
+                {calendarCopied ? 'Copiado' : 'Copiar URL'}
+              </button>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              <a
+                href={calendarInfo.googleCalendarUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+              >
+                Agregar a Google Calendar
+              </a>
+              <a
+                href={calendarInfo.feedUrl}
+                className="inline-flex items-center rounded-md border border-[#3d434e] px-4 py-2 text-sm text-white transition-colors hover:bg-[#252930]"
+              >
+                Descargar archivo .ics
+              </a>
+            </div>
+
+            <p className="mt-3 text-xs text-ink-300">
+              En Google Calendar: "Otros calendarios" → "Suscribirse a un calendario" → "Desde URL" y
+              pega la dirección. Si prefieres que los recordatorios lleguen como notificación, importa
+              el archivo .ics desde Configuración → Importar y exportar.
+            </p>
+          </div>
+        )}
+
         {loading ? (
           <div className="flex justify-center items-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
@@ -266,13 +387,37 @@ const Notifications: React.FC = () => {
                         )}
                       </p>
                     </div>
-                    <div className="mt-4">
+                    <div className="mt-4 flex flex-wrap gap-3">
                       <Link
                         to={`/vehicles/${notification.vehicle._id}/edit`}
                         className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                       >
                         Ver detalles del vehículo
                       </Link>
+
+                      {(() => {
+                        const fechaVencimiento =
+                          notification.type === 'soat'
+                            ? notification.vehicle.documentacion?.soat?.fechaVencimiento
+                            : notification.vehicle.documentacion?.tecnomecanica?.fechaVencimiento;
+
+                        if (!fechaVencimiento) return null;
+
+                        return (
+                          <a
+                            href={buildGoogleCalendarUrl(
+                              getDocumentTypeLabel(notification.type),
+                              notification.vehicle,
+                              new Date(fechaVencimiento)
+                            )}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center rounded-md border border-current px-4 py-2 text-sm font-medium hover:bg-white/40"
+                          >
+                            Recordarme en Google Calendar
+                          </a>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
