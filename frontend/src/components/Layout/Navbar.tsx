@@ -36,6 +36,9 @@ const Navbar: React.FC = () => {
       const today = new Date();
 
       vehicles.forEach((vehicle) => {
+        // Los vehiculos vendidos o retirados ya no generan notificaciones
+        if (vehicle.estado === 'vendido' || vehicle.estado === 'retirado') return;
+
         // Verificar SOAT - incluye vencidos y próximos a vencer
         if (vehicle.documentacion?.soat?.fechaVencimiento) {
           const soatDate = new Date(vehicle.documentacion.soat.fechaVencimiento);

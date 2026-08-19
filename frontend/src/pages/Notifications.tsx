@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { vehiclesAPI } from '../services/api';
 import { Vehicle } from '../types';
 import Layout from '../components/Layout/Layout';
+import { buildGoogleCalendarEventUrl } from '../utils/googleCalendar';
 
 interface NotificationItem {
   vehicle: Vehicle;
@@ -17,48 +18,6 @@ interface CalendarSubscription {
   googleCalendarUrl: string;
   diasAvisoPrevio: number[];
 }
-
-// Días de anticipación del recordatorio que se crea en Google Calendar
-const DIAS_AVISO_PREVIO = 2;
-
-const toGoogleDate = (date: Date): string => date.toISOString().slice(0, 10).replace(/-/g, '');
-
-const addDays = (date: Date, days: number): Date => {
-  const result = new Date(date.getTime());
-  result.setDate(result.getDate() + days);
-  return result;
-};
-
-/**
- * Construye el enlace "Agregar a Google Calendar" con un evento de día completo
- * ubicado DIAS_AVISO_PREVIO días antes del vencimiento, para que el recordatorio
- * llegue a tiempo a la cuenta de Gmail del usuario.
- */
-const buildGoogleCalendarUrl = (
-  documento: string,
-  vehicle: Vehicle,
-  fechaVencimiento: Date
-): string => {
-  const fechaAviso = addDays(fechaVencimiento, -DIAS_AVISO_PREVIO);
-  const inicio = toGoogleDate(fechaAviso);
-  const fin = toGoogleDate(addDays(fechaAviso, 1));
-
-  const titulo = `Recordatorio: ${documento} de ${vehicle.placa} vence en ${DIAS_AVISO_PREVIO} días`;
-  const detalles = [
-    `${documento} del vehículo ${vehicle.marca} ${vehicle.modelo} ${vehicle.año} (placa ${vehicle.placa}).`,
-    `Fecha de vencimiento: ${fechaVencimiento.toLocaleDateString('es-CO')}.`,
-    'Recuerda renovarlo antes de la fecha para evitar sanciones.',
-  ].join('\n');
-
-  const params = new URLSearchParams({
-    action: 'TEMPLATE',
-    text: titulo,
-    dates: `${inicio}/${fin}`,
-    details: detalles,
-  });
-
-  return `https://calendar.google.com/calendar/render?${params.toString()}`;
-};
 
 const Notifications: React.FC = () => {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -102,6 +61,9 @@ const Notifications: React.FC = () => {
       const today = new Date();
 
       vehicles.forEach((vehicle) => {
+        // Los vehiculos vendidos o retirados ya no generan notificaciones
+        if (vehicle.estado === 'vendido' || vehicle.estado === 'retirado') return;
+
         // Verificar SOAT
         if (vehicle.documentacion?.soat?.fechaVencimiento) {
           const soatDate = new Date(vehicle.documentacion.soat.fechaVencimiento);
@@ -405,11 +367,14 @@ const Notifications: React.FC = () => {
 
                         return (
                           <a
-                            href={buildGoogleCalendarUrl(
-                              getDocumentTypeLabel(notification.type),
-                              notification.vehicle,
-                              new Date(fechaVencimiento)
-                            )}
+                            href={
+                              buildGoogleCalendarEventUrl({
+                                documento: getDocumentTypeLabel(notification.type),
+                                placa: notification.vehicle.placa,
+                                descripcionVehiculo: `${notification.vehicle.marca} ${notification.vehicle.modelo} ${notification.vehicle.año}`,
+                                fechaVencimiento,
+                              }) || undefined
+                            }
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center rounded-md border border-current px-4 py-2 text-sm font-medium hover:bg-white/40"

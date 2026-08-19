@@ -10,6 +10,7 @@ import {
   Trash2,
   Users,
   FileText,
+  CalendarPlus,
 } from 'lucide-react';
 import Layout from '../components/Layout/Layout';
 import api, {
@@ -33,6 +34,10 @@ import {
   normalizeDatosNegociacion,
 } from '../constants/vehicleOptions';
 import { DatosNegociacion, FormaPagoNegociacion, UbicacionVehiculo } from '../types';
+import {
+  DIAS_AVISO_CALENDARIO,
+  buildGoogleCalendarEventUrl,
+} from '../utils/googleCalendar';
 
 const DEFAULT_VEHICLE_YEAR = new Date().getFullYear();
 
@@ -724,6 +729,36 @@ const VehicleForm: React.FC = () => {
           formaPago === 'credito' || formaPago === 'mixto' ? prev.datosNegociacion.financiera : ''
       }
     }));
+  };
+
+  // Enlace para guardar el vencimiento en Google Calendar desde el mismo formulario
+  const renderBotonCalendario = (documento: string, fechaVencimiento: string) => {
+    const url = buildGoogleCalendarEventUrl({
+      documento,
+      placa: formData.placa,
+      descripcionVehiculo: `${formData.marca} ${formData.modelo} ${formData.año}`.trim(),
+      fechaVencimiento,
+    });
+
+    if (!url) {
+      return (
+        <p className="mt-2 text-xs text-gray-500">
+          Registra la fecha de vencimiento para agregar el recordatorio al calendario.
+        </p>
+      );
+    }
+
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700"
+      >
+        <CalendarPlus className="h-4 w-4" />
+        Agregar a Google Calendar (aviso {DIAS_AVISO_CALENDARIO} días antes)
+      </a>
+    );
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2419,6 +2454,7 @@ const VehicleForm: React.FC = () => {
                     onChange={handleChange}
                     className="input-field"
                   />
+                  {renderBotonCalendario('SOAT', formData.documentacion.soat.fechaVencimiento)}
                 </div>
 
                 <div>
@@ -2432,6 +2468,10 @@ const VehicleForm: React.FC = () => {
                     onChange={handleChange}
                     className="input-field"
                   />
+                  {renderBotonCalendario(
+                    'Tecnomecánica',
+                    formData.documentacion.tecnomecanica.fechaVencimiento
+                  )}
                 </div>
               </div>
 

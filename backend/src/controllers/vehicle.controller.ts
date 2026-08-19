@@ -1690,8 +1690,10 @@ export const getVehiclesWithExpiringDocuments = async (
     fechaLimite.setDate(fechaLimite.getDate() + diasAlerta);
     const fechaActual = new Date();
 
-    // Buscar vehículos con documentos vencidos O próximos a vencer (en los próximos 30 días)
+    // Buscar vehículos con documentos vencidos O próximos a vencer (en los próximos 30 días).
+    // Los vendidos y retirados ya no son responsabilidad del negocio: no se notifican.
     const vehicles = await Vehicle.find({
+      estado: { $nin: ['vendido', 'retirado'] },
       $or: [
         {
           // Documentos ya vencidos (fechaVencimiento < fecha actual)
