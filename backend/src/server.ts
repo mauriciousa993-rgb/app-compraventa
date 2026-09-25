@@ -6,6 +6,7 @@ import authRoutes from './routes/auth.routes';
 import vehicleRoutes from './routes/vehicle.routes';
 import fixedExpenseRoutes from './routes/fixedExpense.routes';
 import commissionRoutes from './routes/commission.routes';
+import creditApplicationRoutes from './routes/creditApplication.routes';
 import { ensureUploadsDir } from './utils/uploads';
 
 // Configurar variables de entorno
@@ -73,6 +74,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/fixed-expenses', fixedExpenseRoutes);
 app.use('/api/commissions', commissionRoutes);
+app.use('/api/credit-applications', creditApplicationRoutes);
 
 // Ruta de prueba
 app.get('/', (req, res) => {
@@ -83,6 +85,7 @@ app.get('/', (req, res) => {
       auth: '/api/auth',
       vehicles: '/api/vehicles',
       fixedExpenses: '/api/fixed-expenses',
+      creditApplications: '/api/credit-applications',
     },
   });
 });

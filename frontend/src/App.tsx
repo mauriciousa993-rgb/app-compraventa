@@ -16,6 +16,8 @@ const Notifications = lazy(() => import('./pages/Notifications'));
 const ConsultaTramite = lazy(() => import('./pages/ConsultaTramite'));
 const CommissionLiquidation = lazy(() => import('./pages/CommissionLiquidation'));
 const VehicleInspectionChecklist = lazy(() => import('./pages/VehicleInspectionChecklist'));
+const CreditApplications = lazy(() => import('./pages/CreditApplications'));
+const CreditApplicationDetail = lazy(() => import('./pages/CreditApplicationDetail'));
 
 const PageLoader: React.FC = () => (
   <div className="min-h-screen flex items-center justify-center">
@@ -42,6 +44,17 @@ const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   }
 
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
+};
+
+// Rutas exclusivas del administrador (panel de creditos, por ejemplo)
+const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user } = useAuth();
+
+  return (
+    <PrivateRoute>
+      {user?.rol === 'admin' ? <>{children}</> : <Navigate to="/dashboard" />}
+    </PrivateRoute>
+  );
 };
 
 function AppRoutes() {
@@ -132,6 +145,22 @@ function AppRoutes() {
           <PrivateRoute>
             <CommissionLiquidation />
           </PrivateRoute>
+        }
+      />
+      <Route
+        path="/credit-applications"
+        element={
+          <AdminRoute>
+            <CreditApplications />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/credit-applications/:id"
+        element={
+          <AdminRoute>
+            <CreditApplicationDetail />
+          </AdminRoute>
         }
       />
       <Route path="*" element={<Navigate to="/marketplace" />} />

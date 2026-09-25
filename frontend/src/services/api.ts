@@ -10,6 +10,7 @@ import {
   VehicleInspectionChecklist,
   VehicleInspectionChecklistPayload,
 } from '../types';
+import { DetalleSolicitud, ListadoSolicitudes } from '../types/credit';
 
 const asBoolean = (value: unknown) => String(value ?? '').trim().toLowerCase() === 'true';
 const toNumber = (value: any, fallback = 0) => (typeof value === 'number' && Number.isFinite(value) ? value : fallback);
@@ -92,6 +93,7 @@ type AxiosLike = {
   get: (url: string, config?: any) => Promise<AxiosStyleResponse<unknown>>;
   post: (url: string, data?: any, config?: any) => Promise<AxiosStyleResponse<unknown>>;
   put: (url: string, data?: any, config?: any) => Promise<AxiosStyleResponse<unknown>>;
+  patch: (url: string, data?: any, config?: any) => Promise<AxiosStyleResponse<unknown>>;
   delete: (url: string, config?: any) => Promise<AxiosStyleResponse<unknown>>;
   interceptors: {
     request: { use: (a: (v: any) => any, b?: (e: any) => any) => void };
@@ -1494,6 +1496,7 @@ const api: AxiosLike = (DEMO_FRONTEND
       get: (url, config) => mockGet(url, config) as Promise<AxiosStyleResponse<unknown>>,
       post: (url, data, config) => mockPost(url, data, config) as Promise<AxiosStyleResponse<unknown>>,
       put: (url, data, config) => mockPut(url, data, config) as Promise<AxiosStyleResponse<unknown>>,
+      patch: (url, data, config) => mockPut(url, data, config) as Promise<AxiosStyleResponse<unknown>>,
       delete: (url) => mockDelete(url) as Promise<AxiosStyleResponse<unknown>>,
       interceptors: {
         request: { use: () => undefined },
@@ -1832,6 +1835,68 @@ export const commissionsAPI = {
     });
     return response.data;
   },
+};
+
+/**
+ * Solicitudes de credito (panel admin). Los datos viven en Supabase y el
+ * backend los expone ya protegidos con el JWT y el rol admin.
+ */
+export const creditAPI = {
+  list: async (params?: { q?: string; estado?: string; pagina?: number }) => {
+    const response = await api.get('/credit-applications', { params });
+    return response.data as ListadoSolicitudes;
+  },
+
+  getById: async (id: string) => {
+    const response = await api.get(`/credit-applications/${id}`);
+    return response.data as DetalleSolicitud;
+  },
+
+  update: async (id: string, cambios: { estado?: string; notas?: string }) => {
+    const response = await api.patch(`/credit-applications/${id}`, cambios);
+    return response.data;
+  },
+
+  remove: async (id: string) => {
+    const response = await api.delete(`/credit-applications/${id}`);
+    return response.data;
+  },
+
+  // Enlace firmado de Supabase (1 hora). Se abre en una pestana nueva.
+  openFile: async (id: string, path?: string, nombre?: string) => {
+    const response = await api.get(`/credit-applications/${id}/archivo`, {
+      params: { path, nombre },
+    });
+    const url = (response.data as { url?: string })?.url;
+    if (url) window.open(url, '_blank', 'noopener');
+    return url;
+  },
+
+  downloadZip: async (id: string, radicado: string) => {
+    const response = await api.get(`/credit-applications/${id}/zip`, { responseType: 'blob' });
+    descargarBlob(response.data, `${radicado}.zip`, 'application/zip');
+  },
+
+  exportCsv: async (estado?: string) => {
+    const response = await api.get('/credit-applications/export', {
+      params: { estado },
+      responseType: 'blob',
+    });
+    const fecha = new Date().toISOString().slice(0, 10);
+    descargarBlob(response.data, `solicitudes-credito-${fecha}.csv`, 'text/csv;charset=utf-8');
+  },
+};
+
+const descargarBlob = (data: any, nombreArchivo: string, tipo: string) => {
+  const blob = data instanceof Blob ? data : new Blob([data], { type: tipo });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', nombreArchivo);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 };
 
 export default api as unknown as typeof realApi;
