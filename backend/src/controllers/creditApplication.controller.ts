@@ -24,6 +24,24 @@ const POR_PAGINA = 50;
 const CAMPOS_LISTADO =
   'id, radicado, creado_en, estado, nombre, tipo_documento, numero_documento, celular, email, ciudad, ocupacion, vehiculo, total_financiar, correo_enviado, correo_error';
 
+/**
+ * Traduce los errores tipicos de Supabase a algo accionable. El mas comun al
+ * montar el modulo es una service role key mal copiada o de otro proyecto.
+ */
+const mensajeError = (error: { message?: string } | null): string => {
+  const detalle = error?.message ?? '';
+
+  if (/invalid api key/i.test(detalle)) {
+    return 'Supabase rechazo la llave del servidor. Revisa SUPABASE_SERVICE_ROLE_KEY: debe ser la service_role del mismo proyecto de SUPABASE_URL, completa y sin espacios ni comillas.';
+  }
+
+  if (/not find the table|does not exist/i.test(detalle)) {
+    return 'La tabla de solicitudes no existe en el proyecto de Supabase configurado. Verifica que SUPABASE_URL apunte al proyecto correcto.';
+  }
+
+  return `Error al consultar las solicitudes: ${detalle}`;
+};
+
 const sinConfigurar = (res: Response): boolean => {
   if (supabaseConfigurado()) return false;
 
@@ -62,7 +80,7 @@ export const listCreditApplications = async (req: AuthRequest, res: Response): P
 
     const { data, count, error } = await consulta;
     if (error) {
-      res.status(500).json({ message: 'Error al consultar las solicitudes', error: error.message });
+      res.status(500).json({ message: mensajeError(error), error: error.message });
       return;
     }
 
