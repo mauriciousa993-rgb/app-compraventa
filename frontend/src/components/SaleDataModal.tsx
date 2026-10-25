@@ -1,7 +1,8 @@
-﻿import React, { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+﻿import React, { useEffect, useRef, useState } from 'react';
+import { ScanLine, X } from 'lucide-react';
 import { DatosVenta, Vehicle } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { vehiclesAPI } from '../services/api';
 
 interface SaleDataModalProps {
   isOpen: boolean;
@@ -232,6 +233,110 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
     }));
   };
 
+  /* ---------------------------------------------------------------- *
+   * Lectura de la cedula con IA
+   * ---------------------------------------------------------------- */
+
+  type ParteContrato = 'vendedor' | 'comprador';
+
+  const inputCedulaVendedor = useRef<HTMLInputElement | null>(null);
+  const inputCedulaComprador = useRef<HTMLInputElement | null>(null);
+  const [leyendoCedula, setLeyendoCedula] = useState<ParteContrato | null>(null);
+  const [resultadoCedula, setResultadoCedula] = useState<
+    Partial<Record<ParteContrato, { ok: boolean; mensaje: string }>>
+  >({});
+
+  const leerCedula = async (parte: ParteContrato, archivo: File) => {
+    setLeyendoCedula(parte);
+    setResultadoCedula((prev) => ({ ...prev, [parte]: undefined }));
+
+    try {
+      const { extracted, confidence } = await vehiclesAPI.readCedulaWithVisionAI(archivo);
+      const actualizar = parte === 'vendedor' ? updateVendedor : updateComprador;
+
+      const camposLeidos: string[] = [];
+      if (extracted.nombreCompleto) {
+        actualizar('nombre', extracted.nombreCompleto);
+        camposLeidos.push('nombre');
+      }
+      if (extracted.numeroDocumento) {
+        actualizar('identificacion', extracted.numeroDocumento);
+        camposLeidos.push('identificación');
+      }
+
+      setResultadoCedula((prev) => ({
+        ...prev,
+        [parte]: camposLeidos.length
+          ? {
+              ok: true,
+              mensaje: `Se leyó ${camposLeidos.join(' y ')} (confianza ${confidence}%). Verifica antes de generar el contrato.`,
+            }
+          : {
+              ok: false,
+              mensaje: 'No se pudo leer la cédula. Toma la foto de frente, enfocada y con buena luz.',
+            },
+      }));
+    } catch (error: any) {
+      setResultadoCedula((prev) => ({
+        ...prev,
+        [parte]: {
+          ok: false,
+          mensaje:
+            error.response?.data?.message || 'No se pudo leer la cédula. Intenta con otra foto.',
+        },
+      }));
+    } finally {
+      setLeyendoCedula(null);
+    }
+  };
+
+  const manejarArchivoCedula = (
+    parte: ParteContrato,
+    evento: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const archivo = evento.target.files?.[0];
+    evento.target.value = '';
+    if (archivo) void leerCedula(parte, archivo);
+  };
+
+  const renderLectorCedula = (parte: ParteContrato) => {
+    const refInput = parte === 'vendedor' ? inputCedulaVendedor : inputCedulaComprador;
+    const estado = resultadoCedula[parte];
+    const cargando = leyendoCedula === parte;
+
+    return (
+      <div className="md:col-span-2 rounded-lg border border-dashed border-blue-300 bg-blue-50 p-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => refInput.current?.click()}
+            disabled={cargando}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-500 disabled:opacity-60"
+          >
+            <ScanLine className="h-4 w-4" />
+            {cargando ? 'Leyendo cédula…' : 'Leer cédula con IA'}
+          </button>
+          <p className="text-xs text-blue-800">
+            Toma o sube la foto de la cédula y se llenan el nombre y la identificación.
+          </p>
+          <input
+            ref={refInput}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(evento) => manejarArchivoCedula(parte, evento)}
+          />
+        </div>
+        {estado && (
+          <p className={`mt-2 text-xs ${estado.ok ? 'text-green-700' : 'text-red-700'}`}>
+            {estado.mensaje}
+          </p>
+        )}
+      </div>
+    );
+  };
+
   const updateVehiculoAdicional = (
     field: keyof DatosVenta['vehiculoAdicional'],
     value: string | number
@@ -293,6 +398,7 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
               Datos del Vendedor
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {renderLectorCedula('vendedor')}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Nombre Completo *
@@ -408,6 +514,7 @@ const SaleDataModal: React.FC<SaleDataModalProps> = ({
               Datos del Comprador
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {renderLectorCedula('comprador')}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Nombre Completo *

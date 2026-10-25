@@ -28,6 +28,7 @@ import {
   getCalendarSubscriptionInfo,
 } from '../controllers/documentsCalendar.controller';
 import { ocrPropertyCardWithVisionAI } from '../controllers/propertyCardOcr.controller';
+import { ocrCedulaWithVisionAI } from '../controllers/cedulaOcr.controller';
 import {
   getVehicleInspectionChecklist,
   generateVehicleInspectionChecklistPdfAI,
@@ -72,6 +73,12 @@ router.post(
   authorize('admin', 'vendedor'),
   ocrUpload.single('file'),
   ocrPropertyCardWithVisionAI
+);
+router.post(
+  '/ocr/cedula',
+  authorize('admin', 'vendedor'),
+  ocrUpload.single('file'),
+  ocrCedulaWithVisionAI
 );
 router.get('/:id/inspection-checklist', getVehicleInspectionChecklist);
 router.put('/:id/inspection-checklist', authorize('admin', 'vendedor'), upsertVehicleInspectionChecklist);

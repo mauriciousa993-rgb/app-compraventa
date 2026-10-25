@@ -1505,6 +1505,26 @@ const api: AxiosLike = (DEMO_FRONTEND
     }
   : realApi) as unknown as AxiosLike;
 
+export interface CedulaOcrResponse {
+  source: string;
+  confidence: number;
+  detectedFields: number;
+  rawText: string;
+  extracted: {
+    nombres: string;
+    apellidos: string;
+    nombreCompleto: string;
+    tipoDocumento: string;
+    numeroDocumento: string;
+    fechaNacimiento: string;
+    lugarNacimiento: string;
+    sexo: string;
+    fechaExpedicion: string;
+    lugarExpedicion: string;
+    rh: string;
+  };
+}
+
 export interface VisionPropertyCardOcrResponse {
   source?: string;
   confidence: number;
@@ -1601,6 +1621,16 @@ export const vehiclesAPI = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response.data;
+  },
+
+  // Lee una foto de cedula y devuelve los datos del titular
+  readCedulaWithVisionAI: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/vehicles/ocr/cedula', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data as CedulaOcrResponse;
   },
 
   readPropertyCardWithVisionAI: async (file: File) => {
