@@ -10,7 +10,7 @@ import fixedExpenseRoutes from './routes/fixedExpense.routes';
 import commissionRoutes from './routes/commission.routes';
 import creditApplicationRoutes from './routes/creditApplication.routes';
 import { ensureUploadsDir } from './utils/uploads';
-import { isCloudinaryConfigured } from './config/cloudinary';
+import { getEstadoCloudinary, isCloudinaryConfigured, verificarCloudinary } from './config/cloudinary';
 
 
 
@@ -87,7 +87,12 @@ app.get('/', (req, res) => {
       fixedExpenses: '/api/fixed-expenses',
       creditApplications: '/api/credit-applications',
     },
-    almacenamientoFotos: isCloudinaryConfigured() ? 'cloudinary' : 'disco-local',
+    almacenamientoFotos: (() => {
+      const cloud = getEstadoCloudinary();
+      if (!cloud.configurado) return 'disco-local';
+      return cloud.verificado ? 'cloudinary' : 'cloudinary-sin-verificar';
+    })(),
+    almacenamientoError: getEstadoCloudinary().error,
   });
 });
 
@@ -150,15 +155,29 @@ const startServer = async () => {
       console.log(`   - Red/Móvil: http://${localIP}:${PORT}`);
       console.log(`🌍 Entorno: ${process.env.NODE_ENV || 'development'}`);
 
-      if (isCloudinaryConfigured()) {
-        console.log(`🖼️  Fotos: Cloudinary (cloud "${process.env.CLOUDINARY_CLOUD_NAME}") — persisten entre despliegues`);
-      } else {
+      if (!isCloudinaryConfigured()) {
         console.warn(
           '⚠️  Fotos: disco local. En Render el disco se borra en cada despliegue y las imagenes se PERDERAN.'
         );
         console.warn(
           '    Configura CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY y CLOUDINARY_API_SECRET.'
         );
+      } else {
+        // El ping confirma que las credenciales sirven de verdad
+        verificarCloudinary().then((cloud) => {
+          if (cloud.verificado) {
+            console.log(
+              `🖼️  Fotos: Cloudinary (cloud "${process.env.CLOUDINARY_CLOUD_NAME}") — persisten entre despliegues`
+            );
+          } else {
+            console.error(
+              `❌ Cloudinary esta configurado pero rechazo las credenciales: ${cloud.error}`
+            );
+            console.error(
+              '    Las fotos NO se van a guardar. Revisa CLOUDINARY_API_KEY y CLOUDINARY_API_SECRET.'
+            );
+          }
+        });
       }
       console.log(`\n✅ El servidor está listo para recibir conexiones desde móviles y otros dispositivos.\n`);
     });

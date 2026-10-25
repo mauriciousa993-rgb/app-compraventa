@@ -40,5 +40,49 @@ export const cloudinaryStorage = new CloudinaryStorage({
   },
 });
 
+/**
+ * Estado real de la conexion con Cloudinary.
+ *
+ * Tener las tres variables no garantiza que las credenciales sirvan: si son
+ * invalidas, la subida falla en caliente y la foto no queda en ningun lado.
+ * Por eso al arrancar se hace un ping y el resultado queda disponible para los
+ * logs y para la raiz de la API.
+ */
+export type EstadoCloudinary = {
+  configurado: boolean;
+  verificado: boolean;
+  error: string | null;
+};
+
+let estado: EstadoCloudinary = {
+  configurado: isCloudinaryConfigured(),
+  verificado: false,
+  error: null,
+};
+
+export const getEstadoCloudinary = (): EstadoCloudinary => estado;
+
+export const verificarCloudinary = async (): Promise<EstadoCloudinary> => {
+  const configurado = isCloudinaryConfigured();
+
+  if (!configurado) {
+    estado = { configurado: false, verificado: false, error: null };
+    return estado;
+  }
+
+  try {
+    await cloudinary.api.ping();
+    estado = { configurado: true, verificado: true, error: null };
+  } catch (error: any) {
+    estado = {
+      configurado: true,
+      verificado: false,
+      error: error?.error?.message || error?.message || 'Cloudinary rechazo las credenciales',
+    };
+  }
+
+  return estado;
+};
+
 // Exportar cloudinary y multer configurados
 export { cloudinary, multer };
