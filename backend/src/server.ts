@@ -1,6 +1,8 @@
+// Primero que todo: las variables de entorno deben existir antes de que
+// cualquier otro modulo las lea al ser importado (p. ej. la config de Cloudinary).
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { connectDB } from './config/database';
 import authRoutes from './routes/auth.routes';
 import vehicleRoutes from './routes/vehicle.routes';
@@ -8,10 +10,8 @@ import fixedExpenseRoutes from './routes/fixedExpense.routes';
 import commissionRoutes from './routes/commission.routes';
 import creditApplicationRoutes from './routes/creditApplication.routes';
 import { ensureUploadsDir } from './utils/uploads';
+import { isCloudinaryConfigured } from './config/cloudinary';
 
-// Configurar variables de entorno
-// REDEPLOY_TRIGGER: 2025-01-13-v4-marketplace-fotos
-dotenv.config();
 
 
 // Crear aplicación Express
@@ -87,6 +87,7 @@ app.get('/', (req, res) => {
       fixedExpenses: '/api/fixed-expenses',
       creditApplications: '/api/credit-applications',
     },
+    almacenamientoFotos: isCloudinaryConfigured() ? 'cloudinary' : 'disco-local',
   });
 });
 
@@ -148,6 +149,17 @@ const startServer = async () => {
       console.log(`   - Local: http://localhost:${PORT}`);
       console.log(`   - Red/Móvil: http://${localIP}:${PORT}`);
       console.log(`🌍 Entorno: ${process.env.NODE_ENV || 'development'}`);
+
+      if (isCloudinaryConfigured()) {
+        console.log(`🖼️  Fotos: Cloudinary (cloud "${process.env.CLOUDINARY_CLOUD_NAME}") — persisten entre despliegues`);
+      } else {
+        console.warn(
+          '⚠️  Fotos: disco local. En Render el disco se borra en cada despliegue y las imagenes se PERDERAN.'
+        );
+        console.warn(
+          '    Configura CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY y CLOUDINARY_API_SECRET.'
+        );
+      }
       console.log(`\n✅ El servidor está listo para recibir conexiones desde móviles y otros dispositivos.\n`);
     });
   } catch (error) {

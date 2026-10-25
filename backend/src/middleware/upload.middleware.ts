@@ -1,4 +1,5 @@
 import multer from 'multer';
+import { RequestHandler } from 'express';
 import path from 'path';
 import { ensureUploadsDir, getUploadsDir } from '../utils/uploads';
 import { cloudinaryStorage, isCloudinaryConfigured } from '../config/cloudinary';
@@ -48,20 +49,40 @@ const getStorage = () => {
   return localStorage;
 };
 
-// Configuración de multer
-export const upload = multer({
-  storage: getStorage(),
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB máximo
-  },
-  fileFilter: fileFilter,
-});
+/**
+ * El uploader se construye en la primera subida, no al importar el modulo.
+ * Asi la eleccion de almacenamiento ve siempre las variables de entorno ya
+ * cargadas: si se decidia al importar, Cloudinary quedaba descartado y las
+ * fotos terminaban en el disco local, que Render borra en cada despliegue.
+ */
+let uploader: multer.Multer | null = null;
 
-// Middleware para múltiples archivos
-export const uploadMultiple = upload.array('fotos', 20); // Máximo 20 fotos
+const getUploader = (): multer.Multer => {
+  if (!uploader) {
+    uploader = multer({
+      storage: getStorage(),
+      limits: {
+        fileSize: 5 * 1024 * 1024, // 5MB máximo
+      },
+      fileFilter: fileFilter,
+    });
+  }
+  return uploader;
+};
+
+// Se mantiene `upload` para compatibilidad con otros modulos
+export const upload = {
+  array: (campo: string, maximo?: number) => getUploader().array(campo, maximo),
+  single: (campo: string) => getUploader().single(campo),
+};
+
+// Middleware para múltiples archivos (máximo 20 fotos)
+export const uploadMultiple: RequestHandler = (req, res, next) =>
+  getUploader().array('fotos', 20)(req, res, next);
 
 // Middleware para un solo archivo
-export const uploadSingle = upload.single('foto');
+export const uploadSingle: RequestHandler = (req, res, next) =>
+  getUploader().single('foto')(req, res, next);
 
 // Exportar función para verificar si se usa Cloudinary
 export const isUsingCloudinary = () => isCloudinaryConfigured();
