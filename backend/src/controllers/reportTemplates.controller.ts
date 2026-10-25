@@ -318,10 +318,10 @@ export const exportBusinessTemplate = async (
       .sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
 
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'AutoTech';
+    workbook.creator = 'Horizon Autos';
     workbook.created = new Date();
 
-    let fileBaseName = 'plantilla-autotech';
+    let fileBaseName = 'plantilla-horizon-autos';
 
     switch (templateType) {
       case 'inventario':

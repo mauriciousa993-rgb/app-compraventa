@@ -241,7 +241,7 @@ const FixedExpenses: React.FC = () => {
         </div>
 
         {error && (
-          <div className="rounded-lg border border-primary-700 bg-[#2b1215] px-4 py-3 text-primary-200">
+          <div className="rounded-lg border border-primary-700 bg-[#11263f] px-4 py-3 text-primary-200">
             {error}
           </div>
         )}
@@ -352,7 +352,7 @@ const FixedExpenses: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => archiveExpense(expense)}
-                                className="p-2 rounded-md border border-primary-700 text-primary-300 hover:text-white hover:bg-[#2b1215]"
+                                className="p-2 rounded-md border border-primary-700 text-primary-300 hover:text-white hover:bg-[#11263f]"
                                 title="Archivar gasto fijo"
                               >
                                 <Archive className="h-4 w-4" />

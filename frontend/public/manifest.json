@@ -1,23 +1,23 @@
 {
-  "name": "Compraventa de Vehículos - Sistema de Gestión",
-  "short_name": "AutoTech",
-  "description": "Sistema completo de gestión de inventario y compraventa de vehículos",
+  "name": "Horizon Autos - Sistema de Gestión",
+  "short_name": "Horizon Autos",
+  "description": "Inventario, compraventa y gestión de vehículos de Horizon Autos",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#121212",
-  "theme_color": "#121212",
+  "background_color": "#0b0e13",
+  "theme_color": "#0b0e13",
   "orientation": "portrait",
   "scope": "/",
   "lang": "es",
   "icons": [
     {
-      "src": "autotech-logo.png",
+      "src": "horizon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "autotech-logo.png",
+      "src": "horizon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"

@@ -390,7 +390,7 @@ const CreditApplicationDetail: React.FC = () => {
             <button
               onClick={eliminar}
               disabled={eliminando}
-              className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-medium text-primary-300 transition-colors hover:bg-[#2a1114] disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-medium text-alert transition-colors hover:bg-[#2a1114] disabled:opacity-50"
             >
               <Trash2 className="h-4 w-4" />
               {eliminando ? 'Eliminando…' : 'Eliminar solicitud'}

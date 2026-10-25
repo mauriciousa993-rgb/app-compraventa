@@ -67,7 +67,7 @@ const Dashboard: React.FC = () => {
       value: stats?.totalVehiculos || 0,
       icon: Car,
       iconColor: 'text-primary-400',
-      iconBg: 'bg-[#2a1114]',
+      iconBg: 'bg-[#10243d]',
       valueColor: 'text-white',
       clickable: true,
       estado: 'inventario',
@@ -108,7 +108,7 @@ const Dashboard: React.FC = () => {
       value: stats?.vehiculosVendidos || 0,
       icon: TrendingUp,
       iconColor: 'text-signal',
-      iconBg: 'bg-[#341418]',
+      iconBg: 'bg-[#143052]',
       valueColor: 'text-signal',
       clickable: true,
       estado: 'vendido',
@@ -305,7 +305,7 @@ const Dashboard: React.FC = () => {
 
               <Link
                 to="/vehicles/new"
-                className="flex items-center justify-between p-3 rounded-lg border border-primary-700 bg-[#2b1215] hover:bg-[#32161a] hover:border-primary-500 transition-colors"
+                className="flex items-center justify-between p-3 rounded-lg border border-primary-700 bg-[#11263f] hover:bg-[#16325a] hover:border-primary-500 transition-colors"
               >
                 <div className="flex items-center space-x-3">
                   <Car className="h-5 w-5 text-primary-400" />
@@ -351,7 +351,7 @@ const Dashboard: React.FC = () => {
                     <span className="text-ink-200">Mi Utilidad Estimada</span>
                     <span className="font-bold text-[#7be0aa]">${(stats?.miUtilidadEstimada || 0).toLocaleString('es-CO')}</span>
                   </div>
-                  <div className="flex items-center justify-between p-3 rounded-lg border border-primary-800 bg-[#2b1215]">
+                  <div className="flex items-center justify-between p-3 rounded-lg border border-primary-800 bg-[#11263f]">
                     <span className="text-ink-200">Mi Utilidad Real</span>
                     <span className="font-bold text-signal">${(stats?.miUtilidadReal || 0).toLocaleString('es-CO')}</span>
                   </div>
@@ -396,7 +396,7 @@ const Dashboard: React.FC = () => {
                 </span>
                 <span className="font-bold text-[#7be0aa]">${(stats?.gananciasEstimadas || 0).toLocaleString('es-CO')}</span>
               </div>
-              <div className="flex items-center justify-between p-3 rounded-lg border border-primary-800 bg-[#2b1215]">
+              <div className="flex items-center justify-between p-3 rounded-lg border border-primary-800 bg-[#11263f]">
                 <span className="text-ink-200">
                   {isAdmin ? 'Ganancias Reales Sistema' : 'Mi Utilidad Real'}
                 </span>

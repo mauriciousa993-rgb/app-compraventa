@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Mail, Lock, AlertCircle } from 'lucide-react';
-import autoTechLogo from '../assets/autotech-logo.png';
+import horizonLogo from '../assets/horizon-logo.png';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -33,11 +33,11 @@ const Login: React.FC = () => {
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
             <div className="h-20 w-20 rounded-2xl border border-[#2f3238] bg-[#1b1d22] flex items-center justify-center shadow-[0_16px_32px_-24px_rgba(0,0,0,0.9)]">
-              <img src={autoTechLogo} alt="AutoTech logo" className="h-14 w-14 object-contain" />
+              <img src={horizonLogo} alt="Horizon Autos logo" className="h-14 w-14 object-contain" />
             </div>
           </div>
           <h1 className="text-3xl font-bold text-white mb-2">
-            AutoTech
+            HORIZON <span className="text-primary-400">AUTOS</span>
           </h1>
           <p className="text-ink-200">
             Sistema de Gestion de Inventario
@@ -50,7 +50,7 @@ const Login: React.FC = () => {
           </h2>
 
           {error && (
-            <div className="mb-4 p-3 bg-[#2b1215] border border-primary-700 rounded-lg flex items-start">
+            <div className="mb-4 p-3 bg-[#11263f] border border-primary-700 rounded-lg flex items-start">
               <AlertCircle className="h-5 w-5 text-primary-300 mr-2 flex-shrink-0 mt-0.5" />
               <span className="text-sm text-primary-200">{error}</span>
             </div>
@@ -104,7 +104,7 @@ const Login: React.FC = () => {
         </div>
 
         <div className="mt-8 text-center text-ink-300 text-sm">
-          <p>� 2024 AutoTech</p>
+          <p>&copy; 2026 Horizon Autos</p>
         </div>
       </div>
     </div>

@@ -448,7 +448,7 @@ const VehicleList: React.FC = () => {
             }}
             className={`card transition-all ${
               filterEstado === 'inventario'
-                ? 'bg-[#2b1215] border-primary-500 ring-2 ring-primary-500'
+                ? 'bg-[#11263f] border-primary-500 ring-2 ring-primary-500'
                 : 'bg-[#1c1f26] border-[#30343d] hover:border-primary-700'
             }`}
           >
@@ -514,8 +514,8 @@ const VehicleList: React.FC = () => {
             }}
             className={`card transition-all ${
               filterEstado === 'vendido'
-                ? 'bg-[#351418] border-primary-500 ring-2 ring-primary-500'
-                : 'bg-[#251317] border-[#412228] hover:border-primary-600'
+                ? 'bg-[#143052] border-primary-500 ring-2 ring-primary-500'
+                : 'bg-[#0f2135] border-[#1e4470] hover:border-primary-600'
             }`}
           >
             <p className="text-sm text-primary-300 font-medium">Vendidos</p>
@@ -574,7 +574,7 @@ const VehicleList: React.FC = () => {
                         </h3>
                         <span className={`text-xs px-2 py-1 rounded-full font-medium ${
                           vehicle.estado === 'vendido'
-                            ? 'bg-[#311418] text-primary-300 border border-primary-700/60'
+                            ? 'bg-[#122a45] text-primary-300 border border-primary-700/60'
                             : vehicle.estado === 'en_proceso'
                               ? 'bg-[#2b2116] text-[#f4c26b] border border-[#7e6642]'
                               : 'bg-[#1a2129] text-silver border border-[#4d5663]'
@@ -944,7 +944,7 @@ const VehicleList: React.FC = () => {
                       <h4 className="text-sm font-semibold text-ink-200 mb-2">DocumentaciÃ³n</h4>
                       <div className="flex flex-wrap gap-2">
                         {vehicle.documentacion?.prenda?.tiene && (
-                          <span className="text-xs bg-[#311418] text-primary-300 px-3 py-1 rounded-full border border-primary-700/60">
+                          <span className="text-xs bg-[#122a45] text-primary-300 px-3 py-1 rounded-full border border-primary-700/60">
                             ⚠️ Prenda
                           </span>
                         )}
@@ -961,7 +961,7 @@ const VehicleList: React.FC = () => {
                         )}
 
                         {vehicle.documentacion?.tarjetaPropiedad?.tiene && (
-                          <span className="text-xs bg-[#2b1215] text-primary-300 px-3 py-1 rounded-full border border-primary-700/60">
+                          <span className="text-xs bg-[#11263f] text-primary-300 px-3 py-1 rounded-full border border-primary-700/60">
                             ✓ Tarjeta Propiedad
                           </span>
                         )}
@@ -1183,7 +1183,7 @@ const VehicleList: React.FC = () => {
                           e.stopPropagation();
                           handleDelete(vehicle._id);
                         }}
-                        className="px-4 py-2 text-sm text-primary-300 hover:bg-[#2a1114] rounded-lg transition-colors flex items-center gap-2"
+                        className="px-4 py-2 text-sm text-alert hover:bg-[#2a1114] rounded-lg transition-colors flex items-center gap-2"
                       >
                         <Trash2 className="h-4 w-4" />
                         Eliminar

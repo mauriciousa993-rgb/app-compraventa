@@ -32,9 +32,9 @@ export const ESTADOS_SOLICITUD: Array<{
   {
     valor: 'rechazada',
     texto: 'Rechazada',
-    badge: 'bg-[#311418] text-primary-300 border border-primary-700/60',
-    card: 'bg-[#251317] border-[#412228] hover:border-primary-600',
-    cardActiva: 'bg-[#351418] border-primary-500 ring-2 ring-primary-500',
+    badge: 'bg-[#122a45] text-primary-300 border border-primary-700/60',
+    card: 'bg-[#0f2135] border-[#1e4470] hover:border-primary-600',
+    cardActiva: 'bg-[#143052] border-primary-500 ring-2 ring-primary-500',
   },
   {
     valor: 'desistida',

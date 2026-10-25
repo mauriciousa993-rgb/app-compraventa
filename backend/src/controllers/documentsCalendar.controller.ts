@@ -110,10 +110,10 @@ export const buildIcsCalendar = (vehicles: any[]): string => {
   const lineas: string[] = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//AutoTech//Vencimientos de documentos//ES',
+    'PRODID:-//Horizon Autos//Vencimientos de documentos//ES',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
-    'X-WR-CALNAME:Vencimientos SOAT y Tecnomecánica',
+    'X-WR-CALNAME:Horizon Autos · Vencimientos SOAT y Tecnomecánica',
     'X-WR-TIMEZONE:America/Bogota',
     'X-WR-CALDESC:Vencimientos de SOAT y Tecnomecánica del inventario de vehículos',
     'REFRESH-INTERVAL;VALUE=DURATION:PT6H',

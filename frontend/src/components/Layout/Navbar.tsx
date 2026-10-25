@@ -15,7 +15,7 @@ import {
   ClipboardCheck,
   Landmark,
 } from 'lucide-react';
-import autoTechLogo from '../../assets/autotech-logo.png';
+import horizonLogo from '../../assets/horizon-logo.png';
 import { vehiclesAPI } from '../../services/api';
 
 const Navbar: React.FC = () => {
@@ -82,15 +82,15 @@ const Navbar: React.FC = () => {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-20">
           <Link to="/" className="flex items-center space-x-3 min-w-0">
-            <img src={autoTechLogo} alt="AutoTech logo" className="h-11 w-11 flex-shrink-0 object-contain" />
+            <img src={horizonLogo} alt="Horizon Autos logo" className="h-11 w-11 flex-shrink-0 object-contain" />
             <div className="min-w-0">
               <span className="hidden sm:block text-xl leading-none font-bold tracking-wide truncate">
-                <span className="text-white">Auto</span>
-                <span className="text-primary-400">Tech</span>
+                <span className="text-white">HORIZON</span>
+                <span className="text-primary-400"> AUTOS</span>
               </span>
               <span className="sm:hidden text-base leading-none font-bold truncate">
-                <span className="text-white">Auto</span>
-                <span className="text-primary-400">Tech</span>
+                <span className="text-white">HORIZON</span>
+                <span className="text-primary-400"> AUTOS</span>
               </span>
               <span className="hidden sm:block text-xs text-ink-300 mt-1">
                 Gestion de vehiculos

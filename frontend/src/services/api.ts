@@ -54,13 +54,13 @@ const DEMO_PHOTO_URL =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450">
       <rect width="800" height="450" rx="24" fill="#e5eefc"/>
       <rect x="35" y="35" width="730" height="380" rx="24" fill="#ffffff" fill-opacity="0.6"/>
-      <text x="400" y="205" text-anchor="middle" font-size="48" fill="#2c3e61" font-family="Arial, sans-serif" font-weight="700">AutoTech</text>
+      <text x="400" y="205" text-anchor="middle" font-size="48" fill="#2c3e61" font-family="Arial, sans-serif" font-weight="700">Horizon Autos</text>
       <text x="400" y="250" text-anchor="middle" font-size="28" fill="#51617e" font-family="Arial, sans-serif">Demo: imagen local</text>
     </svg>`
   );
 
-const createBlob = (label: string, type = 'application/pdf') => new Blob([`Archivo demo AutoTech: ${label}`], { type });
-const createExcelBlob = (label: string) => new Blob([`Excel demo AutoTech: ${label}`], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+const createBlob = (label: string, type = 'application/pdf') => new Blob([`Archivo demo Horizon Autos: ${label}`], { type });
+const createExcelBlob = (label: string) => new Blob([`Excel demo Horizon Autos: ${label}`], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
 interface AxiosStyleResponse<T = unknown> {
   data: T;

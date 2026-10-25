@@ -8,6 +8,7 @@ import VehicleInspectionChecklist, {
   IVehicleInspectionChecklistDocument,
 } from '../models/VehicleInspectionChecklist';
 import { AuthRequest } from '../types';
+import { buildChecklistPdfBuffer } from '../utils/checklistPdf';
 
 const OPENAI_TEXT_MODEL = process.env.OPENAI_TEXT_MODEL || process.env.OPENAI_VISION_MODEL || 'gpt-4o-mini';
 const OPENAI_API_BASE_URL = process.env.OPENAI_API_BASE_URL || 'https://api.openai.com/v1';
@@ -380,11 +381,8 @@ const enrichChecklistTemplateDataWithAI = async (
 ): Promise<ChecklistTemplateData> => {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    throw createHttpError(
-      503,
-      'Diligenciamiento con IA no configurado. Falta OPENAI_API_KEY.',
-      { missingEnv: ['OPENAI_API_KEY'] }
-    );
+    // Sin IA el PDF se arma igual con los datos del checklist.
+    return baseData;
   }
 
   const prompt = [
@@ -601,35 +599,32 @@ const buildChecklistTemplatePdfBuffer = async (
   vehicle: any,
   checklist: Partial<IVehicleInspectionChecklistDocument>
 ): Promise<Buffer> => {
-  const templatePdfPath = resolveChecklistTemplatePdfPath();
-  if (!templatePdfPath) {
-    throw createHttpError(
-      500,
-      'No se encontro plantilla PDF editable para checklist en backend/templates.',
-      {
-        missingTemplateHint:
-          'Sube un PDF editable de checklist con nombre que incluya "checklist" o "inspeccion" (no traspaso), o define INSPECTION_CHECKLIST_TEMPLATE_PDF apuntando a esa plantilla.',
-      }
-    );
-  }
-
   const baseData = buildChecklistTemplateBaseData(vehicle, checklist as any);
   const aiData = await enrichChecklistTemplateDataWithAI(baseData, vehicle, checklist);
+
+  // Si no hay plantilla editable, se genera el documento desde cero.
+  const templatePdfPath = resolveChecklistTemplatePdfPath();
+  if (!templatePdfPath) {
+    return buildChecklistPdfBuffer({
+      vehicle,
+      checklist: checklist as any,
+      resumen: aiData.resumenGeneral,
+    });
+  }
 
   const templateBytes = fs.readFileSync(templatePdfPath);
   const pdfDoc = await PDFLibDocument.load(templateBytes);
   const appliedFields = applyChecklistTemplateDataToEditablePdf(pdfDoc, aiData);
 
   if (appliedFields === 0) {
-    throw createHttpError(
-      500,
-      'No se pudo mapear ningun campo de texto del PDF editable del checklist.',
-      {
-        templatePath: templatePdfPath,
-        mappingHint:
-          'Renombra los campos del PDF con nombres semanticos (ej: placa, inspectorNombre) o agrega mapeo en CHECKLIST_EDITABLE_FIELD_MAP.',
-      }
+    console.warn(
+      `La plantilla ${templatePdfPath} no tiene campos mapeables; se genera el checklist desde cero.`
     );
+    return buildChecklistPdfBuffer({
+      vehicle,
+      checklist: checklist as any,
+      resumen: aiData.resumenGeneral,
+    });
   }
 
   const output = await pdfDoc.save();

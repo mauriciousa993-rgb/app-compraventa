@@ -182,7 +182,7 @@ const CreditApplications: React.FC = () => {
           </div>
         </div>
       ) : error ? (
-        <div className="card border-primary-700/60 bg-[#2a1114] text-center">
+        <div className="card border-primary-700/60 bg-[#10243d] text-center">
           <p className="text-primary-200">{error}</p>
           <button onClick={cargar} className="btn-secondary mt-4">
             Reintentar
