@@ -1297,8 +1297,13 @@ const VehicleForm: React.FC = () => {
       const vinUnificado = normalizeVinValue(
         formData.vin || formData.datosTarjetaPropiedad.numeroChasis || ''
       );
+      // Las fotos no viajan en este payload: las administra /vehicles/:id/photos.
+      // Reenviar la lista cargada al abrir el formulario podia pisar fotos
+      // subidas despues desde otra sesion.
+      const { fotos: _fotosNoSeEnvian, ...datosFormulario } = formData;
+
       const payload = {
-        ...formData,
+        ...datosFormulario,
         marca: formData.marca.trim(),
         modelo: modeloUnificado,
         placa: normalizePlateValue(formData.placa),

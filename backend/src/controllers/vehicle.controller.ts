@@ -1141,6 +1141,21 @@ export const updateVehicle = async (req: AuthRequest, res: Response): Promise<vo
     delete updateFields.createdAt;
     delete updateFields.updatedAt;
     
+    // Las fotos se administran con /:id/photos. Un update de datos no debe
+    // borrarlas: si llega una lista vacia donde ya habia fotos (por ejemplo un
+    // formulario abierto antes de subirlas), se conserva lo que esta guardado.
+    if (updateFields.fotos && typeof updateFields.fotos === 'object') {
+      const fotosActuales: any = (vehicle as any).fotos || {};
+      for (const tipo of ['exteriores', 'interiores', 'detalles', 'documentos']) {
+        const entrantes = updateFields.fotos[tipo];
+        const guardadas = Array.isArray(fotosActuales[tipo]) ? fotosActuales[tipo] : [];
+
+        if (!Array.isArray(entrantes) || (entrantes.length === 0 && guardadas.length > 0)) {
+          updateFields.fotos[tipo] = guardadas;
+        }
+      }
+    }
+
     // Convertir campos numéricos que vengan como string vacío
     if (updateFields.kilometraje === '') updateFields.kilometraje = 0;
     if (updateFields.precioCompra === '') updateFields.precioCompra = 0;
