@@ -52,3 +52,5 @@ autotech-frontend-demo/
 /*.ps1
 /*.sh
 /*.n8n
+.env.backup
+.env.backup.*
