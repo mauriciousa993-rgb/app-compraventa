@@ -43,3 +43,12 @@ Thumbs.db
 
 # Frontend demo: vive en su propio repositorio (compraventademo)
 autotech-frontend-demo/
+
+# Notas de trabajo y scripts locales: se quedan en el equipo, no en el repo
+/*.md
+!/README.md
+/*.bat
+/*.txt
+/*.ps1
+/*.sh
+/*.n8n
